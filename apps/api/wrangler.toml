@@ -1,0 +1,20 @@
+# RetroFoot API - Cloudflare Workers Configuration
+name = "retrofoot-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-13"
+workers_dev = true
+
+# Development settings
+[dev]
+port = 8787
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "retrofoot-db"
+database_id = "bca95b94-1528-42fb-9de4-09a61ea76754"
+migrations_dir = "../db/migrations"
+
+# Environment variables (secrets should be set via `wrangler secret put`)
+[vars]
+ENVIRONMENT = "production"

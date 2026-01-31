@@ -40,3 +40,23 @@ Thumbs.db
 
 .nx/cache
 .nx/workspace-data
+
+# Cloudflare
+.wrangler
+.dev.vars
+
+# Vite
+*.local
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+apps/web/dist
+apps/api/dist
+
+# Database
+*.sqlite
+*.db

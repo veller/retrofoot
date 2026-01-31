@@ -1,0 +1,26 @@
+{
+  "name": "@retrofoot/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "wrangler d1 migrations apply retrofoot-db --local",
+    "db:migrate:prod": "wrangler d1 migrations apply retrofoot-db --remote"
+  },
+  "dependencies": {
+    "@retrofoot/core": "workspace:*",
+    "@retrofoot/db": "workspace:*",
+    "hono": "^4.6.0",
+    "drizzle-orm": "^0.41.0",
+    "better-auth": "^1.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "drizzle-kit": "^0.31.4",
+    "typescript": "~5.9.2",
+    "wrangler": "^4"
+  }
+}
