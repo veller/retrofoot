@@ -2,7 +2,7 @@
 // RETROFOOT - Database Schema (Drizzle + SQLite/D1)
 // ============================================================================
 
-import { sqliteTable, text, integer, real, blob } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 
 // ============================================================================
 // Users & Authentication

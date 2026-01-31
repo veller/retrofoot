@@ -9,8 +9,6 @@ import type {
   Tactics,
   MatchEvent,
   MatchResult,
-  MatchEventType,
-  TacticalPosture,
 } from '../types'
 import { calculateOverall } from '../types'
 

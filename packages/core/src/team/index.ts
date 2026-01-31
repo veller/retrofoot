@@ -3,7 +3,7 @@
 // ============================================================================
 // Team management, squad handling
 
-import type { Team, Player, Tactics, FormationType, TacticalPosture, Position } from '../types'
+import type { Team, Player, Tactics, FormationType, Position } from '../types'
 import { calculateOverall } from '../types'
 import { generatePlayer } from '../player'
 
@@ -103,7 +103,7 @@ export function generateSquad(options: {
   teamReputation: number // 1-100
   budgetTier: 'low' | 'medium' | 'high'
 }): Player[] {
-  const { teamReputation, budgetTier } = options
+  const { teamReputation } = options
 
   // Overall ranges based on team reputation
   const baseOverall = 40 + Math.floor(teamReputation * 0.4) // 40-80 range
@@ -162,7 +162,6 @@ export function calculateTeamOverall(team: Team): number {
 // Get team statistics
 export function getTeamStats(team: Team) {
   const players = team.players
-  const overalls = players.map((p) => calculateOverall(p))
 
   return {
     squadSize: players.length,

@@ -28,7 +28,6 @@ export function generateFixtures(teams: Team[], seasonYear: string): Fixture[] {
 
   for (let round = 0; round < rounds; round++) {
     const isSecondHalf = round >= numTeams - 1
-    const actualRound = isSecondHalf ? round - (numTeams - 1) : round
 
     // Create rotation for this round
     const rotation = [fixed, ...rotating]
