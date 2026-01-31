@@ -33,3 +33,10 @@ import { players } from '@retrofoot/db/schema'
 - Workers limit: 10ms CPU, 128MB memory
 - D1 limit: 5GB storage, 5M reads/day (free tier)
 - Core package must have zero dependencies and no I/O
+
+## Deeper Reference
+
+For detailed context, see:
+- `docs/DATA_MODELS.md` - Entity schemas and relationships
+- `docs/GAME_DESIGN.md` - Game mechanics and features
+- `docs/MVP_SCOPE.md` - Version roadmap and feature checklist
