@@ -17,3 +17,6 @@ export * from './team'
 
 // Re-export season system
 export * from './season'
+
+// Re-export pitch layout
+export * from './pitch'

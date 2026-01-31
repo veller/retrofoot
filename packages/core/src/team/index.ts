@@ -85,6 +85,31 @@ function getPositionScore(player: Player, targetPosition: Position): number {
   return overall - 15
 }
 
+/**
+ * Swap a lineup player with a bench player. Returns new Tactics.
+ */
+export function swapPlayersInTactics(
+  tactics: Tactics,
+  lineupIndex: number,
+  benchIndex: number
+): Tactics {
+  if (lineupIndex < 0 || lineupIndex >= tactics.lineup.length) return tactics
+  if (benchIndex < 0 || benchIndex >= tactics.substitutes.length) return tactics
+
+  const lineup = [...tactics.lineup]
+  const substitutes = [...tactics.substitutes]
+  ;[lineup[lineupIndex], substitutes[benchIndex]] = [
+    substitutes[benchIndex],
+    lineup[lineupIndex],
+  ]
+
+  return {
+    ...tactics,
+    lineup,
+    substitutes,
+  }
+}
+
 // Create default tactics for a team
 export function createDefaultTactics(team: Team): Tactics {
   const formation: FormationType = '4-3-3'
