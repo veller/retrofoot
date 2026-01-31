@@ -1,0 +1,2 @@
+# Better Auth secret - generate a strong random string for production
+BETTER_AUTH_SECRET=local-dev-secret
