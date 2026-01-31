@@ -1,0 +1,46 @@
+---
+description: TypeScript conventions for RetroFoot
+globs: "**/*.ts"
+alwaysApply: false
+---
+
+# TypeScript Conventions
+
+## Strict Mode
+
+No `any` types. Use `unknown` and narrow with type guards if needed.
+
+```typescript
+// Good
+function getPlayer(id: string): Player | undefined
+
+// Bad
+function getPlayer(id: any): any
+```
+
+## Type Exports
+
+Export types from index files for clean imports:
+
+```typescript
+// packages/core/src/types/index.ts
+export type { Player, Team, Match } from './entities'
+```
+
+## Naming
+
+| Type | Convention | Example |
+|------|------------|---------|
+| Files | kebab-case | `match-engine.ts` |
+| Types/Interfaces | PascalCase | `PlayerAttributes` |
+| Functions | camelCase | `simulateMatch()` |
+| Constants | SCREAMING_SNAKE | `MAX_PLAYERS` |
+
+## Prefer Interfaces
+
+Use interfaces for object shapes (extensible), types for unions/aliases:
+
+```typescript
+interface PlayerAttributes { speed: number }
+type Position = 'GK' | 'CB' | 'ST'
+```

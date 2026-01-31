@@ -1,0 +1,41 @@
+---
+description: Git commit and branch conventions
+alwaysApply: false
+---
+
+# Git Conventions
+
+## Branch Names
+
+- `feature/match-simulation`
+- `fix/player-development-bug`
+- `chore/update-dependencies`
+
+## Commit Format
+
+```
+type: short description
+
+Optional longer explanation.
+```
+
+## Commit Types
+
+| Type | Use for |
+|------|---------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `style` | Formatting, no logic change |
+| `refactor` | Code change, no feature/fix |
+| `test` | Adding/updating tests |
+| `chore` | Build, deps, tooling |
+
+## Examples
+
+```
+feat: add match simulation engine
+fix: correct player overall calculation
+docs: update architecture documentation
+chore: upgrade drizzle-orm to 0.42
+```

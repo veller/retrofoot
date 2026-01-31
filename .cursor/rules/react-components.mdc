@@ -1,0 +1,50 @@
+---
+description: React component patterns for RetroFoot frontend
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# React Component Patterns
+
+## Component Structure
+
+```tsx
+// 1. Imports
+import { useState } from 'react'
+import type { Player } from '@retrofoot/core/types'
+
+// 2. Props interface
+interface PlayerCardProps {
+  player: Player
+  onSelect?: (id: string) => void
+}
+
+// 3. Component (hooks → handlers → render)
+export function PlayerCard({ player, onSelect }: PlayerCardProps) {
+  const [expanded, setExpanded] = useState(false)
+
+  function handleClick() {
+    onSelect?.(player.id)
+  }
+
+  return <div onClick={handleClick}>{player.name}</div>
+}
+```
+
+## Rules
+
+- Function components only (no classes)
+- Named exports (no default exports)
+- Hooks at top, before logic
+- Early returns for loading/error states
+
+## State Management
+
+- Local UI state: `useState`
+- Global app state: Zustand stores in `lib/store.ts`
+
+## Styling (Tailwind)
+
+- Dark theme: `bg-slate-900`, `bg-slate-800`, `border-slate-700`
+- Accent: `text-pitch-400`, `border-pitch-500`
+- Retro font: `font-pixel` (Press Start 2P)

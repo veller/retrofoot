@@ -1,0 +1,49 @@
+---
+description: Hono API route patterns for RetroFoot backend
+globs: "apps/api/**/*.ts"
+alwaysApply: false
+---
+
+# Hono API Patterns
+
+## Route Structure
+
+```typescript
+import { Hono } from 'hono'
+import type { Env } from '../index'
+
+export const gameRoutes = new Hono<{ Bindings: Env }>()
+
+gameRoutes.get('/state/:saveId', async (c) => {
+  const saveId = c.req.param('saveId')
+  const db = createDb(c.env.DB)
+  // ... implementation
+  return c.json({ data: result })
+})
+```
+
+## Response Format
+
+```typescript
+// Success
+return c.json({ data: result })
+
+// Error
+return c.json({ error: 'NotFound', message: 'Save not found' }, 404)
+```
+
+## Dependencies
+
+- Database: `createDb(c.env.DB)` from `@retrofoot/db`
+- Game logic: Pure functions from `@retrofoot/core`
+- Schema: Import tables from `@retrofoot/db/schema`
+
+## Error Handling
+
+```typescript
+import { HTTPException } from 'hono/http-exception'
+
+if (!save) {
+  throw new HTTPException(404, { message: 'Save not found' })
+}
+```

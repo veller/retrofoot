@@ -1,0 +1,45 @@
+---
+description: Drizzle schema and migration patterns for D1
+globs: "packages/db/**/*.ts"
+alwaysApply: false
+---
+
+# Drizzle Database Patterns
+
+## Schema Definition
+
+```typescript
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+
+export const players = sqliteTable('players', {
+  id: text('id').primaryKey(),
+  teamId: text('team_id').references(() => teams.id),
+  name: text('name').notNull(),
+  age: integer('age').notNull(),
+  overall: real('overall').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+})
+
+// Export types
+export type Player = typeof players.$inferSelect
+export type InsertPlayer = typeof players.$inferInsert
+```
+
+## Conventions
+
+- Table names: plural, snake_case (`players`, `match_events`)
+- Column names: snake_case (`team_id`, `created_at`)
+- Always include `createdAt` timestamp
+- Use `.references()` for foreign keys with cascade options
+
+## Migration Workflow
+
+1. Edit schema in `packages/db/src/schema/index.ts`
+2. Generate: `pnpm --filter @retrofoot/db generate`
+3. Apply local: `pnpm --filter @retrofoot/api db:migrate`
+4. Apply prod: `pnpm --filter @retrofoot/api db:migrate:prod`
+
+## SQLite/D1 Types
+
+Only use: `text()`, `integer()`, `real()`, `blob()`
+Modes: `{ mode: 'boolean' }`, `{ mode: 'timestamp' }`, `{ mode: 'json' }`

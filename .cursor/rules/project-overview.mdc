@@ -1,0 +1,35 @@
+---
+description: RetroFoot project structure and architecture
+alwaysApply: true
+---
+
+# RetroFoot Project Overview
+
+## Monorepo Structure
+
+- `apps/web` - React 19 + Vite frontend (Cloudflare Pages)
+- `apps/api` - Hono API backend (Cloudflare Workers)
+- `packages/core` - Pure TypeScript game engine (no dependencies)
+- `packages/db` - Drizzle ORM schema + migrations (Cloudflare D1)
+
+## Import Patterns
+
+```typescript
+import type { Player, Team } from '@retrofoot/core/types'
+import { createDb } from '@retrofoot/db'
+import { players } from '@retrofoot/db/schema'
+```
+
+## Deployment
+
+- Frontend: Cloudflare Pages (auto-deploy on push to main)
+- Backend: Cloudflare Workers (wrangler deploy)
+- Database: Cloudflare D1 (SQLite)
+- Migrations: `pnpm --filter @retrofoot/db generate` then `wrangler d1 migrations apply`
+
+## Key Constraints
+
+- No real team/player names (fictional only)
+- Workers limit: 10ms CPU, 128MB memory
+- D1 limit: 5GB storage, 5M reads/day (free tier)
+- Core package must have zero dependencies and no I/O

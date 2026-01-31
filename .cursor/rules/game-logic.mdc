@@ -1,0 +1,56 @@
+---
+description: Pure game logic patterns for the core engine
+globs: "packages/core/**/*.ts"
+alwaysApply: false
+---
+
+# Game Logic Patterns (packages/core)
+
+## Core Principles
+
+1. **Pure functions** - No side effects, no I/O, no async
+2. **Deterministic** - Same inputs always produce same outputs
+3. **No dependencies** - Zero external packages
+4. **Immutable** - Return new objects, never mutate
+
+## Pure Functions
+
+```typescript
+// Good - pure function
+function calculateOverall(player: Player): number {
+  return weightedAverage(player.attributes, positionWeights[player.position])
+}
+
+// Bad - side effect
+function calculateOverall(player: Player): number {
+  player.cachedOverall = weightedAverage(...) // Mutation!
+  return player.cachedOverall
+}
+```
+
+## Immutable Updates
+
+```typescript
+// Good - return new object
+function developPlayer(player: Player): Player {
+  return {
+    ...player,
+    age: player.age + 1,
+    attributes: improveAttributes(player.attributes),
+  }
+}
+```
+
+## Generator Functions for Simulation
+
+```typescript
+function* simulateMatchLive(config: MatchConfig): Generator<MatchState> {
+  for (let minute = 0; minute <= 90; minute++) {
+    yield simulateMinute(state, minute)
+  }
+}
+```
+
+## Type Exports
+
+Export all types from `packages/core/src/types/index.ts` for use across the monorepo.
