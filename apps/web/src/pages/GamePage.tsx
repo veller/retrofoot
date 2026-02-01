@@ -341,7 +341,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
               <select
                 value={formation}
                 onChange={(e) => setFormation(e.target.value as FormationType)}
-                className="bg-slate-700 text-white text-sm px-3 py-1.5 rounded border border-slate-600"
+                className="select-chevron bg-slate-700 text-white text-sm px-3 py-1.5 rounded border border-slate-600"
               >
                 {FORMATION_OPTIONS.map((f) => (
                   <option key={f} value={f}>

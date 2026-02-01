@@ -152,8 +152,9 @@ export function PitchView({
                 key={playerId}
                 className="absolute -translate-x-1/2 -translate-y-1/2 group"
                 style={{
-                  left: `${coord.x}%`,
-                  top: `${coord.y}%`,
+                  /* Horizontal pitch: goal-to-goal = left/right (y), touchline = top/bottom (x) */
+                  left: `${coord.y}%`,
+                  top: `${coord.x}%`,
                 }}
               >
                 <div
