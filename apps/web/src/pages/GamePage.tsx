@@ -74,6 +74,43 @@ function getPositionGroupOrder(position: Position): number {
   return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4
 }
 
+function TeamShield({ team }: { team: { shortName: string; primaryColor: string; secondaryColor: string; badgeUrl?: string } }) {
+  return (
+    <div className="w-8 h-8 shrink-0 flex items-center justify-center pixel-art">
+      {team.badgeUrl ? (
+        <img
+          src={team.badgeUrl}
+          alt={team.shortName}
+          className="w-full h-full object-contain"
+        />
+      ) : (
+        <svg
+          viewBox="0 0 40 48"
+          className="w-8 h-10"
+        >
+          <path
+            d="M20 2 L36 8 L36 24 Q36 36 20 46 Q4 36 4 24 L4 8 Z"
+            fill={team.primaryColor}
+            stroke={team.secondaryColor}
+            strokeWidth="1"
+          />
+          <text
+            x="20"
+            y="26"
+            textAnchor="middle"
+            fill={team.secondaryColor}
+            fontSize="10"
+            fontWeight="bold"
+            fontFamily="monospace"
+          >
+            {team.shortName}
+          </text>
+        </svg>
+      )}
+    </div>
+  )
+}
+
 export function GamePage() {
   const [activeTab, setActiveTab] = useState<GameTab>('squad')
 
@@ -135,12 +172,6 @@ export function GamePage() {
             <span className="text-slate-500">Season:</span>{' '}
             <span className="text-white">{season.year}</span>
           </div>
-          <button
-            onClick={() => setActiveTab('match')}
-            className="bg-pitch-600 hover:bg-pitch-500 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
-          >
-            Go to match
-          </button>
         </div>
       </header>
 
@@ -168,7 +199,9 @@ export function GamePage() {
       {/* Main Content */}
       <main className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 w-full">
-          {activeTab === 'squad' && <SquadPanel />}
+          {activeTab === 'squad' && (
+            <SquadPanel onGoToMatch={() => setActiveTab('match')} />
+          )}
           {activeTab === 'match' && <MatchPanel />}
           {activeTab === 'table' && <TablePanel />}
           {activeTab === 'transfers' && <TransfersPanel />}
@@ -179,7 +212,11 @@ export function GamePage() {
   )
 }
 
-function SquadPanel() {
+function SquadPanel({
+  onGoToMatch,
+}: {
+  onGoToMatch: () => void
+}) {
   const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null)
 
   const playerTeam = useGameStore((s) => {
@@ -187,6 +224,7 @@ function SquadPanel() {
     const playerTeamId = s.playerTeamId
     return teams.find((t) => t.id === playerTeamId) ?? null
   })
+  const { fixture, homeTeam, awayTeam } = useUpcomingFixture()
   const tactics = useGameStore((s) => s.tactics)
   const setFormation = useGameStore((s) => s.setFormation)
   const setPosture = useGameStore((s) => s.setPosture)
@@ -255,8 +293,8 @@ function SquadPanel() {
 
   return (
     <div className="flex h-full">
-      {/* Left: Squad list - 50% */}
-      <div className="w-1/2 min-w-0 bg-slate-800 border-r border-slate-700 p-6 overflow-auto">
+      {/* Left: Squad list - 30% */}
+      <div className="w-[30%] min-w-0 shrink-0 bg-slate-800 border-r border-slate-700 p-6 overflow-auto">
         <h2 className="text-xl font-bold text-white mb-4">Squad</h2>
         <p className="text-slate-400 text-sm mb-6">
           Your squad. Manage your players, set formations, and prepare for
@@ -304,8 +342,8 @@ function SquadPanel() {
         </div>
       </div>
 
-      {/* Right: Pitch + bench - 50% */}
-      <div className="w-1/2 min-w-0 flex flex-col">
+      {/* Middle: Pitch + bench */}
+      <div className="flex-1 min-w-0 flex flex-col">
         <div className="bg-slate-800 p-6 h-full overflow-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Formation</h2>
@@ -360,6 +398,57 @@ function SquadPanel() {
             benchLimit={BENCH_LIMIT}
           />
         </div>
+      </div>
+
+      {/* Right: Next match preview */}
+      <div className="w-[22%] min-w-[200px] shrink-0 p-4 flex flex-col">
+        {fixture && homeTeam && awayTeam ? (
+          <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden shrink-0">
+            <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200">
+              <p className="text-slate-600 text-xs font-semibold uppercase tracking-wide">
+                Round {fixture.round}
+              </p>
+            </div>
+            <div className="p-3 flex items-center justify-between gap-2">
+              <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+                <TeamShield team={homeTeam} />
+                <span
+                  className="text-slate-800 font-bold text-xs truncate w-full text-center"
+                  title={homeTeam.name}
+                >
+                  {homeTeam.name}
+                </span>
+              </div>
+              <div className="text-slate-400 text-[10px] font-bold py-0.5 px-2 bg-slate-100 rounded shrink-0">
+                VS
+              </div>
+              <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+                <TeamShield team={awayTeam} />
+                <span
+                  className="text-slate-800 font-bold text-xs truncate w-full text-center"
+                  title={awayTeam.name}
+                >
+                  {awayTeam.name}
+                </span>
+              </div>
+            </div>
+            <div className="p-3 border-t border-slate-200 bg-slate-50">
+              <button
+                onClick={onGoToMatch}
+                className="w-full bg-pitch-600 hover:bg-pitch-500 text-white font-semibold py-2 px-3 rounded-lg text-xs transition-colors"
+              >
+                Go to match
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+            <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
+              Next match
+            </h3>
+            <p className="text-slate-500 text-sm">No upcoming fixture</p>
+          </div>
+        )}
       </div>
     </div>
   )
