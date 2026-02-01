@@ -35,6 +35,11 @@ interface ApiSaveResponse {
     wageBudget: number;
     momentum: number;
     lastFiveResults: ('W' | 'D' | 'L')[];
+    // Financial fields
+    balance: number | null;
+    roundWages: number | null;
+    seasonRevenue: number | null;
+    seasonExpenses: number | null;
   } | null;
   teamCount: number;
   playerCount: number;
@@ -464,6 +469,11 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
         players,
         momentum: saveData.playerTeam.momentum ?? 50,
         lastFiveResults: saveData.playerTeam.lastFiveResults ?? [],
+        // Financial fields
+        balance: saveData.playerTeam.balance ?? 0,
+        roundWages: saveData.playerTeam.roundWages ?? 0,
+        seasonRevenue: saveData.playerTeam.seasonRevenue ?? 0,
+        seasonExpenses: saveData.playerTeam.seasonExpenses ?? 0,
       };
 
       setData({

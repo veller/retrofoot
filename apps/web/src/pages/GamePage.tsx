@@ -236,7 +236,10 @@ export function GamePage() {
           {activeTab === 'table' && <TablePanel standings={data.standings} />}
           {activeTab === 'transfers' && <TransfersPanel />}
           {activeTab === 'finances' && (
-            <FinancesPanel playerTeam={playerTeam} />
+            <FinancesPanel
+              playerTeam={playerTeam}
+              currentRound={data.currentRound}
+            />
           )}
         </div>
       </main>
@@ -613,25 +616,152 @@ function TransfersPanel() {
 
 interface FinancesPanelProps {
   playerTeam: Team;
+  currentRound?: number;
 }
 
-function FinancesPanel({ playerTeam }: FinancesPanelProps) {
+function formatCurrency(amount: number): string {
+  const absAmount = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+
+  if (absAmount >= 1_000_000_000) {
+    return `${sign}R$ ${(absAmount / 1_000_000_000).toFixed(1)}B`;
+  } else if (absAmount >= 1_000_000) {
+    return `${sign}R$ ${(absAmount / 1_000_000).toFixed(1)}M`;
+  } else if (absAmount >= 1_000) {
+    return `${sign}R$ ${(absAmount / 1_000).toFixed(0)}K`;
+  }
+  return `${sign}R$ ${absAmount.toLocaleString('pt-BR')}`;
+}
+
+function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
+  const balance = playerTeam.balance ?? 0;
+  const roundWages = playerTeam.roundWages ?? 0;
+  const seasonRevenue = playerTeam.seasonRevenue ?? 0;
+  const seasonExpenses = playerTeam.seasonExpenses ?? 0;
+  const netResult = seasonRevenue - seasonExpenses;
+
+  // Project end-of-season balance
+  const roundsPlayed = currentRound - 1;
+  const totalRounds = 38;
+  const remainingRounds = totalRounds - roundsPlayed;
+  const avgNetPerRound = roundsPlayed > 0 ? netResult / roundsPlayed : 0;
+  const projectedEndBalance = balance + avgNetPerRound * remainingRounds;
+
   return (
-    <div className="bg-slate-800 border border-slate-700 p-6">
-      <h2 className="text-xl font-bold text-white mb-4">Club Finances</h2>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-slate-700 p-4">
-          <p className="text-slate-400 text-sm">Transfer Budget</p>
-          <p className="text-2xl text-pitch-400 font-bold">
-            R$ {playerTeam.budget.toLocaleString('pt-BR')}
+    <div className="space-y-6 p-4">
+      {/* Main Balance */}
+      <div className="bg-slate-800 border border-slate-700 p-6">
+        <h2 className="text-xl font-bold text-white mb-6">Club Finances</h2>
+
+        {/* Current Balance - Large Display */}
+        <div className="bg-slate-900 border border-slate-600 p-6 mb-6 text-center">
+          <p className="text-slate-400 text-sm uppercase tracking-wide mb-2">
+            Current Balance
+          </p>
+          <p
+            className={`text-4xl font-bold ${balance >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+          >
+            {formatCurrency(balance)}
           </p>
         </div>
-        <div className="bg-slate-700 p-4">
-          <p className="text-slate-400 text-sm">Wage Budget</p>
-          <p className="text-2xl text-white font-bold">
-            R$ {playerTeam.wageBudget.toLocaleString('pt-BR')}/mo
-          </p>
+
+        {/* Budget Cards */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-slate-700 p-4 rounded">
+            <p className="text-slate-400 text-sm">Transfer Budget</p>
+            <p className="text-2xl text-pitch-400 font-bold">
+              {formatCurrency(playerTeam.budget)}
+            </p>
+          </div>
+          <div className="bg-slate-700 p-4 rounded">
+            <p className="text-slate-400 text-sm">Wage Bill (Per Round)</p>
+            <p className="text-2xl text-amber-400 font-bold">
+              {formatCurrency(roundWages)}
+            </p>
+          </div>
         </div>
+      </div>
+
+      {/* Season Summary */}
+      <div className="bg-slate-800 border border-slate-700 p-6">
+        <h3 className="text-lg font-bold text-white mb-4">
+          Season Financial Summary
+        </h3>
+
+        <div className="space-y-4">
+          {/* Income */}
+          <div className="flex justify-between items-center py-2 border-b border-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="text-pitch-400">▲</span>
+              <span className="text-slate-300">Total Revenue</span>
+            </div>
+            <span className="text-pitch-400 font-bold">
+              {formatCurrency(seasonRevenue)}
+            </span>
+          </div>
+
+          {/* Expenses */}
+          <div className="flex justify-between items-center py-2 border-b border-slate-700">
+            <div className="flex items-center gap-2">
+              <span className="text-red-400">▼</span>
+              <span className="text-slate-300">Total Expenses</span>
+            </div>
+            <span className="text-red-400 font-bold">
+              {formatCurrency(seasonExpenses)}
+            </span>
+          </div>
+
+          {/* Net Result */}
+          <div className="flex justify-between items-center py-2 bg-slate-700 px-3 rounded">
+            <span className="text-white font-medium">Net Result</span>
+            <span
+              className={`font-bold ${netResult >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+            >
+              {netResult >= 0 ? '+' : ''}
+              {formatCurrency(netResult)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Projection */}
+      <div className="bg-slate-800 border border-slate-700 p-6">
+        <h3 className="text-lg font-bold text-white mb-4">Season Projection</h3>
+
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <p className="text-slate-400 text-xs uppercase">Rounds Played</p>
+            <p className="text-xl text-white font-bold">
+              {roundsPlayed} / {totalRounds}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400 text-xs uppercase">Avg Net/Round</p>
+            <p
+              className={`text-xl font-bold ${avgNetPerRound >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+            >
+              {avgNetPerRound >= 0 ? '+' : ''}
+              {formatCurrency(Math.round(avgNetPerRound))}
+            </p>
+          </div>
+          <div>
+            <p className="text-slate-400 text-xs uppercase">
+              Projected End Balance
+            </p>
+            <p
+              className={`text-xl font-bold ${projectedEndBalance >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+            >
+              {formatCurrency(Math.round(projectedEndBalance))}
+            </p>
+          </div>
+        </div>
+
+        {projectedEndBalance < 0 && (
+          <div className="mt-4 p-3 bg-red-900/30 border border-red-700 rounded text-red-300 text-sm">
+            ⚠️ Warning: At current spending rate, you may end the season in
+            debt. Consider selling players or reducing wages.
+          </div>
+        )}
       </div>
     </div>
   );

@@ -21,5 +21,8 @@ export * from './season';
 // Re-export pitch layout
 export * from './pitch';
 
+// Re-export financial system
+export * from './finance';
+
 // Re-export seed data
 export * from './data';

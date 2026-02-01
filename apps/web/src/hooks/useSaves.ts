@@ -18,6 +18,8 @@ interface UseSavesResult {
   refetch: () => Promise<void>;
   currentSave: SaveSummary | null;
   hasSave: boolean;
+  deleteSave: (saveId: string) => Promise<boolean>;
+  isDeleting: boolean;
 }
 
 /**
@@ -27,6 +29,7 @@ interface UseSavesResult {
 export function useSaves(): UseSavesResult {
   const [saves, setSaves] = useState<SaveSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSaves = useCallback(async () => {
@@ -57,6 +60,32 @@ export function useSaves(): UseSavesResult {
     }
   }, []);
 
+  const deleteSave = useCallback(async (saveId: string): Promise<boolean> => {
+    try {
+      setIsDeleting(true);
+      setError(null);
+
+      const response = await fetch(`/api/save/${saveId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete save');
+      }
+
+      // Remove from local state
+      setSaves((prev) => prev.filter((s) => s.id !== saveId));
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete save');
+      return false;
+    } finally {
+      setIsDeleting(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchSaves();
   }, [fetchSaves]);
@@ -72,6 +101,8 @@ export function useSaves(): UseSavesResult {
     refetch: fetchSaves,
     currentSave,
     hasSave,
+    deleteSave,
+    isDeleting,
   };
 }
 

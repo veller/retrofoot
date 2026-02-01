@@ -93,6 +93,11 @@ export interface Team {
   // Team form tracking
   momentum: number; // 1-100, affects match simulation
   lastFiveResults: ('W' | 'D' | 'L')[]; // Last 5 match results
+  // Financial tracking (optional for backwards compatibility)
+  balance?: number; // Current cash balance
+  roundWages?: number; // Calculated from squad (sum of player wages)
+  seasonRevenue?: number; // Running total this season
+  seasonExpenses?: number; // Running total this season
 }
 
 // Formation types
@@ -219,6 +224,43 @@ export interface TransferOffer {
   wage: number;
   contractYears: number;
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
+}
+
+// ============================================================================
+// FINANCIAL SYSTEM TYPES
+// ============================================================================
+
+// Finance transaction categories
+export type FinanceCategory =
+  | 'match_day' // Ticket sales from home matches
+  | 'sponsorship' // Per-round sponsor payment
+  | 'tv_rights' // Broadcasting revenue
+  | 'prize_money' // Season-end prizes
+  | 'player_sale' // Transfer income (future)
+  | 'wages' // Player salaries
+  | 'stadium' // Maintenance costs
+  | 'operations' // General running costs
+  | 'player_buy'; // Transfer expense (future)
+
+// Team financial state (for tracking in-memory or display)
+export interface TeamFinances {
+  balance: number; // Current cash balance
+  roundWages: number; // Calculated from squad (sum of player wages)
+  lastRoundIncome: number; // Income from last round processed
+  lastMatchIncome: number; // Revenue from last home match
+  seasonRevenue: number; // Running total this season
+  seasonExpenses: number; // Running total this season
+}
+
+// Individual financial transaction (for history tracking)
+export interface FinancialTransaction {
+  id: string;
+  teamId: string;
+  type: 'income' | 'expense';
+  category: FinanceCategory;
+  amount: number;
+  description: string;
+  round: number;
 }
 
 // Position weights for overall calculation (simplified 4 positions)

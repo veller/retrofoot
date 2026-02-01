@@ -103,6 +103,11 @@ export const teams = sqliteTable('teams', {
   // Team form tracking
   momentum: integer('momentum').default(50),
   lastFiveResults: text('last_five_results', { mode: 'json' }).default([]),
+  // Financial tracking
+  balance: integer('balance').default(0), // Current cash balance
+  roundWages: integer('round_wages').default(0), // Cached sum of player wages per round
+  seasonRevenue: integer('season_revenue').default(0), // Running total this season
+  seasonExpenses: integer('season_expenses').default(0), // Running total this season
 });
 
 // ============================================================================
@@ -246,6 +251,26 @@ export const tactics = sqliteTable('tactics', {
 });
 
 // ============================================================================
+// Financial Transactions (history tracking)
+// ============================================================================
+
+export const transactions = sqliteTable('transactions', {
+  id: text('id').primaryKey(),
+  saveId: text('save_id')
+    .notNull()
+    .references(() => saves.id, { onDelete: 'cascade' }),
+  teamId: text('team_id')
+    .notNull()
+    .references(() => teams.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'income' | 'expense'
+  category: text('category').notNull(), // match_day, sponsorship, tv_rights, wages, stadium, operations, etc.
+  amount: integer('amount').notNull(),
+  description: text('description'),
+  round: integer('round').notNull(), // Which round this transaction occurred
+  createdAt: integer('created_at', { mode: 'timestamp' }),
+});
+
+// ============================================================================
 // Type exports for use in application
 // ============================================================================
 
@@ -284,3 +309,6 @@ export type NewTransfer = typeof transfers.$inferInsert;
 
 export type Tactics = typeof tactics.$inferSelect;
 export type NewTactics = typeof tactics.$inferInsert;
+
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;

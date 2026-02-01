@@ -17,7 +17,12 @@ import {
   type NewStanding,
   type NewFixture,
 } from '@retrofoot/db/schema';
-import { TEAMS, ALL_PLAYERS } from '@retrofoot/core';
+import {
+  TEAMS,
+  ALL_PLAYERS,
+  calculateInitialBalance,
+  calculateRoundWages,
+} from '@retrofoot/core';
 
 /**
  * Generate a unique ID
@@ -128,9 +133,22 @@ export async function seedNewGame(
   // 2. Create all teams
   const teamIdMap = new Map<string, string>(); // templateId -> dbId
 
+  // Pre-calculate wages per team from player data
+  const teamWagesMap = new Map<string, number>();
+  for (const player of ALL_PLAYERS) {
+    const currentWages = teamWagesMap.get(player.teamId) || 0;
+    teamWagesMap.set(player.teamId, currentWages + player.wage);
+  }
+
   const newTeams: NewTeam[] = TEAMS.map((team) => {
     const dbId = `${saveId}-${team.id}`;
     teamIdMap.set(team.id, dbId);
+
+    // Calculate round wages from actual player wages
+    const roundWages = teamWagesMap.get(team.id) || 0;
+
+    // Calculate initial balance based on wage buffer + working capital
+    const initialBalance = calculateInitialBalance(team.budget, roundWages);
 
     return {
       id: dbId,
@@ -146,6 +164,11 @@ export async function seedNewGame(
       wageBudget: team.wageBudget,
       momentum: 50,
       lastFiveResults: [],
+      // Financial fields
+      balance: initialBalance,
+      roundWages: roundWages,
+      seasonRevenue: 0,
+      seasonExpenses: 0,
     };
   });
 
