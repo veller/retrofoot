@@ -48,13 +48,13 @@ export function PitchView({
 
   return (
     <div className="flex flex-col gap-4 items-center">
-      {/* Football pitch - horizontal, aspect ratio 105:68 (length:width) */}
-      <div className="w-full">
+      {/* Football pitch - horizontal, aspect ratio 105:68 (length:width), 80% size */}
+      <div className="w-[100%] mx-auto">
         <div
           id="pitch-container"
           className="relative w-full rounded-lg overflow-hidden border-2 border-white/80"
           style={{
-            aspectRatio: '105 / 68',
+            aspectRatio: '55 / 30',
             background:
               'repeating-linear-gradient(90deg, #50A66E 0px, #50A66E 12px, #489362 12px, #489362 24px)',
           }}

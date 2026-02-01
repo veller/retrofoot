@@ -268,8 +268,8 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
 
   return (
     <div className="flex h-full">
-      {/* Left: Squad list - 30% */}
-      <div className="w-[30%] min-w-0 shrink-0 bg-slate-800 border-r border-slate-700 p-6 overflow-auto">
+      {/* Left: Squad list - 36% (pitch reduced so list and next round get more) */}
+      <div className="w-[36%] min-w-0 shrink-0 bg-slate-800 border-r border-slate-700 p-6 overflow-auto">
         <h2 className="text-xl font-bold text-white mb-4">Squad</h2>
         <p className="text-slate-400 text-sm mb-6">
           Your squad. Manage your players, set formations, and prepare for
@@ -317,8 +317,8 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
         </div>
       </div>
 
-      {/* Middle: Pitch + bench */}
-      <div className="flex-1 min-w-0 flex flex-col">
+      {/* Middle: Pitch + bench - 38% (reduced so squad and next round get more) */}
+      <div className="w-[38%] min-w-0 shrink-0 flex flex-col">
         <div className="bg-slate-800 p-6 h-full overflow-auto">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-xl font-bold text-white">Formation</h2>
@@ -372,8 +372,8 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
         </div>
       </div>
 
-      {/* Right: Next match preview */}
-      <div className="w-[22%] min-w-[200px] shrink-0 p-4 flex flex-col">
+      {/* Right: Next match preview - 26% (more room with smaller pitch column) */}
+      <div className="w-[26%] min-w-[200px] shrink-0 p-4 flex flex-col">
         {fixture && homeTeam && awayTeam ? (
           <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden shrink-0">
             <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200">
