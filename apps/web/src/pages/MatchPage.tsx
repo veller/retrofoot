@@ -5,6 +5,7 @@ import type {
   MatchResult,
   Tactics,
   Fixture,
+  MatchEvent,
 } from '@retrofoot/core';
 import type { MatchFixture } from '../hooks';
 import {
@@ -19,6 +20,7 @@ import { useSaveMatchData } from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
+import { useGameStore } from '../stores/gameStore';
 
 type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
 
@@ -37,6 +39,183 @@ function toCoreFigure(f: MatchFixture): Fixture {
     played: f.played,
     result: undefined,
   };
+}
+
+function EventIcon({ type }: { type: MatchEvent['type'] }) {
+  switch (type) {
+    case 'goal':
+      return <span className="text-yellow-400">⚽</span>;
+    case 'own_goal':
+      return <span className="text-red-400">⚽</span>;
+    case 'yellow_card':
+      return <span className="text-yellow-400">🟨</span>;
+    case 'red_card':
+      return <span className="text-red-600">🟥</span>;
+    case 'penalty_scored':
+      return <span className="text-green-400">⚽</span>;
+    case 'penalty_missed':
+      return <span className="text-red-400">❌</span>;
+    case 'injury':
+      return <span className="text-red-400">🏥</span>;
+    case 'substitution':
+      return <span className="text-blue-400">🔄</span>;
+    default:
+      return null;
+  }
+}
+
+function getEventLabel(type: MatchEvent['type']): string {
+  switch (type) {
+    case 'goal':
+      return 'Goal';
+    case 'own_goal':
+      return 'Own Goal';
+    case 'yellow_card':
+      return 'Yellow Card';
+    case 'red_card':
+      return 'Red Card';
+    case 'penalty_scored':
+      return 'Penalty';
+    case 'penalty_missed':
+      return 'Penalty Missed';
+    case 'injury':
+      return 'Injury';
+    case 'substitution':
+      return 'Substitution';
+    default:
+      return '';
+  }
+}
+
+interface MatchEventsSummaryProps {
+  events: MatchEvent[];
+  homeTeamShortName: string;
+  awayTeamShortName: string;
+}
+
+function MatchEventsSummary({
+  events,
+  homeTeamShortName,
+  awayTeamShortName,
+}: MatchEventsSummaryProps) {
+  // Filter to significant events only
+  const significantTypes = [
+    'goal',
+    'own_goal',
+    'penalty_scored',
+    'penalty_missed',
+    'yellow_card',
+    'red_card',
+    'injury',
+    'substitution',
+  ];
+
+  const significantEvents = events.filter((e) =>
+    significantTypes.includes(e.type),
+  );
+
+  if (significantEvents.length === 0) {
+    return null;
+  }
+
+  // Group events by category
+  const goals = significantEvents.filter((e) =>
+    ['goal', 'own_goal', 'penalty_scored', 'penalty_missed'].includes(e.type),
+  );
+  const cards = significantEvents.filter((e) =>
+    ['yellow_card', 'red_card'].includes(e.type),
+  );
+  const other = significantEvents.filter((e) =>
+    ['injury', 'substitution'].includes(e.type),
+  );
+
+  return (
+    <div className="mb-6 text-left space-y-4">
+      {/* Goals */}
+      {goals.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-sm uppercase mb-2">Goals</h3>
+          <div className="space-y-1">
+            {goals.map((e, i) => (
+              <div
+                key={i}
+                className="text-white text-sm flex items-center gap-2"
+              >
+                <span className="text-slate-400 w-8">{e.minute}'</span>
+                <EventIcon type={e.type} />
+                <span className="flex-1">
+                  {e.playerName}
+                  {e.type === 'own_goal' && (
+                    <span className="text-red-400 text-xs ml-1">(OG)</span>
+                  )}
+                  {e.type === 'penalty_scored' && (
+                    <span className="text-green-400 text-xs ml-1">(P)</span>
+                  )}
+                  {e.type === 'penalty_missed' && (
+                    <span className="text-red-400 text-xs ml-1">
+                      (P missed)
+                    </span>
+                  )}
+                </span>
+                <span className="text-slate-500 text-xs">
+                  {e.team === 'home' ? homeTeamShortName : awayTeamShortName}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cards */}
+      {cards.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-sm uppercase mb-2">Cards</h3>
+          <div className="space-y-1">
+            {cards.map((e, i) => (
+              <div
+                key={i}
+                className="text-white text-sm flex items-center gap-2"
+              >
+                <span className="text-slate-400 w-8">{e.minute}'</span>
+                <EventIcon type={e.type} />
+                <span className="flex-1">{e.playerName}</span>
+                <span className="text-slate-500 text-xs">
+                  {e.team === 'home' ? homeTeamShortName : awayTeamShortName}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Other events (injuries, substitutions) */}
+      {other.length > 0 && (
+        <div>
+          <h3 className="text-slate-400 text-sm uppercase mb-2">Other</h3>
+          <div className="space-y-1">
+            {other.map((e, i) => (
+              <div
+                key={i}
+                className="text-white text-sm flex items-center gap-2"
+              >
+                <span className="text-slate-400 w-8">{e.minute}'</span>
+                <EventIcon type={e.type} />
+                <span className="flex-1">
+                  {e.playerName}
+                  <span className="text-slate-400 text-xs ml-1">
+                    ({getEventLabel(e.type)})
+                  </span>
+                </span>
+                <span className="text-slate-500 text-xs">
+                  {e.team === 'home' ? homeTeamShortName : awayTeamShortName}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function MatchPage() {
@@ -95,9 +274,32 @@ export function MatchPage() {
     };
   }, [matchData]);
 
-  // Initialize player tactics when data loads
+  // Get tactics from game store (set by GamePage)
+  const gameStoreTactics = useGameStore((s) => s.tactics);
+
+  // Initialize player tactics when data loads - prefer gameStore tactics
   useEffect(() => {
     if (matchData && !playerTactics) {
+      // First, try to use tactics from the game store (set by GamePage)
+      if (gameStoreTactics && gameStoreTactics.lineup.length >= 11) {
+        // Validate that the lineup player IDs exist in the current team
+        const playerTeam = matchData.teams.find(
+          (t) => t.id === matchData.playerTeamId,
+        );
+        if (playerTeam) {
+          const playerIds = new Set(playerTeam.players.map((p) => p.id));
+          const lineupValid = gameStoreTactics.lineup.every((id) =>
+            playerIds.has(id),
+          );
+
+          if (lineupValid) {
+            setPlayerTactics(gameStoreTactics);
+            return;
+          }
+        }
+      }
+
+      // Fallback: generate default tactics if none in store
       const playerTeam = matchData.teams.find(
         (t) => t.id === matchData.playerTeamId,
       );
@@ -111,7 +313,7 @@ export function MatchPage() {
         });
       }
     }
-  }, [matchData, playerTactics]);
+  }, [matchData, playerTactics, gameStoreTactics]);
 
   // Initialize match states when confirmed
   const handleConfirmMatch = useCallback(() => {
@@ -426,31 +628,14 @@ export function MatchPage() {
             </div>
           )}
 
-          {/* Goals Summary */}
-          {playerResult &&
-            playerResult.events.filter((e) => e.type === 'goal').length > 0 && (
-              <div className="mb-6 text-left">
-                <h3 className="text-slate-400 text-sm uppercase mb-2">Goals</h3>
-                <div className="space-y-1">
-                  {playerResult.events
-                    .filter((e) => e.type === 'goal')
-                    .map((e, i) => (
-                      <div key={i} className="text-white text-sm">
-                        <span className="text-slate-400">{e.minute}'</span>{' '}
-                        <span className="text-yellow-400">⚽</span>{' '}
-                        {e.playerName}{' '}
-                        <span className="text-slate-500">
-                          (
-                          {e.team === 'home'
-                            ? playerHomeTeam.shortName
-                            : playerAwayTeam.shortName}
-                          )
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
+          {/* Match Events Summary */}
+          {playerResult && (
+            <MatchEventsSummary
+              events={playerResult.events}
+              homeTeamShortName={playerHomeTeam.shortName}
+              awayTeamShortName={playerAwayTeam.shortName}
+            />
+          )}
 
           <button
             onClick={handleFinish}

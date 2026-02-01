@@ -12,8 +12,8 @@ import {
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
-import { useSaveData } from '../hooks';
-import { useGameStore, useUpcomingFixture } from '../stores/gameStore';
+import { useSaveData, useSaveMatchData } from '../hooks';
+import { useGameStore } from '../stores/gameStore';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
 
@@ -74,19 +74,31 @@ export function GamePage() {
   // Initialize tactics when team data loads
   const playerTeam = data?.playerTeam ?? null;
 
-  // Check if there's an upcoming match using the game store
-  const {
-    fixture: upcomingFixture,
-    homeTeam,
-    awayTeam,
-    isPlayerHome,
-  } = useUpcomingFixture();
+  // Fetch match data from database for upcoming fixture
+  const { data: matchData } = useSaveMatchData(saveId);
 
+  // Compute upcoming match from database match data
   const upcomingMatch = useMemo(() => {
-    if (!upcomingFixture || upcomingFixture.played) return null;
-    const opponent = isPlayerHome ? awayTeam : homeTeam;
-    return { fixture: upcomingFixture, opponent, isHome: isPlayerHome };
-  }, [upcomingFixture, homeTeam, awayTeam, isPlayerHome]);
+    if (!matchData) return null;
+
+    // Find unplayed fixture for player's team
+    const playerFixture = matchData.fixtures.find(
+      (f) =>
+        !f.played &&
+        (f.homeTeamId === matchData.playerTeamId ||
+          f.awayTeamId === matchData.playerTeamId),
+    );
+
+    if (!playerFixture) return null;
+
+    const isHome = playerFixture.homeTeamId === matchData.playerTeamId;
+    const opponentId = isHome
+      ? playerFixture.awayTeamId
+      : playerFixture.homeTeamId;
+    const opponent = matchData.teams.find((t) => t.id === opponentId);
+
+    return { fixture: playerFixture, opponent, isHome };
+  }, [matchData]);
 
   const handlePlayMatch = () => {
     // Sync tactics to game store before navigating

@@ -27,8 +27,9 @@ function generateId(): string {
 }
 
 /**
- * Generate round-robin fixtures for a season
- * Returns 38 rounds (home and away for each team pair)
+ * Generate round-robin fixtures for a season using the circle method
+ * Ensures each team plays exactly once per round
+ * Returns (N-1)*2 rounds for N teams (home and away)
  */
 function generateFixtures(
   teamIds: string[],
@@ -36,38 +37,60 @@ function generateFixtures(
   season: string,
 ): NewFixture[] {
   const matches: NewFixture[] = [];
-  let round = 1;
+  const n = teamIds.length;
 
-  // Simple round-robin for 20 teams
-  for (let i = 0; i < teamIds.length; i++) {
-    for (let j = i + 1; j < teamIds.length; j++) {
-      // First leg
+  // Handle odd number of teams by adding a BYE placeholder
+  const teams = [...teamIds];
+  if (n % 2 !== 0) {
+    teams.push('BYE');
+  }
+
+  const numTeams = teams.length;
+  const rounds = (numTeams - 1) * 2; // Home and away
+  const matchesPerRound = numTeams / 2;
+
+  // Circle method: fix first team, rotate the rest
+  const fixed = teams[0];
+  const rotating = teams.slice(1);
+
+  for (let round = 0; round < rounds; round++) {
+    const isSecondHalf = round >= numTeams - 1;
+    const roundNumber = round + 1;
+
+    // Create rotation for this round
+    const rotation = [fixed, ...rotating];
+
+    for (let match = 0; match < matchesPerRound; match++) {
+      const home = rotation[match];
+      const away = rotation[numTeams - 1 - match];
+
+      // Skip bye matches
+      if (home === 'BYE' || away === 'BYE') continue;
+
+      // Swap home/away for second half of season
+      const [homeTeam, awayTeam] = isSecondHalf ? [away, home] : [home, away];
+
+      // Calculate date (one round per week, starting April)
+      const startMonth = isSecondHalf ? 8 : 4; // August for second half, April for first
+      const roundInHalf = isSecondHalf ? round - (numTeams - 1) : round;
+      const monthOffset = Math.floor(roundInHalf / 4);
+      const dayOffset = (roundInHalf % 4) * 7 + 1;
+
       matches.push({
         id: generateId(),
         saveId,
         season,
-        round: round,
-        homeTeamId: teamIds[i],
-        awayTeamId: teamIds[j],
-        date: `2026-${String(4 + Math.floor((round - 1) / 4)).padStart(2, '0')}-${String(1 + ((round - 1) % 4) * 7).padStart(2, '0')}`,
+        round: roundNumber,
+        homeTeamId: homeTeam,
+        awayTeamId: awayTeam,
+        date: `2026-${String(startMonth + monthOffset).padStart(2, '0')}-${String(dayOffset).padStart(2, '0')}`,
         played: false,
       });
-
-      // Second leg
-      matches.push({
-        id: generateId(),
-        saveId,
-        season,
-        round: round + 19, // Second half of season
-        homeTeamId: teamIds[j],
-        awayTeamId: teamIds[i],
-        date: `2026-${String(8 + Math.floor((round - 1) / 4)).padStart(2, '0')}-${String(1 + ((round - 1) % 4) * 7).padStart(2, '0')}`,
-        played: false,
-      });
-
-      round++;
-      if (round > 19) round = 1; // Reset for next batch
     }
+
+    // Rotate teams (keep first fixed)
+    const last = rotating.pop()!;
+    rotating.unshift(last);
   }
 
   return matches;

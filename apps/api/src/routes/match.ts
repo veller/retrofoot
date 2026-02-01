@@ -296,6 +296,23 @@ matchRoutes.post('/:saveId/complete', async (c) => {
           result.homeScore,
         );
 
+        // Update team form (lastFiveResults)
+        const homeResult: 'W' | 'D' | 'L' =
+          result.homeScore > result.awayScore
+            ? 'W'
+            : result.homeScore < result.awayScore
+              ? 'L'
+              : 'D';
+        const awayResult: 'W' | 'D' | 'L' =
+          result.awayScore > result.homeScore
+            ? 'W'
+            : result.awayScore < result.homeScore
+              ? 'L'
+              : 'D';
+
+        await updateTeamForm(db, saveId, fixture.homeTeamId, homeResult);
+        await updateTeamForm(db, saveId, fixture.awayTeamId, awayResult);
+
         // Update player stats for goals
         const goalEvents = result.events.filter((e) => e.type === 'goal');
         for (const goal of goalEvents) {
@@ -399,4 +416,32 @@ async function recalculateStandingPositions(
       .set({ position: i + 1 })
       .where(eq(standings.id, allStandings[i].id));
   }
+}
+
+// Helper to update team form (lastFiveResults)
+async function updateTeamForm(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  teamId: string,
+  result: 'W' | 'D' | 'L',
+) {
+  // Fetch current form
+  const teamResult = await db
+    .select({ lastFiveResults: teams.lastFiveResults })
+    .from(teams)
+    .where(and(eq(teams.saveId, saveId), eq(teams.id, teamId)))
+    .limit(1);
+
+  if (teamResult.length === 0) return;
+
+  // Get current results, append new one, keep last 5
+  const currentResults =
+    (teamResult[0].lastFiveResults as ('W' | 'D' | 'L')[]) ?? [];
+  const newResults = [...currentResults, result].slice(-5);
+
+  // Update team
+  await db
+    .update(teams)
+    .set({ lastFiveResults: newResults })
+    .where(and(eq(teams.saveId, saveId), eq(teams.id, teamId)));
 }

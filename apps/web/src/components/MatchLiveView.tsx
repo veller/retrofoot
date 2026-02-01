@@ -63,21 +63,13 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
     [state.events],
   );
 
-  // Check if there was a recent goal (within last 3 events) for flash effect
-  const recentGoal = useMemo(() => {
-    const lastEvents = state.events.slice(-3);
-    return lastEvents.some((e) =>
-      ['goal', 'own_goal', 'penalty_scored'].includes(e.type),
-    );
-  }, [state.events]);
-
   return (
     <div
       className={`grid grid-cols-[120px_1fr_80px_1fr_200px] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors ${
         isPlayerMatch
           ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
           : 'bg-slate-800 hover:bg-slate-750'
-      } ${recentGoal && !isPlayerMatch ? 'animate-pulse' : ''}`}
+      }`}
     >
       {/* Attendance + Stadium */}
       <div className="text-slate-400 text-xs">

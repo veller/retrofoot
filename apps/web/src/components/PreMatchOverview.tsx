@@ -33,29 +33,37 @@ function TeamOverview({
   team,
   tactics,
   isOpponent,
+  formation,
 }: {
   team: Team;
   tactics?: Tactics;
   isOpponent: boolean;
+  formation?: string;
 }) {
+  const displayFormation = formation || tactics?.formation || '4-3-3';
+
   const lineup = useMemo(() => {
     const players = team.players || [];
     if (players.length === 0) return [];
 
     if (tactics?.lineup) {
+      // Use the exact order from tactics (as selected by user)
       return tactics.lineup
         .map((id) => players.find((p) => p.id === id))
         .filter(Boolean);
     }
     // Generate predicted lineup for opponent
     if (players.length >= 11) {
-      const { lineup: lineupIds } = selectBestLineup(team, '4-3-3');
+      const { lineup: lineupIds } = selectBestLineup(
+        team,
+        displayFormation as '4-3-3',
+      );
       return lineupIds
         .map((id) => players.find((p) => p.id === id))
         .filter(Boolean);
     }
     return players.slice(0, 11);
-  }, [team, tactics]);
+  }, [team, tactics, displayFormation]);
 
   const avgOverall = useMemo(() => {
     if (lineup.length === 0) return 0;
@@ -103,20 +111,30 @@ function TeamOverview({
 
       {/* Lineup Preview */}
       <div>
-        <p className="text-slate-500 text-xs uppercase mb-2">
-          {isOpponent ? 'Predicted Lineup' : 'Your Lineup'}
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-slate-500 text-xs uppercase">
+            {isOpponent ? 'Predicted Lineup' : 'Your Lineup'}
+          </p>
+          <span className="text-pitch-400 text-xs font-medium bg-pitch-900/50 px-2 py-0.5 rounded">
+            {displayFormation}
+          </span>
+        </div>
         <div className="grid gap-1">
           {lineup.length > 0 ? (
             lineup.slice(0, 11).map((player) => (
               <div
                 key={player!.id}
-                className="flex justify-between text-sm bg-slate-700/50 px-2 py-1 rounded"
+                className="flex justify-between items-center text-sm bg-slate-700/50 px-2 py-1 rounded"
               >
-                <span className="text-white truncate">
-                  {player!.nickname || player!.name}
-                </span>
-                <span className="text-pitch-400 font-medium">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-slate-400 text-xs font-medium w-7 shrink-0">
+                    {player!.position}
+                  </span>
+                  <span className="text-white truncate">
+                    {player!.nickname || player!.name}
+                  </span>
+                </div>
+                <span className="text-pitch-400 font-medium shrink-0">
                   {calculateOverall(player!)}
                 </span>
               </div>
@@ -140,8 +158,6 @@ export function PreMatchOverview({
   onBack,
 }: PreMatchOverviewProps) {
   const isPlayerHome = fixture.homeTeamId === playerTeamId;
-  const playerTeam = isPlayerHome ? homeTeam : awayTeam;
-  const opponentTeam = isPlayerHome ? awayTeam : homeTeam;
 
   const expectedAttendance = useMemo(() => {
     const min = Math.floor(homeTeam.capacity * 0.5);
@@ -197,14 +213,20 @@ export function PreMatchOverview({
           </div>
         </div>
 
-        {/* Team Comparison */}
+        {/* Team Comparison - Home team first, Away team second */}
         <div className="grid grid-cols-2 gap-6 max-w-4xl mx-auto mb-8">
           <TeamOverview
-            team={playerTeam}
-            tactics={playerTactics}
-            isOpponent={false}
+            team={homeTeam}
+            tactics={isPlayerHome ? playerTactics : undefined}
+            isOpponent={!isPlayerHome}
+            formation={isPlayerHome ? playerTactics.formation : undefined}
           />
-          <TeamOverview team={opponentTeam} isOpponent={true} />
+          <TeamOverview
+            team={awayTeam}
+            tactics={!isPlayerHome ? playerTactics : undefined}
+            isOpponent={isPlayerHome}
+            formation={!isPlayerHome ? playerTactics.formation : undefined}
+          />
         </div>
 
         {/* Confirmation */}
