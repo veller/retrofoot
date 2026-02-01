@@ -1,186 +1,248 @@
-import { useState, useEffect, useMemo } from 'react';
-import type { Team, Fixture } from '@retrofoot/core';
+import { useMemo } from 'react';
+import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
 
-/** Real ms between each game minute (1, 2, 3... human-like). */
-const TICK_MS = 450;
-
-type MatchPhase = '1st' | 'HT' | '2nd' | 'FT';
-
-/** Display time as MM:00 (minutes only, zero-padded). */
-function formatTime(minute: number): string {
-  return `${String(minute).padStart(2, '0')}:00`;
-}
-
-function shuffle<T>(array: T[]): T[] {
-  const out = [...array];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
-/** Returns random pairings of teams excluding the given IDs (e.g. user's match teams). */
-function getRandomOtherMatches(
-  teams: Team[],
-  excludeTeamIds: string[],
-): { homeTeam: Team; awayTeam: Team }[] {
-  const exclude = new Set(excludeTeamIds);
-  const rest = teams.filter((t) => !exclude.has(t.id));
-  const shuffled = shuffle(rest);
-  const pairs: { homeTeam: Team; awayTeam: Team }[] = [];
-  for (let i = 0; i + 1 < shuffled.length; i += 2) {
-    pairs.push({ homeTeam: shuffled[i], awayTeam: shuffled[i + 1] });
-  }
-  return pairs;
-}
-
 interface MatchLiveViewProps {
-  fixture: Fixture;
-  homeTeam: Team;
-  awayTeam: Team;
-  teams: Team[];
-  onExit: () => void;
+  matches: LiveMatchState[];
+  playerMatchIndex: number;
+  currentMinute: number;
+  currentSeconds: number;
+  phase: 'first_half' | 'half_time' | 'second_half' | 'full_time';
+  isPaused: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  onSubstitutions: () => void;
+  round: number;
+}
+
+function EventIcon({ type }: { type: MatchEvent['type'] }) {
+  switch (type) {
+    case 'goal':
+      return <span className="text-yellow-400">⚽</span>;
+    case 'own_goal':
+      return <span className="text-red-400">⚽</span>;
+    case 'yellow_card':
+      return <span className="text-yellow-400">🟨</span>;
+    case 'red_card':
+      return <span className="text-red-600">🟥</span>;
+    case 'penalty_scored':
+      return <span className="text-green-400">⚽</span>;
+    case 'penalty_missed':
+      return <span className="text-red-400">❌</span>;
+    default:
+      return null;
+  }
+}
+
+function formatTime(minute: number, seconds: number): string {
+  return `${String(minute).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function getLatestSignificantEvent(
+  events: MatchEvent[],
+): MatchEvent | undefined {
+  // Only show goals and cards as significant events in the ticker
+  const significant = events.filter((e) =>
+    ['goal', 'own_goal', 'penalty_scored', 'yellow_card', 'red_card'].includes(
+      e.type,
+    ),
+  );
+  return significant[significant.length - 1];
+}
+
+interface MatchRowProps {
+  match: LiveMatchState;
+  isPlayerMatch: boolean;
+}
+
+function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
+  const { homeTeam, awayTeam, state, attendance } = match;
+
+  const latestEvent = useMemo(
+    () => getLatestSignificantEvent(state.events),
+    [state.events],
+  );
+
+  // Check if there was a recent goal (within last 3 events) for flash effect
+  const recentGoal = useMemo(() => {
+    const lastEvents = state.events.slice(-3);
+    return lastEvents.some((e) =>
+      ['goal', 'own_goal', 'penalty_scored'].includes(e.type),
+    );
+  }, [state.events]);
+
+  return (
+    <div
+      className={`grid grid-cols-[120px_1fr_80px_1fr_200px] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors ${
+        isPlayerMatch
+          ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
+          : 'bg-slate-800 hover:bg-slate-750'
+      } ${recentGoal && !isPlayerMatch ? 'animate-pulse' : ''}`}
+    >
+      {/* Attendance + Stadium */}
+      <div className="text-slate-400 text-xs">
+        <div className="font-mono text-white">
+          {attendance.toLocaleString()}
+        </div>
+        <div className="truncate">{homeTeam.stadium}</div>
+      </div>
+
+      {/* Home Team */}
+      <div className="flex items-center gap-2 justify-end">
+        <span className="text-white font-medium truncate">{homeTeam.name}</span>
+        <TeamShield team={homeTeam} />
+      </div>
+
+      {/* Score */}
+      <div className="text-center">
+        <span className="text-white font-bold text-xl font-mono">
+          {state.homeScore} x {state.awayScore}
+        </span>
+      </div>
+
+      {/* Away Team */}
+      <div className="flex items-center gap-2">
+        <TeamShield team={awayTeam} />
+        <span className="text-white font-medium truncate">{awayTeam.name}</span>
+      </div>
+
+      {/* Latest Event */}
+      <div className="text-sm truncate">
+        {latestEvent && (
+          <span className="flex items-center gap-1">
+            <span className="text-slate-400 font-mono">
+              {latestEvent.minute}'
+            </span>
+            <EventIcon type={latestEvent.type} />
+            <span className="text-white">{latestEvent.playerName}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function MatchLiveView({
-  fixture,
-  homeTeam,
-  awayTeam,
-  teams,
-  onExit,
+  matches,
+  playerMatchIndex,
+  currentMinute,
+  currentSeconds,
+  phase,
+  isPaused,
+  onPause,
+  onResume,
+  onSubstitutions,
+  round,
 }: MatchLiveViewProps) {
-  const [minute, setMinute] = useState(0);
-  const [phase, setPhase] = useState<MatchPhase>('1st');
-
-  /** All matches: user's match first (highlighted), then random other pairings. */
-  const allMatches = useMemo(() => {
-    const others = getRandomOtherMatches(teams, [homeTeam.id, awayTeam.id]);
-    return [
-      { homeTeam, awayTeam, isUserMatch: true as const },
-      ...others.map((pair) => ({ ...pair, isUserMatch: false as const })),
-    ];
-  }, [teams, homeTeam, awayTeam]);
-
-  useEffect(() => {
-    if (phase === 'FT' || phase === 'HT') return;
-
-    const interval = setInterval(() => {
-      setMinute((m) => {
-        const next = m + 1;
-        if (phase === '1st') {
-          if (next >= 45) {
-            setPhase('HT');
-            return 45;
-          }
-          return next;
-        }
-        // phase === '2nd'
-        if (next >= 90) {
-          setPhase('FT');
-          return 90;
-        }
-        return next;
-      });
-    }, TICK_MS);
-
-    return () => clearInterval(interval);
+  const phaseLabel = useMemo(() => {
+    switch (phase) {
+      case 'first_half':
+        return '1st Half';
+      case 'half_time':
+        return 'Half Time';
+      case 'second_half':
+        return '2nd Half';
+      case 'full_time':
+        return 'Full Time';
+    }
   }, [phase]);
 
-  const phaseLabel =
-    phase === '1st'
-      ? '1st half'
-      : phase === 'HT'
-        ? 'Half time'
-        : phase === '2nd'
-          ? '2nd half'
-          : 'Full time';
+  const isLive = phase === 'first_half' || phase === 'second_half';
+  const canSubstitute = phase === 'half_time' || isPaused;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-slate-900">
-      {/* Minimal header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center justify-between shrink-0">
-        <span className="text-slate-400 text-sm font-medium">
-          Round {fixture.round} · {phase === 'FT' ? 'Full Time' : 'Live'}
-        </span>
+    <div className="flex flex-col h-full bg-slate-900">
+      {/* Header */}
+      <header className="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="font-pixel text-sm text-pitch-400">SÉRIE A</h1>
+          <p className="text-slate-400 text-sm">Round {round}</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {/* Timer */}
+          <div className="text-center">
+            <div className="text-slate-400 text-xs uppercase">{phaseLabel}</div>
+            <div className="text-white font-mono text-3xl font-bold">
+              {formatTime(currentMinute, currentSeconds)}
+            </div>
+            {isLive && !isPaused && (
+              <div className="text-red-500 text-xs font-bold uppercase animate-pulse">
+                LIVE
+              </div>
+            )}
+            {isPaused && (
+              <div className="text-yellow-500 text-xs font-bold uppercase">
+                PAUSED
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="w-32" /> {/* Spacer for centering */}
       </header>
 
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-6">
-        {/* Big timer at top */}
-        <section className="flex flex-col items-center justify-center py-8 shrink-0">
-          <span className="text-slate-400 text-sm font-medium uppercase tracking-wide mb-1">
-            {phase === '2nd' ? '2nd half' : phaseLabel}
-          </span>
-          <span className="text-6xl font-bold text-white font-mono tabular-nums">
-            {formatTime(minute)}
-          </span>
-          {phase !== 'FT' && phase !== 'HT' && (
-            <span className="mt-1 text-red-500 text-xs font-bold uppercase">
-              Live
-            </span>
-          )}
-          {phase === 'HT' && (
-            <button
-              type="button"
-              onClick={() => setPhase('2nd')}
-              className="mt-4 bg-pitch-600 hover:bg-pitch-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-            >
-              Play 2nd half
-            </button>
-          )}
-        </section>
-
-        {/* Full time: show exit button */}
-        {phase === 'FT' && (
-          <div className="flex flex-col items-center gap-4 py-2 shrink-0">
-            <button
-              type="button"
-              onClick={onExit}
-              className="bg-pitch-600 hover:bg-pitch-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-            >
-              Back to match day
-            </button>
+      {/* Match List */}
+      <main className="flex-1 overflow-auto">
+        <div className="border border-slate-700 rounded-lg m-4 overflow-hidden">
+          {/* Column Headers */}
+          <div className="grid grid-cols-[120px_1fr_80px_1fr_200px] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
+            <div>Attendance</div>
+            <div className="text-right">Home</div>
+            <div className="text-center">Score</div>
+            <div>Away</div>
+            <div>Latest Event</div>
           </div>
+
+          {/* Match Rows */}
+          {matches.map((match, index) => (
+            <MatchRow
+              key={match.fixtureId}
+              match={match}
+              isPlayerMatch={index === playerMatchIndex}
+            />
+          ))}
+        </div>
+      </main>
+
+      {/* Controls */}
+      <footer className="bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-center gap-4">
+        {isLive && (
+          <>
+            {isPaused ? (
+              <button
+                onClick={onResume}
+                className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+              >
+                Resume
+              </button>
+            ) : (
+              <button
+                onClick={onPause}
+                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+              >
+                Pause
+              </button>
+            )}
+          </>
         )}
 
-        {/* All matches: user's row highlighted */}
-        <section className="shrink-0">
-          <h2 className="text-slate-400 text-sm font-semibold uppercase tracking-wide mb-3">
-            Round {fixture.round}
-          </h2>
-          <ul className="grid gap-2">
-            {allMatches.map(({ homeTeam: h, awayTeam: a, isUserMatch }, i) => (
-              <li
-                key={isUserMatch ? 'user' : `${h.id}-${a.id}-${i}`}
-                className={`rounded-lg px-4 py-3 flex items-center justify-between ${
-                  isUserMatch
-                    ? 'bg-pitch-900/40 border-2 border-pitch-500'
-                    : 'bg-slate-800 border border-slate-700'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <TeamShield team={h} />
-                  <span className="text-white font-medium truncate">
-                    {h.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 px-2">
-                  <span className="text-slate-500 text-sm font-mono">
-                    0 - 0
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 min-w-0 flex-1 justify-end">
-                  <span className="text-white font-medium truncate">
-                    {a.name}
-                  </span>
-                  <TeamShield team={a} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+        {phase === 'half_time' && (
+          <button
+            onClick={onResume}
+            className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+          >
+            Play 2nd Half
+          </button>
+        )}
+
+        {canSubstitute && (
+          <button
+            onClick={onSubstitutions}
+            className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+          >
+            Substitutions
+          </button>
+        )}
+      </footer>
     </div>
   );
 }

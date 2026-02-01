@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { gameRoutes } from './routes/game';
 import { saveRoutes } from './routes/save';
 import { authRoutes } from './routes/auth';
+import { matchRoutes } from './routes/match';
 import type { CloudflareBindings } from './lib/auth';
 
 // Re-export the Env type for use in other files
@@ -39,6 +40,7 @@ app.get('/api/health', (c) => {
 app.route('/api/auth', authRoutes);
 app.route('/api/game', gameRoutes);
 app.route('/api/save', saveRoutes);
+app.route('/api/match', matchRoutes);
 
 // 404 handler
 app.notFound((c) => {

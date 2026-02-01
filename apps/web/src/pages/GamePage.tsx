@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
@@ -13,6 +13,7 @@ import {
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
 import { useSaveData } from '../hooks';
+import { useGameStore, useUpcomingFixture } from '../stores/gameStore';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
 
@@ -35,18 +36,6 @@ const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'attacking', label: 'Attacking' },
 ];
 
-// Position groups for highlighting similar roles (simplified: GK, DEF, MID, ATT)
-const POSITION_GROUPS: Record<Position, Position[]> = {
-  GK: ['GK'],
-  DEF: ['DEF'],
-  MID: ['MID'],
-  ATT: ['ATT'],
-};
-
-function getSimilarPositions(position: Position): Position[] {
-  return POSITION_GROUPS[position] ?? [position];
-}
-
 const POSITION_ORDER: Record<Position, number> = {
   GK: 0,
   DEF: 1,
@@ -60,6 +49,7 @@ function getPositionOrder(position: Position): number {
 
 export function GamePage() {
   const { saveId } = useParams<{ saveId: string }>();
+  const navigate = useNavigate();
   const { data, isLoading, error } = useSaveData(saveId);
 
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
@@ -67,8 +57,44 @@ export function GamePage() {
   // Local tactics state - initialized when data loads
   const [tactics, setTactics] = useState<Tactics | null>(null);
 
+  // Game store for match functionality
+  const gameStoreTeams = useGameStore((s) => s.teams);
+  const gameStoreTactics = useGameStore((s) => s.tactics);
+  const initializeGame = useGameStore((s) => s.initializeGame);
+  const setStoreTactics = useGameStore((s) => s.setTactics);
+  const _hasHydrated = useGameStore((s) => s._hasHydrated);
+
+  // Initialize game store if empty (for match functionality)
+  useEffect(() => {
+    if (_hasHydrated && gameStoreTeams.length === 0) {
+      initializeGame();
+    }
+  }, [_hasHydrated, gameStoreTeams.length, initializeGame]);
+
   // Initialize tactics when team data loads
   const playerTeam = data?.playerTeam ?? null;
+
+  // Check if there's an upcoming match using the game store
+  const {
+    fixture: upcomingFixture,
+    homeTeam,
+    awayTeam,
+    isPlayerHome,
+  } = useUpcomingFixture();
+
+  const upcomingMatch = useMemo(() => {
+    if (!upcomingFixture || upcomingFixture.played) return null;
+    const opponent = isPlayerHome ? awayTeam : homeTeam;
+    return { fixture: upcomingFixture, opponent, isHome: isPlayerHome };
+  }, [upcomingFixture, homeTeam, awayTeam, isPlayerHome]);
+
+  const handlePlayMatch = () => {
+    // Sync tactics to game store before navigating
+    if (tactics) {
+      setStoreTactics(tactics);
+    }
+    navigate(`/game/${saveId}/match`);
+  };
 
   // Initialize tactics on first load
   useEffect(() => {
@@ -82,6 +108,13 @@ export function GamePage() {
       });
     }
   }, [playerTeam, tactics]);
+
+  // Sync tactics to game store when they change
+  useEffect(() => {
+    if (tactics && gameStoreTactics !== tactics) {
+      setStoreTactics(tactics);
+    }
+  }, [tactics, gameStoreTactics, setStoreTactics]);
 
   if (isLoading) {
     return (
@@ -144,6 +177,18 @@ export function GamePage() {
             <span className="text-slate-500">Round:</span>{' '}
             <span className="text-white">{data.currentRound}</span>
           </div>
+          {upcomingMatch && (
+            <button
+              onClick={handlePlayMatch}
+              className="ml-4 px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+            >
+              <span>Play Match</span>
+              <span className="text-pitch-200 text-xs">
+                vs {upcomingMatch.opponent?.shortName || '???'}
+                {upcomingMatch.isHome ? ' (H)' : ' (A)'}
+              </span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -326,7 +371,7 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
         : substitutes[selectedSlot.index];
     const player = playerId ? playersById.get(playerId) : undefined;
     if (!player) return null;
-    return getSimilarPositions(player.position);
+    return [player.position];
   }, [selectedSlot, lineup, substitutes, playersById]);
 
   function handlePlayerClick(slot: PitchSlot) {

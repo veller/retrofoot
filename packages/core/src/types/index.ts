@@ -131,7 +131,10 @@ export type MatchEventType =
   | 'save'
   | 'corner'
   | 'free_kick'
-  | 'offside';
+  | 'offside'
+  | 'kickoff'
+  | 'half_time'
+  | 'full_time';
 
 // Single match event
 export interface MatchEvent {

@@ -80,6 +80,7 @@ export interface SaveData {
   currentRound: number;
   playerTeam: Team | null;
   standings: StandingEntry[];
+  teams?: Team[];
 }
 
 interface UseSaveDataResult {
@@ -119,6 +120,251 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
       seasonMinutes: 0,
       seasonAvgRating: 0,
     } as PlayerForm,
+  };
+}
+
+// ============================================================================
+// Match Data Types (for match simulation)
+// ============================================================================
+
+interface ApiFixtureResponse {
+  id: string;
+  round: number;
+  homeTeamId: string;
+  awayTeamId: string;
+  date: string;
+  played: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+  homeTeam: ApiTeamWithPlayersResponse | null;
+  awayTeam: ApiTeamWithPlayersResponse | null;
+}
+
+interface ApiTeamWithPlayersResponse {
+  id: string;
+  name: string;
+  shortName: string;
+  badgeUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  stadium: string;
+  capacity: number;
+  reputation: number;
+  budget: number;
+  wageBudget: number;
+  momentum: number;
+  lastFiveResults: ('W' | 'D' | 'L')[];
+  players: ApiMatchPlayerResponse[];
+}
+
+interface ApiMatchPlayerResponse {
+  id: string;
+  name: string;
+  nickname?: string;
+  age: number;
+  nationality: string;
+  position: string;
+  preferredFoot: string;
+  attributes: PlayerAttributes;
+  potential: number;
+  morale: number;
+  fitness: number;
+  injured: boolean;
+  injuryWeeks: number;
+  contractEndSeason: number;
+  wage: number;
+  marketValue: number;
+  status: string;
+  form: {
+    form: number;
+    lastFiveRatings: number[];
+    seasonGoals: number;
+    seasonAssists: number;
+    seasonMinutes: number;
+    seasonAvgRating: number;
+  };
+}
+
+interface ApiMatchDataResponse {
+  currentRound: number;
+  currentSeason: string;
+  playerTeamId: string;
+  fixtures: ApiFixtureResponse[];
+  teams: ApiTeamWithPlayersResponse[];
+}
+
+export interface MatchFixture {
+  id: string;
+  round: number;
+  homeTeamId: string;
+  awayTeamId: string;
+  date: string;
+  played: boolean;
+  homeScore: number | null;
+  awayScore: number | null;
+}
+
+export interface MatchData {
+  saveId: string;
+  currentRound: number;
+  currentSeason: string;
+  playerTeamId: string;
+  fixtures: MatchFixture[];
+  teams: Team[];
+}
+
+interface UseSaveMatchDataResult {
+  data: MatchData | null;
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Transform API match player to core Player type
+ */
+function transformMatchPlayer(apiPlayer: ApiMatchPlayerResponse): Player {
+  return {
+    id: apiPlayer.id,
+    name: apiPlayer.name,
+    nickname: apiPlayer.nickname,
+    age: apiPlayer.age,
+    nationality: apiPlayer.nationality,
+    position: apiPlayer.position as Position,
+    preferredFoot:
+      (apiPlayer.preferredFoot as 'left' | 'right' | 'both') || 'right',
+    attributes: apiPlayer.attributes,
+    potential: apiPlayer.potential,
+    morale: apiPlayer.morale ?? 70,
+    fitness: apiPlayer.fitness ?? 100,
+    injured: apiPlayer.injured ?? false,
+    injuryWeeks: apiPlayer.injuryWeeks ?? 0,
+    contractEndSeason: apiPlayer.contractEndSeason ?? 2028,
+    wage: apiPlayer.wage,
+    marketValue: apiPlayer.marketValue,
+    status:
+      (apiPlayer.status as
+        | 'active'
+        | 'retiring'
+        | 'retired'
+        | 'deceased'
+        | 'suspended') ?? 'active',
+    form: {
+      form: apiPlayer.form?.form ?? 70,
+      lastFiveRatings: apiPlayer.form?.lastFiveRatings ?? [],
+      seasonGoals: apiPlayer.form?.seasonGoals ?? 0,
+      seasonAssists: apiPlayer.form?.seasonAssists ?? 0,
+      seasonMinutes: apiPlayer.form?.seasonMinutes ?? 0,
+      seasonAvgRating: apiPlayer.form?.seasonAvgRating ?? 0,
+    },
+  };
+}
+
+/**
+ * Transform API team with players to core Team type
+ */
+function transformTeamWithPlayers(apiTeam: ApiTeamWithPlayersResponse): Team {
+  return {
+    id: apiTeam.id,
+    name: apiTeam.name,
+    shortName: apiTeam.shortName,
+    badgeUrl: apiTeam.badgeUrl,
+    primaryColor: apiTeam.primaryColor,
+    secondaryColor: apiTeam.secondaryColor,
+    stadium: apiTeam.stadium,
+    capacity: apiTeam.capacity,
+    reputation: apiTeam.reputation,
+    budget: apiTeam.budget,
+    wageBudget: apiTeam.wageBudget,
+    momentum: apiTeam.momentum ?? 50,
+    lastFiveResults: apiTeam.lastFiveResults ?? [],
+    players: (apiTeam.players ?? []).map(transformMatchPlayer),
+  };
+}
+
+/**
+ * Hook to fetch match data (fixtures, teams with players) for match simulation
+ */
+export function useSaveMatchData(
+  saveId: string | undefined,
+): UseSaveMatchDataResult {
+  const [data, setData] = useState<MatchData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!saveId) {
+      setIsLoading(false);
+      setError('No save ID provided');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch match fixtures with teams and players
+      const response = await fetch(`/api/match/${saveId}/fixtures`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized');
+        }
+        if (response.status === 403) {
+          throw new Error('Access denied');
+        }
+        if (response.status === 404) {
+          throw new Error('Save not found');
+        }
+        throw new Error('Failed to fetch match data');
+      }
+
+      const matchData: ApiMatchDataResponse = await response.json();
+
+      // Transform teams
+      const teams = matchData.teams.map(transformTeamWithPlayers);
+
+      // Transform fixtures
+      const fixtures: MatchFixture[] = matchData.fixtures.map((f) => ({
+        id: f.id,
+        round: f.round,
+        homeTeamId: f.homeTeamId,
+        awayTeamId: f.awayTeamId,
+        date: f.date,
+        played: f.played,
+        homeScore: f.homeScore,
+        awayScore: f.awayScore,
+      }));
+
+      setData({
+        saveId,
+        currentRound: matchData.currentRound ?? 1,
+        currentSeason: matchData.currentSeason,
+        playerTeamId: matchData.playerTeamId,
+        fixtures,
+        teams,
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to load match data',
+      );
+      setData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [saveId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return {
+    data,
+    isLoading,
+    error,
+    refetch: fetchData,
   };
 }
 
