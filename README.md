@@ -80,6 +80,7 @@ pnpm --filter @retrofoot/core test
 ## Deployment
 
 Deployed on Cloudflare:
+
 - **Frontend:** Cloudflare Pages
 - **API:** Cloudflare Workers
 - **Database:** Cloudflare D1

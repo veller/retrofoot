@@ -4,19 +4,19 @@
 // Main entry point for the @retrofoot/core package
 
 // Re-export all types
-export * from './types'
+export * from './types';
 
 // Re-export match engine
-export * from './match'
+export * from './match';
 
 // Re-export player system
-export * from './player'
+export * from './player';
 
 // Re-export team system
-export * from './team'
+export * from './team';
 
 // Re-export season system
-export * from './season'
+export * from './season';
 
 // Re-export pitch layout
-export * from './pitch'
+export * from './pitch';

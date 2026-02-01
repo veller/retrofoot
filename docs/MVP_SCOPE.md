@@ -9,17 +9,20 @@
 #### Features
 
 **Authentication**
+
 - [x] User registration with email
 - [x] Login/logout
 - [x] Session management
 
 **Game Saves**
+
 - [ ] Create new game (pick team, name manager)
 - [ ] Load existing save
 - [ ] Auto-save after each action
 - [ ] One save per user (free tier)
 
 **Teams & Players**
+
 - [ ] Brasil Série A (20 teams, fictional names)
 - [ ] ~25 players per team
 - [ ] Player attributes (15 stats)
@@ -27,6 +30,7 @@
 - [ ] Overall rating calculation
 
 **Match Simulation**
+
 - [ ] Minute-by-minute simulation
 - [ ] Live event display (goals, cards, etc.)
 - [ ] Pause/resume during match
@@ -35,12 +39,14 @@
 - [ ] Tactical posture changes
 
 **Tactics**
+
 - [ ] 8 formations (4-4-2, 4-3-3, etc.)
 - [ ] 3 tactical postures (defensive, balanced, attacking)
 - [ ] Auto-select best lineup
 - [ ] Manual lineup selection
 
 **Season**
+
 - [ ] 38-round league calendar
 - [ ] Live standings table
 - [ ] Fixture list
@@ -48,12 +54,14 @@
 - [ ] Season end handling
 
 **Transfers**
+
 - [ ] View transfer market
 - [ ] Buy players (budget permitting)
 - [ ] Sell players
 - [ ] Basic valuation system
 
 **UI/UX**
+
 - [ ] Home screen (new game, load game)
 - [ ] Main game view with tabs
 - [ ] Squad management screen

@@ -38,12 +38,6 @@ export function PitchView({
   const excessCount = overLimit ? benchCount - benchLimit : 0;
   const coordinates = getFormationSlotCoordinates(formation);
 
-  // Horizontal layout: coord.y = left/right (goal to goal), coord.x = top/bottom (wing to wing)
-  const mapCoord = (coord: SlotCoordinate) => ({
-    left: `${coord.y}%`,
-    top: `${coord.x}%`,
-  });
-
   return (
     <div className="flex flex-col gap-4 items-center">
       {/* Football pitch - horizontal, aspect ratio 105:68 (length:width) */}
@@ -137,59 +131,58 @@ export function PitchView({
           />
 
           {/* Players on pitch */}
-        {lineup.map((playerId, index) => {
-          const player = playersById.get(playerId);
-          const coord = coordinates[index] as SlotCoordinate | undefined;
-          if (!coord || !player) return null;
+          {lineup.map((playerId, index) => {
+            const player = playersById.get(playerId);
+            const coord = coordinates[index] as SlotCoordinate | undefined;
+            if (!coord || !player) return null;
 
-          const pos = mapCoord(coord);
-          const displayName =
-            player.nickname ?? player.name.split(' ').pop() ?? '?';
-          const overall = calculateOverall(player);
+            const displayName =
+              player.nickname ?? player.name.split(' ').pop() ?? '?';
+            const overall = calculateOverall(player);
 
-          const isSelected =
-            selectedSlot?.type === 'lineup' && selectedSlot.index === index;
-          const isHighlighted =
-            !isSelected &&
-            highlightPositions?.length &&
-            highlightPositions.includes(player.position);
+            const isSelected =
+              selectedSlot?.type === 'lineup' && selectedSlot.index === index;
+            const isHighlighted =
+              !isSelected &&
+              highlightPositions?.length &&
+              highlightPositions.includes(player.position);
 
-          return (
-            <div
-              key={playerId}
-              className="absolute -translate-x-1/2 -translate-y-1/2 group z-10"
-              style={{
-                left: pos.left,
-                top: pos.top,
-              }}
-            >
+            return (
               <div
-                role="button"
-                tabIndex={0}
-                onClick={() =>
-                  onPlayerClick?.({ type: 'lineup', index }, playerId)
-                }
-                onKeyDown={(e) =>
-                  (e.key === 'Enter' || e.key === ' ') &&
-                  onPlayerClick?.({ type: 'lineup', index }, playerId)
-                }
-                className={`w-10 h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-xs font-bold text-white shadow-lg ${
-                  isSelected
-                    ? 'border-yellow-400 ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900'
-                    : isHighlighted
-                      ? 'border-cyan-400 ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-slate-900'
-                      : 'border-pitch-400'
-                } ${onPlayerClick ? 'cursor-pointer hover:border-pitch-300' : 'cursor-default'}`}
-                title={`${player.name} - OVR ${overall}`}
+                key={playerId}
+                className="absolute -translate-x-1/2 -translate-y-1/2 group"
+                style={{
+                  left: `${coord.x}%`,
+                  top: `${coord.y}%`,
+                }}
               >
-                {player.position}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    onPlayerClick?.({ type: 'lineup', index }, playerId)
+                  }
+                  onKeyDown={(e) =>
+                    (e.key === 'Enter' || e.key === ' ') &&
+                    onPlayerClick?.({ type: 'lineup', index }, playerId)
+                  }
+                  className={`w-10 h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-xs font-bold text-white shadow-lg ${
+                    isSelected
+                      ? 'border-yellow-400 ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900'
+                      : isHighlighted
+                        ? 'border-cyan-400 ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-slate-900'
+                        : 'border-pitch-400'
+                  } ${onPlayerClick ? 'cursor-pointer hover:border-pitch-300' : 'cursor-default'}`}
+                  title={`${player.name} - OVR ${overall}`}
+                >
+                  {player.position}
+                </div>
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 hidden group-hover:block z-10 px-2 py-1 bg-slate-900/95 border border-slate-600 rounded text-xs whitespace-nowrap">
+                  {displayName} ({overall})
+                </div>
               </div>
-              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 hidden group-hover:block z-10 px-2 py-1 bg-slate-900/95 border border-slate-600 rounded text-xs whitespace-nowrap">
-                {displayName} ({overall})
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
         </div>
       </div>
 
@@ -229,7 +222,8 @@ export function PitchView({
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('[data-remove]')) return;
+                  if ((e.target as HTMLElement).closest('[data-remove]'))
+                    return;
                   onPlayerClick?.({ type: 'bench', index: i }, playerId);
                 }}
                 onKeyDown={(e) => {

@@ -71,37 +71,40 @@ Matches are simulated minute-by-minute with events displayed as they happen:
 ### Pausable
 
 Players can pause at any time to:
+
 - Make substitutions (up to 5 per match)
 - Change formation
 - Adjust tactical posture
 
 ### Event Types
 
-| Event | Description |
-|-------|-------------|
-| `goal` | Goal scored |
-| `own_goal` | Own goal |
-| `penalty_scored` | Penalty converted |
-| `penalty_missed` | Penalty saved/missed |
-| `yellow_card` | Yellow card shown |
-| `red_card` | Red card, player sent off |
-| `injury` | Player injured during match |
-| `substitution` | Player substituted |
-| `chance_missed` | Missed scoring opportunity |
-| `save` | Goalkeeper save |
-| `corner` | Corner kick awarded |
-| `free_kick` | Free kick in dangerous position |
+| Event            | Description                     |
+| ---------------- | ------------------------------- |
+| `goal`           | Goal scored                     |
+| `own_goal`       | Own goal                        |
+| `penalty_scored` | Penalty converted               |
+| `penalty_missed` | Penalty saved/missed            |
+| `yellow_card`    | Yellow card shown               |
+| `red_card`       | Red card, player sent off       |
+| `injury`         | Player injured during match     |
+| `substitution`   | Player substituted              |
+| `chance_missed`  | Missed scoring opportunity      |
+| `save`           | Goalkeeper save                 |
+| `corner`         | Corner kick awarded             |
+| `free_kick`      | Free kick in dangerous position |
 
 ## Player System
 
 ### Attributes (15 total)
 
 **Physical:**
+
 - `speed` (1-99) - Sprint speed and acceleration
 - `strength` (1-99) - Physical power in duels
 - `stamina` (1-99) - Endurance over 90 minutes
 
 **Technical:**
+
 - `shooting` (1-99) - Finishing ability
 - `passing` (1-99) - Pass accuracy and vision
 - `dribbling` (1-99) - Ball control and skill moves
@@ -109,12 +112,14 @@ Players can pause at any time to:
 - `tackling` (1-99) - Defensive interceptions
 
 **Mental:**
+
 - `positioning` (1-99) - Reading the game
 - `vision` (1-99) - Spotting opportunities
 - `composure` (1-99) - Performance under pressure
 - `aggression` (1-99) - Intensity and pressing
 
 **Goalkeeping:**
+
 - `reflexes` (1-99) - Shot-stopping reactions
 - `handling` (1-99) - Catching and parrying
 - `diving` (1-99) - Reach and agility
@@ -123,34 +128,37 @@ Players can pause at any time to:
 
 Overall is calculated based on position-weighted attributes:
 
-| Position | Key Attributes |
-|----------|---------------|
-| GK | reflexes, handling, diving, positioning |
-| CB | tackling, heading, strength, positioning |
-| LB/RB | tackling, speed, stamina, passing |
-| CDM | tackling, positioning, passing, strength |
-| CM | passing, vision, stamina, positioning |
-| CAM | passing, vision, dribbling, shooting |
-| LW/RW | speed, dribbling, shooting, passing |
-| ST | shooting, positioning, heading, composure |
+| Position | Key Attributes                            |
+| -------- | ----------------------------------------- |
+| GK       | reflexes, handling, diving, positioning   |
+| CB       | tackling, heading, strength, positioning  |
+| LB/RB    | tackling, speed, stamina, passing         |
+| CDM      | tackling, positioning, passing, strength  |
+| CM       | passing, vision, stamina, positioning     |
+| CAM      | passing, vision, dribbling, shooting      |
+| LW/RW    | speed, dribbling, shooting, passing       |
+| ST       | shooting, positioning, heading, composure |
 
 ### Player Development
 
 Players improve or decline each season based on:
 
 **Growth factors (age < 30):**
+
 - `age` - Younger players develop faster
 - `potential` - Maximum possible overall
 - `developmentRate` - Individual growth speed (0.5-1.5)
 - `minutesPlayed` - More game time = faster development
 
 **Decline factors (age >= 30):**
+
 - Physical attributes decline faster than mental
 - Rate increases with age (30=slight, 35+=significant)
 
 ### Retirement
 
 Players may retire based on:
+
 - Age 33-35: 15% chance per season
 - Age 35-38: 30% chance per season
 - Age 38+: 50% chance per season
@@ -159,6 +167,7 @@ Players may retire based on:
 ### Regens
 
 When players retire, new youth players appear:
+
 - In club's youth academy (if your team)
 - In transfer market
 - Random names, positions, and attributes
@@ -168,24 +177,24 @@ When players retire, new youth players appear:
 
 ### Formations
 
-| Formation | Style |
-|-----------|-------|
-| 4-4-2 | Balanced, classic |
-| 4-3-3 | Attacking, wing play |
-| 4-2-3-1 | Control, single striker |
-| 3-5-2 | Midfield dominance |
-| 4-5-1 | Defensive, counter-attack |
-| 5-3-2 | Very defensive |
-| 5-4-1 | Park the bus |
-| 3-4-3 | All-out attack |
+| Formation | Style                     |
+| --------- | ------------------------- |
+| 4-4-2     | Balanced, classic         |
+| 4-3-3     | Attacking, wing play      |
+| 4-2-3-1   | Control, single striker   |
+| 3-5-2     | Midfield dominance        |
+| 4-5-1     | Defensive, counter-attack |
+| 5-3-2     | Very defensive            |
+| 5-4-1     | Park the bus              |
+| 3-4-3     | All-out attack            |
 
 ### Tactical Posture
 
-| Posture | Effect |
-|---------|--------|
+| Posture   | Effect                                         |
+| --------- | ---------------------------------------------- |
 | Defensive | +10% defense, -10% attack, less goals conceded |
-| Balanced | Standard performance |
-| Attacking | +10% attack, -10% defense, more goals scored |
+| Balanced  | Standard performance                           |
+| Attacking | +10% attack, -10% defense, more goals scored   |
 
 ### Squad Size
 
@@ -218,6 +227,7 @@ marketValue = baseValue * ageModifier
 ### Wages (Future Enhancement)
 
 Currently simplified. Future:
+
 - Weekly wage budget
 - Wage bill affects profitability
 - Player demands based on quality
@@ -254,6 +264,7 @@ Currently simplified. Future:
 ### Job Offers
 
 When fired or seeking new challenge:
+
 - Clubs with vacancies may offer job
 - Offers based on manager reputation
 - Better reputation = bigger clubs interested

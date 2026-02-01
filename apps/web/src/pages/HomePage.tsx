@@ -1,15 +1,32 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
+import { useAuth } from '@/hooks';
 
 export function HomePage() {
+  const { user, signOut } = useAuth();
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
+      {/* User info bar */}
+      <div className="absolute top-4 right-4 flex items-center gap-4">
+        <span className="text-slate-400 text-sm">
+          Welcome,{' '}
+          <span className="text-pitch-400">{user?.name || user?.email}</span>
+        </span>
+        <button
+          onClick={signOut}
+          className="text-slate-400 hover:text-red-400 text-sm transition-colors"
+        >
+          Sign Out
+        </button>
+      </div>
+
       <header className="text-center mb-12">
         <h1 className="font-pixel text-4xl text-pitch-400 mb-4 tracking-wider">
           RETROFOOT
         </h1>
         <p className="text-slate-400 text-lg max-w-md">
-          A nostalgic football management experience.
-          Build your dream team, manage your club, conquer the league.
+          A nostalgic football management experience. Build your dream team,
+          manage your club, conquer the league.
         </p>
       </header>
 
@@ -38,5 +55,5 @@ export function HomePage() {
         <p>Inspired by Elifoot &amp; Brasfoot</p>
       </footer>
     </div>
-  )
+  );
 }

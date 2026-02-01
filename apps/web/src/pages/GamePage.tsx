@@ -1,20 +1,20 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   calculateOverall,
   type FormationType,
   type TacticalPosture,
   type Position,
-} from '@retrofoot/core'
-import { PitchView, type PitchSlot } from '../components/PitchView'
-import { PositionBadge } from '../components/PositionBadge'
+} from '@retrofoot/core';
+import { PitchView, type PitchSlot } from '../components/PitchView';
+import { PositionBadge } from '../components/PositionBadge';
 import {
   useGameStore,
   useUpcomingFixture,
   BENCH_LIMIT,
-} from '../stores/gameStore'
+} from '../stores/gameStore';
 
-type GameTab = 'squad' | 'match' | 'table' | 'transfers' | 'finances'
+type GameTab = 'squad' | 'match' | 'table' | 'transfers' | 'finances';
 
 const FORMATION_OPTIONS: FormationType[] = [
   '4-3-3',
@@ -25,19 +25,13 @@ const FORMATION_OPTIONS: FormationType[] = [
   '5-3-2',
   '5-4-1',
   '3-4-3',
-]
+];
 
 const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'defensive', label: 'Defensive' },
   { value: 'balanced', label: 'Balanced' },
   { value: 'attacking', label: 'Attacking' },
-]
-
-const PLAY_STYLE_OPTIONS: { value: TacticalPosture; label: string }[] = [
-  { value: 'defensive', label: 'Defensive' },
-  { value: 'balanced', label: 'Neutral' },
-  { value: 'attacking', label: 'Offensive' },
-]
+];
 
 // Position groups for highlighting similar roles (GK, defenders, midfielders, attackers)
 const POSITION_GROUPS: Record<string, Position[]> = {
@@ -45,7 +39,7 @@ const POSITION_GROUPS: Record<string, Position[]> = {
   DEF: ['CB', 'LB', 'RB'],
   MID: ['CDM', 'CM', 'CAM', 'LM', 'RM'],
   ATT: ['LW', 'RW', 'ST'],
-}
+};
 const POSITION_TO_GROUP: Record<Position, string> = {
   GK: 'GK',
   CB: 'DEF',
@@ -59,9 +53,9 @@ const POSITION_TO_GROUP: Record<Position, string> = {
   LW: 'ATT',
   RW: 'ATT',
   ST: 'ATT',
-}
+};
 function getSimilarPositions(position: Position): Position[] {
-  return POSITION_GROUPS[POSITION_TO_GROUP[position]] ?? [position]
+  return POSITION_GROUPS[POSITION_TO_GROUP[position]] ?? [position];
 }
 
 const POSITION_GROUP_ORDER: Record<string, number> = {
@@ -69,9 +63,9 @@ const POSITION_GROUP_ORDER: Record<string, number> = {
   DEF: 1,
   MID: 2,
   ATT: 3,
-}
+};
 function getPositionGroupOrder(position: Position): number {
-  return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4
+  return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4;
 }
 
 function TeamShield({ team }: { team: { shortName: string; primaryColor: string; secondaryColor: string; badgeUrl?: string } }) {
@@ -112,31 +106,31 @@ function TeamShield({ team }: { team: { shortName: string; primaryColor: string;
 }
 
 export function GamePage() {
-  const [activeTab, setActiveTab] = useState<GameTab>('squad')
+  const [activeTab, setActiveTab] = useState<GameTab>('squad');
 
-  const _hasHydrated = useGameStore((s) => s._hasHydrated)
-  const initializeGame = useGameStore((s) => s.initializeGame)
-  const teams = useGameStore((s) => s.teams)
-  const playerTeamId = useGameStore((s) => s.playerTeamId)
+  const _hasHydrated = useGameStore((s) => s._hasHydrated);
+  const initializeGame = useGameStore((s) => s.initializeGame);
+  const teams = useGameStore((s) => s.teams);
+  const playerTeamId = useGameStore((s) => s.playerTeamId);
 
   const playerTeam = useMemo(
     () => teams.find((t) => t.id === playerTeamId) ?? null,
-    [teams, playerTeamId]
-  )
-  const season = useGameStore((s) => s.season)
+    [teams, playerTeamId],
+  );
+  const season = useGameStore((s) => s.season);
 
   useEffect(() => {
     if (_hasHydrated && teams.length === 0) {
-      initializeGame()
+      initializeGame();
     }
-  }, [_hasHydrated, teams.length, initializeGame])
+  }, [_hasHydrated, teams.length, initializeGame]);
 
   if (!_hasHydrated) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading...</p>
       </div>
-    )
+    );
   }
 
   if (!playerTeam || !season) {
@@ -144,7 +138,7 @@ export function GamePage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Initializing game...</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -191,7 +185,7 @@ export function GamePage() {
               >
                 {tab}
               </button>
-            )
+            ),
           )}
         </div>
       </nav>
@@ -209,86 +203,82 @@ export function GamePage() {
         </div>
       </main>
     </div>
-  )
+  );
 }
 
-function SquadPanel({
-  onGoToMatch,
-}: {
-  onGoToMatch: () => void
-}) {
-  const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null)
+function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
+  const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null);
 
   const playerTeam = useGameStore((s) => {
-    const teams = s.teams
-    const playerTeamId = s.playerTeamId
-    return teams.find((t) => t.id === playerTeamId) ?? null
-  })
-  const { fixture, homeTeam, awayTeam } = useUpcomingFixture()
-  const tactics = useGameStore((s) => s.tactics)
-  const setFormation = useGameStore((s) => s.setFormation)
-  const setPosture = useGameStore((s) => s.setPosture)
-  const swapLineupWithBench = useGameStore((s) => s.swapLineupWithBench)
-  const addToBench = useGameStore((s) => s.addToBench)
-  const removeFromBench = useGameStore((s) => s.removeFromBench)
+    const teams = s.teams;
+    const playerTeamId = s.playerTeamId;
+    return teams.find((t) => t.id === playerTeamId) ?? null;
+  });
+  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
+  const tactics = useGameStore((s) => s.tactics);
+  const setFormation = useGameStore((s) => s.setFormation);
+  const swapLineupWithBench = useGameStore((s) => s.swapLineupWithBench);
+  const addToBench = useGameStore((s) => s.addToBench);
+  const removeFromBench = useGameStore((s) => s.removeFromBench);
 
   const playersById = useMemo(
     () => new Map(playerTeam?.players.map((p) => [p.id, p]) ?? []),
-    [playerTeam?.players]
-  )
+    [playerTeam?.players],
+  );
 
-  if (!playerTeam || !tactics) return null
+  if (!playerTeam || !tactics) return null;
 
-  const { lineup, substitutes, formation } = tactics
+  const { lineup, substitutes, formation } = tactics;
 
-  const lineupSet = useMemo(() => new Set(lineup), [lineup])
-  const substitutesSet = useMemo(() => new Set(substitutes), [substitutes])
+  const lineupSet = useMemo(() => new Set(lineup), [lineup]);
+  const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
   const sortedPlayers = useMemo(() => {
-    const players = [...playerTeam.players]
+    const players = [...playerTeam.players];
     const getTier = (id: string) =>
-      lineupSet.has(id) ? 0 : substitutesSet.has(id) ? 1 : 2
+      lineupSet.has(id) ? 0 : substitutesSet.has(id) ? 1 : 2;
     return players.sort((a, b) => {
-      const aTier = getTier(a.id)
-      const bTier = getTier(b.id)
-      if (aTier !== bTier) return aTier - bTier
+      const aTier = getTier(a.id);
+      const bTier = getTier(b.id);
+      if (aTier !== bTier) return aTier - bTier;
 
-      const aGroupOrder = getPositionGroupOrder(a.position)
-      const bGroupOrder = getPositionGroupOrder(b.position)
-      if (aGroupOrder !== bGroupOrder) return aGroupOrder - bGroupOrder
+      const aGroupOrder = getPositionGroupOrder(a.position);
+      const bGroupOrder = getPositionGroupOrder(b.position);
+      if (aGroupOrder !== bGroupOrder) return aGroupOrder - bGroupOrder;
 
-      if (aTier === 0) return lineup.indexOf(a.id) - lineup.indexOf(b.id)
-      if (aTier === 1) return substitutes.indexOf(a.id) - substitutes.indexOf(b.id)
-      return calculateOverall(b) - calculateOverall(a)
-    })
-  }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet])
+      if (aTier === 0) return lineup.indexOf(a.id) - lineup.indexOf(b.id);
+      if (aTier === 1)
+        return substitutes.indexOf(a.id) - substitutes.indexOf(b.id);
+      return calculateOverall(b) - calculateOverall(a);
+    });
+  }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet]);
 
   const highlightPositions = useMemo((): Position[] | null => {
-    if (!selectedSlot) return null
+    if (!selectedSlot) return null;
     const playerId =
       selectedSlot.type === 'lineup'
         ? lineup[selectedSlot.index]
-        : substitutes[selectedSlot.index]
-    const player = playerId ? playersById.get(playerId) : undefined
-    if (!player) return null
-    return getSimilarPositions(player.position)
-  }, [selectedSlot, lineup, substitutes, playersById])
+        : substitutes[selectedSlot.index];
+    const player = playerId ? playersById.get(playerId) : undefined;
+    if (!player) return null;
+    return getSimilarPositions(player.position);
+  }, [selectedSlot, lineup, substitutes, playersById]);
 
   function handlePlayerClick(slot: PitchSlot) {
     if (!selectedSlot) {
-      setSelectedSlot(slot)
-      return
+      setSelectedSlot(slot);
+      return;
     }
     if (selectedSlot.type === slot.type && selectedSlot.index === slot.index) {
-      setSelectedSlot(null)
-      return
+      setSelectedSlot(null);
+      return;
     }
     if (selectedSlot.type === 'lineup' && slot.type === 'bench') {
-      swapLineupWithBench(selectedSlot.index, slot.index)
+      swapLineupWithBench(selectedSlot.index, slot.index);
     } else if (selectedSlot.type === 'bench' && slot.type === 'lineup') {
-      swapLineupWithBench(slot.index, selectedSlot.index)
+      swapLineupWithBench(slot.index, selectedSlot.index);
     }
-    setSelectedSlot(null)
+    setSelectedSlot(null);
   }
 
   return (
@@ -302,14 +292,14 @@ function SquadPanel({
         </p>
         <div className="grid gap-2">
           {sortedPlayers.map((player) => {
-            const inLineup = lineupSet.has(player.id)
-            const onBench = substitutesSet.has(player.id)
-            const canSendToBench = !inLineup && !onBench
+            const inLineup = lineupSet.has(player.id);
+            const onBench = substitutesSet.has(player.id);
+            const canSendToBench = !inLineup && !onBench;
             const rowStyle = inLineup
               ? 'bg-pitch-900/30 border-l-4 border-pitch-500'
               : onBench
                 ? 'bg-slate-600/80 border-l-4 border-slate-500'
-                : 'bg-slate-700'
+                : 'bg-slate-700';
 
             return (
               <div
@@ -337,7 +327,7 @@ function SquadPanel({
                   </span>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       </div>
@@ -347,38 +337,24 @@ function SquadPanel({
         <div className="bg-slate-800 p-6 h-full overflow-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Formation</h2>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <select
-                  value={formation}
-                  onChange={(e) =>
-                    setFormation(e.target.value as FormationType)
-                  }
-                  className="select-chevron bg-slate-700 text-white text-sm pl-3 py-1.5 rounded border border-slate-600"
-                >
-                  {FORMATION_OPTIONS.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400 text-sm">Play style</span>
-                <select
-                  value={tactics.posture}
-                  onChange={(e) =>
-                    setPosture(e.target.value as TacticalPosture)
-                  }
-                  className="select-chevron bg-slate-700 text-white text-sm pl-3 py-1.5 rounded border border-slate-600"
-                >
-                  {PLAY_STYLE_OPTIONS.map(({ value, label }) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={formation}
+                onChange={(e) => setFormation(e.target.value as FormationType)}
+                className="bg-slate-700 text-white text-sm px-3 py-1.5 rounded border border-slate-600"
+              >
+                {FORMATION_OPTIONS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+              {/* <button
+                onClick={autoSelectLineup}
+                className="text-xs bg-pitch-600 hover:bg-pitch-500 text-white px-3 py-1.5 rounded"
+              >
+                Suggest best XI
+              </button> */}
             </div>
           </div>
           {selectedSlot && (
@@ -451,14 +427,14 @@ function SquadPanel({
         )}
       </div>
     </div>
-  )
+  );
 }
 
 function MatchPanel() {
-  const { fixture, homeTeam, awayTeam } = useUpcomingFixture()
-  const tactics = useGameStore((s) => s.tactics)
-  const setPosture = useGameStore((s) => s.setPosture)
-  const season = useGameStore((s) => s.season)
+  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
+  const tactics = useGameStore((s) => s.tactics);
+  const setPosture = useGameStore((s) => s.setPosture);
+  const season = useGameStore((s) => s.season);
 
   if (!fixture || !homeTeam || !awayTeam || !season) {
     return (
@@ -466,14 +442,14 @@ function MatchPanel() {
         <h2 className="text-xl font-bold text-white mb-4">Next Match</h2>
         <p className="text-slate-400">No upcoming fixture.</p>
       </div>
-    )
+    );
   }
 
   const fixtureDate = new Date(fixture.date).toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  })
+  });
 
   return (
     <div className="bg-slate-800 border border-slate-700 p-6">
@@ -524,8 +500,8 @@ function MatchPanel() {
             {tactics?.formation ?? '—'} formation
           </p>
           <p className="text-slate-500 text-xs mt-1">
-            {tactics?.lineup.length ?? 0} starters, {tactics?.substitutes.length ?? 0}{' '}
-            on bench
+            {tactics?.lineup.length ?? 0} starters,{' '}
+            {tactics?.substitutes.length ?? 0} on bench
           </p>
           <p className="text-slate-400 text-xs mt-2">
             Posture: {tactics?.posture ?? 'balanced'}
@@ -533,13 +509,13 @@ function MatchPanel() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function TablePanel() {
-  const season = useGameStore((s) => s.season)
+  const season = useGameStore((s) => s.season);
 
-  if (!season) return null
+  if (!season) return null;
 
   return (
     <div className="bg-slate-800 border border-slate-700 p-6">
@@ -576,7 +552,7 @@ function TablePanel() {
         </tbody>
       </table>
     </div>
-  )
+  );
 }
 
 function TransfersPanel() {
@@ -587,17 +563,17 @@ function TransfersPanel() {
         Search for players and make offers. The transfer window is open.
       </p>
     </div>
-  )
+  );
 }
 
 function FinancesPanel() {
   const playerTeam = useGameStore((s) => {
-    const teams = s.teams
-    const playerTeamId = s.playerTeamId
-    return teams.find((t) => t.id === playerTeamId) ?? null
-  })
+    const teams = s.teams;
+    const playerTeamId = s.playerTeamId;
+    return teams.find((t) => t.id === playerTeamId) ?? null;
+  });
 
-  if (!playerTeam) return null
+  if (!playerTeam) return null;
 
   return (
     <div className="bg-slate-800 border border-slate-700 p-6">
@@ -617,5 +593,5 @@ function FinancesPanel() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,29 +1,30 @@
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
-import { gameRoutes } from './routes/game'
-import { saveRoutes } from './routes/save'
-import { authRoutes } from './routes/auth'
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { gameRoutes } from './routes/game';
+import { saveRoutes } from './routes/save';
+import { authRoutes } from './routes/auth';
+import type { CloudflareBindings } from './lib/auth';
 
-// Cloudflare Workers environment bindings
-export type Env = {
-  DB: D1Database
-  ENVIRONMENT: string
-  BETTER_AUTH_SECRET?: string
-}
+// Re-export the Env type for use in other files
+export type Env = CloudflareBindings;
 
 // Create Hono app with environment type
-const app = new Hono<{ Bindings: Env }>()
+const app = new Hono<{ Bindings: Env }>();
 
 // Global middleware
-app.use('*', logger())
+app.use('*', logger());
 app.use(
   '*',
   cors({
-    origin: ['http://localhost:3000', 'https://retrofoot.pages.dev'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'https://retrofoot.pages.dev',
+    ],
     credentials: true,
-  })
-)
+  }),
+);
 
 // Health check
 app.get('/api/health', (c) => {
@@ -31,33 +32,33 @@ app.get('/api/health', (c) => {
     status: 'ok',
     environment: c.env.ENVIRONMENT,
     timestamp: new Date().toISOString(),
-  })
-})
+  });
+});
 
 // Mount routes
-app.route('/api/auth', authRoutes)
-app.route('/api/game', gameRoutes)
-app.route('/api/save', saveRoutes)
+app.route('/api/auth', authRoutes);
+app.route('/api/game', gameRoutes);
+app.route('/api/save', saveRoutes);
 
 // 404 handler
 app.notFound((c) => {
-  return c.json({ error: 'Not Found' }, 404)
-})
+  return c.json({ error: 'Not Found' }, 404);
+});
 
 // Error handler
 app.onError((err, c) => {
-  console.error('Unhandled error:', err)
+  console.error('Unhandled error:', err);
   return c.json(
     {
       error: 'Internal Server Error',
       message: c.env.ENVIRONMENT === 'development' ? err.message : undefined,
     },
-    500
-  )
-})
+    500,
+  );
+});
 
 // Export for Cloudflare Workers
-export default app
+export default app;
 
 // Export type for Hono RPC client
-export type AppType = typeof app
+export type AppType = typeof app;

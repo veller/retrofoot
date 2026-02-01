@@ -2,6 +2,7 @@
 name = "retrofoot-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-13"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 # Development settings
@@ -13,8 +14,16 @@ port = 8787
 binding = "DB"
 database_name = "retrofoot-db"
 database_id = "bca95b94-1528-42fb-9de4-09a61ea76754"
-migrations_dir = "../db/migrations"
+migrations_dir = "../../packages/db/migrations"
 
 # Environment variables (secrets should be set via `wrangler secret put`)
 [vars]
 ENVIRONMENT = "production"
+
+# Development-only overrides
+[env.dev.vars]
+ENVIRONMENT = "development"
+
+# Development secrets (use .dev.vars file for secrets in local dev)
+# Create a .dev.vars file with:
+# BETTER_AUTH_SECRET=your-secret-at-least-32-characters-long

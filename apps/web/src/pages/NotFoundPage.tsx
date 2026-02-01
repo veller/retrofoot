@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router-dom';
 
 export function NotFoundPage() {
   return (
@@ -12,5 +12,5 @@ export function NotFoundPage() {
         BACK TO HOME
       </Link>
     </div>
-  )
+  );
 }

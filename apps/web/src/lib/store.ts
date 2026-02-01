@@ -1,23 +1,23 @@
-import { create } from 'zustand'
+import { create } from 'zustand';
 
 interface GameState {
   // Current save state
-  saveId: string | null
-  currentSeason: string | null
-  currentRound: number
-  playerTeamId: string | null
+  saveId: string | null;
+  currentSeason: string | null;
+  currentRound: number;
+  playerTeamId: string | null;
 
   // Loading state
-  isLoading: boolean
-  error: string | null
+  isLoading: boolean;
+  error: string | null;
 
   // Actions
-  loadSave: (saveId: string) => void
-  clearSave: () => void
-  setCurrentRound: (round: number) => void
-  setSeason: (season: string) => void
-  setLoading: (isLoading: boolean) => void
-  setError: (error: string | null) => void
+  loadSave: (saveId: string) => void;
+  clearSave: () => void;
+  setCurrentRound: (round: number) => void;
+  setSeason: (season: string) => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -53,4 +53,4 @@ export const useGameStore = create<GameState>((set) => ({
   setLoading: (isLoading: boolean) => set({ isLoading }),
 
   setError: (error: string | null) => set({ error, isLoading: false }),
-}))
+}));

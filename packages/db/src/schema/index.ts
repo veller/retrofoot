@@ -2,7 +2,7 @@
 // RETROFOOT - Database Schema (Drizzle + SQLite/D1)
 // ============================================================================
 
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 
 // ============================================================================
 // Users & Authentication
@@ -13,31 +13,54 @@ export const users = sqliteTable('users', {
   email: text('email').notNull().unique(),
   emailVerified: integer('email_verified', { mode: 'boolean' }).default(false),
   name: text('name'),
+  image: text('image'), // Optional user avatar
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-})
+});
 
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(), // Session token for Better Auth
   expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  ipAddress: text('ip_address'), // For security tracking
+  userAgent: text('user_agent'), // For security tracking
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-})
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
 
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
   userId: text('user_id')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  providerId: text('provider_id').notNull(),
-  providerAccountId: text('provider_account_id').notNull(),
+  accountId: text('account_id').notNull(), // Better Auth uses this for credential accounts
+  providerId: text('provider_id').notNull(), // 'credential' for email/password
   accessToken: text('access_token'),
   refreshToken: text('refresh_token'),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }),
+  accessTokenExpiresAt: integer('access_token_expires_at', {
+    mode: 'timestamp',
+  }),
+  refreshTokenExpiresAt: integer('refresh_token_expires_at', {
+    mode: 'timestamp',
+  }),
+  scope: text('scope'),
+  idToken: text('id_token'),
+  password: text('password'), // Hashed password for credential provider
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-})
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const verifications = sqliteTable('verifications', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(), // Email or other identifier
+  value: text('value').notNull(), // Token value
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+});
 
 // ============================================================================
 // Game Saves
@@ -56,7 +79,7 @@ export const saves = sqliteTable('saves', {
   currentRound: integer('current_round').default(1),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-})
+});
 
 // ============================================================================
 // Teams
@@ -77,7 +100,7 @@ export const teams = sqliteTable('teams', {
   reputation: integer('reputation').notNull(),
   budget: integer('budget').notNull(),
   wageBudget: integer('wage_budget').notNull(),
-})
+});
 
 // ============================================================================
 // Players
@@ -108,7 +131,7 @@ export const players = sqliteTable('players', {
   contractEndSeason: integer('contract_end_season').notNull(),
   wage: integer('wage').notNull(),
   marketValue: integer('market_value').notNull(),
-})
+});
 
 // ============================================================================
 // Standings
@@ -131,7 +154,7 @@ export const standings = sqliteTable('standings', {
   goalsFor: integer('goals_for').default(0),
   goalsAgainst: integer('goals_against').default(0),
   points: integer('points').default(0),
-})
+});
 
 // ============================================================================
 // Fixtures
@@ -154,7 +177,7 @@ export const fixtures = sqliteTable('fixtures', {
   played: integer('played', { mode: 'boolean' }).default(false),
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
-})
+});
 
 // ============================================================================
 // Match Events (for replays/history)
@@ -171,7 +194,7 @@ export const matchEvents = sqliteTable('match_events', {
   playerId: text('player_id'),
   playerName: text('player_name'),
   description: text('description'),
-})
+});
 
 // ============================================================================
 // Transfers
@@ -191,7 +214,7 @@ export const transfers = sqliteTable('transfers', {
   wage: integer('wage').notNull(),
   season: text('season').notNull(),
   date: text('date').notNull(),
-})
+});
 
 // ============================================================================
 // Tactics (per team per save)
@@ -209,38 +232,44 @@ export const tactics = sqliteTable('tactics', {
   posture: text('posture').notNull(),
   lineup: text('lineup', { mode: 'json' }).notNull(), // Array of player IDs
   substitutes: text('substitutes', { mode: 'json' }).notNull(), // Array of player IDs
-})
+});
 
 // ============================================================================
 // Type exports for use in application
 // ============================================================================
 
-export type User = typeof users.$inferSelect
-export type NewUser = typeof users.$inferInsert
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
 
-export type Session = typeof sessions.$inferSelect
-export type NewSession = typeof sessions.$inferInsert
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 
-export type Save = typeof saves.$inferSelect
-export type NewSave = typeof saves.$inferInsert
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
 
-export type Team = typeof teams.$inferSelect
-export type NewTeam = typeof teams.$inferInsert
+export type Verification = typeof verifications.$inferSelect;
+export type NewVerification = typeof verifications.$inferInsert;
 
-export type Player = typeof players.$inferSelect
-export type NewPlayer = typeof players.$inferInsert
+export type Save = typeof saves.$inferSelect;
+export type NewSave = typeof saves.$inferInsert;
 
-export type Standing = typeof standings.$inferSelect
-export type NewStanding = typeof standings.$inferInsert
+export type Team = typeof teams.$inferSelect;
+export type NewTeam = typeof teams.$inferInsert;
 
-export type Fixture = typeof fixtures.$inferSelect
-export type NewFixture = typeof fixtures.$inferInsert
+export type Player = typeof players.$inferSelect;
+export type NewPlayer = typeof players.$inferInsert;
 
-export type MatchEvent = typeof matchEvents.$inferSelect
-export type NewMatchEvent = typeof matchEvents.$inferInsert
+export type Standing = typeof standings.$inferSelect;
+export type NewStanding = typeof standings.$inferInsert;
 
-export type Transfer = typeof transfers.$inferSelect
-export type NewTransfer = typeof transfers.$inferInsert
+export type Fixture = typeof fixtures.$inferSelect;
+export type NewFixture = typeof fixtures.$inferInsert;
 
-export type Tactics = typeof tactics.$inferSelect
-export type NewTactics = typeof tactics.$inferInsert
+export type MatchEvent = typeof matchEvents.$inferSelect;
+export type NewMatchEvent = typeof matchEvents.$inferInsert;
+
+export type Transfer = typeof transfers.$inferSelect;
+export type NewTransfer = typeof transfers.$inferInsert;
+
+export type Tactics = typeof tactics.$inferSelect;
+export type NewTactics = typeof tactics.$inferInsert;
