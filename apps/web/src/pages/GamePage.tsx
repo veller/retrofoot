@@ -35,39 +35,27 @@ const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'attacking', label: 'Attacking' },
 ];
 
-// Position groups for highlighting similar roles (GK, defenders, midfielders, attackers)
-const POSITION_GROUPS: Record<string, Position[]> = {
+// Position groups for highlighting similar roles (simplified: GK, DEF, MID, ATT)
+const POSITION_GROUPS: Record<Position, Position[]> = {
   GK: ['GK'],
-  DEF: ['CB', 'LB', 'RB'],
-  MID: ['CDM', 'CM', 'CAM', 'LM', 'RM'],
-  ATT: ['LW', 'RW', 'ST'],
+  DEF: ['DEF'],
+  MID: ['MID'],
+  ATT: ['ATT'],
 };
-const POSITION_TO_GROUP: Record<Position, string> = {
-  GK: 'GK',
-  CB: 'DEF',
-  LB: 'DEF',
-  RB: 'DEF',
-  CDM: 'MID',
-  CM: 'MID',
-  CAM: 'MID',
-  LM: 'MID',
-  RM: 'MID',
-  LW: 'ATT',
-  RW: 'ATT',
-  ST: 'ATT',
-};
+
 function getSimilarPositions(position: Position): Position[] {
-  return POSITION_GROUPS[POSITION_TO_GROUP[position]] ?? [position];
+  return POSITION_GROUPS[position] ?? [position];
 }
 
-const POSITION_GROUP_ORDER: Record<string, number> = {
+const POSITION_ORDER: Record<Position, number> = {
   GK: 0,
   DEF: 1,
   MID: 2,
   ATT: 3,
 };
-function getPositionGroupOrder(position: Position): number {
-  return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4;
+
+function getPositionOrder(position: Position): number {
+  return POSITION_ORDER[position] ?? 4;
 }
 
 export function GamePage() {
@@ -206,19 +194,23 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
   const addToBench = useGameStore((s) => s.addToBench);
   const removeFromBench = useGameStore((s) => s.removeFromBench);
 
+  const lineup = useMemo(() => tactics?.lineup ?? [], [tactics?.lineup]);
+  const substitutes = useMemo(
+    () => tactics?.substitutes ?? [],
+    [tactics?.substitutes],
+  );
+  const formation = tactics?.formation ?? '4-3-3';
+
   const playersById = useMemo(
     () => new Map(playerTeam?.players.map((p) => [p.id, p]) ?? []),
     [playerTeam?.players],
   );
 
-  if (!playerTeam || !tactics) return null;
-
-  const { lineup, substitutes, formation } = tactics;
-
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
   const sortedPlayers = useMemo(() => {
+    if (!playerTeam) return [];
     const players = [...playerTeam.players];
     const getTier = (id: string) =>
       lineupSet.has(id) ? 0 : substitutesSet.has(id) ? 1 : 2;
@@ -227,16 +219,16 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
       const bTier = getTier(b.id);
       if (aTier !== bTier) return aTier - bTier;
 
-      const aGroupOrder = getPositionGroupOrder(a.position);
-      const bGroupOrder = getPositionGroupOrder(b.position);
-      if (aGroupOrder !== bGroupOrder) return aGroupOrder - bGroupOrder;
+      const aOrder = getPositionOrder(a.position);
+      const bOrder = getPositionOrder(b.position);
+      if (aOrder !== bOrder) return aOrder - bOrder;
 
       if (aTier === 0) return lineup.indexOf(a.id) - lineup.indexOf(b.id);
       if (aTier === 1)
         return substitutes.indexOf(a.id) - substitutes.indexOf(b.id);
       return calculateOverall(b) - calculateOverall(a);
     });
-  }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet]);
+  }, [playerTeam, lineup, substitutes, lineupSet, substitutesSet]);
 
   const highlightPositions = useMemo((): Position[] | null => {
     if (!selectedSlot) return null;
@@ -248,6 +240,8 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
     if (!player) return null;
     return getSimilarPositions(player.position);
   }, [selectedSlot, lineup, substitutes, playersById]);
+
+  if (!playerTeam || !tactics) return null;
 
   function handlePlayerClick(slot: PitchSlot) {
     if (!selectedSlot) {
@@ -566,7 +560,7 @@ function FinancesPanel() {
         <div className="bg-slate-700 p-4">
           <p className="text-slate-400 text-sm">Wage Budget</p>
           <p className="text-2xl text-white font-bold">
-            R$ {playerTeam.wagebudget.toLocaleString('pt-BR')}/mo
+            R$ {playerTeam.wageBudget.toLocaleString('pt-BR')}/mo
           </p>
         </div>
       </div>

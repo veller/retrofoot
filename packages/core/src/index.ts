@@ -20,3 +20,6 @@ export * from './season';
 
 // Re-export pitch layout
 export * from './pitch';
+
+// Re-export seed data
+export * from './data';

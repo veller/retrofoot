@@ -2,20 +2,30 @@
 // RETROFOOT - Core Types
 // ============================================================================
 
-// Player position types
+// Player position types (simplified: 4 positions)
 export type Position =
   | 'GK' // Goalkeeper
-  | 'CB' // Center Back
-  | 'LB' // Left Back
-  | 'RB' // Right Back
-  | 'CDM' // Defensive Midfielder
-  | 'CM' // Central Midfielder
-  | 'CAM' // Attacking Midfielder
-  | 'LM' // Left Midfielder
-  | 'RM' // Right Midfielder
-  | 'LW' // Left Winger
-  | 'RW' // Right Winger
-  | 'ST'; // Striker
+  | 'DEF' // Defender (CB, LB, RB, wing-backs)
+  | 'MID' // Midfielder (CDM, CM, CAM, LM, RM)
+  | 'ATT'; // Attacker (ST, CF, wingers)
+
+// Player lifecycle status
+export type PlayerStatus =
+  | 'active' // Playing normally
+  | 'retiring' // Announced retirement at season end
+  | 'retired' // No longer playing
+  | 'deceased' // Future dramatic events
+  | 'suspended'; // Banned from football
+
+// Player form tracking (updated after each match)
+export interface PlayerForm {
+  form: number; // 1-100, affects next match performance
+  lastFiveRatings: number[]; // Match ratings (0-10) for trend display
+  seasonGoals: number;
+  seasonAssists: number;
+  seasonMinutes: number;
+  seasonAvgRating: number; // Average match rating this season
+}
 
 // Player attributes (classic Elifoot-style, ~15 attributes)
 export interface PlayerAttributes {
@@ -47,14 +57,13 @@ export interface PlayerAttributes {
 export interface Player {
   id: string;
   name: string;
-  nickname?: string; // e.g., "Bunda" for Hulk-inspired player
+  nickname?: string; // e.g., "Tigrinho" for a young striker
   age: number;
   nationality: string;
   position: Position;
   preferredFoot: 'left' | 'right' | 'both';
   attributes: PlayerAttributes;
   potential: number; // 1-99, max possible overall
-  developmentRate: number; // How fast they develop (0.5-1.5)
   morale: number; // 1-100
   fitness: number; // 1-100
   injured: boolean;
@@ -62,6 +71,9 @@ export interface Player {
   contractEndSeason: number;
   wage: number; // Weekly wage in currency
   marketValue: number;
+  // New fields
+  status: PlayerStatus; // active, retiring, retired, etc.
+  form: PlayerForm; // Form tracking for match performance
 }
 
 // Team/Club entity
@@ -76,8 +88,11 @@ export interface Team {
   capacity: number;
   reputation: number; // 1-100, affects transfers
   budget: number;
-  wagebudget: number;
+  wageBudget: number;
   players: Player[];
+  // Team form tracking
+  momentum: number; // 1-100, affects match simulation
+  lastFiveResults: ('W' | 'D' | 'L')[]; // Last 5 match results
 }
 
 // Formation types
@@ -203,12 +218,28 @@ export interface TransferOffer {
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
 }
 
-// Utility type for calculating overall rating
+// Position weights for overall calculation (simplified 4 positions)
+const POSITION_WEIGHTS: Record<
+  Position,
+  Partial<Record<keyof PlayerAttributes, number>>
+> = {
+  GK: { reflexes: 3, handling: 3, diving: 3, positioning: 2, composure: 1 },
+  DEF: { tackling: 3, heading: 2, strength: 2, positioning: 2, speed: 1 },
+  MID: {
+    passing: 3,
+    vision: 2,
+    stamina: 2,
+    dribbling: 1,
+    positioning: 1,
+    tackling: 1,
+  },
+  ATT: { shooting: 3, positioning: 2, dribbling: 2, speed: 2, composure: 1 },
+};
+
+// Calculate overall rating based on position-weighted attributes
 export function calculateOverall(player: Player): number {
   const { attributes, position } = player;
-
-  // Weight attributes based on position
-  const weights = getPositionWeights(position);
+  const weights = POSITION_WEIGHTS[position];
 
   let total = 0;
   let weightSum = 0;
@@ -222,56 +253,14 @@ export function calculateOverall(player: Player): number {
   return Math.round(total / weightSum);
 }
 
-function getPositionWeights(
-  position: Position,
-): Partial<Record<keyof PlayerAttributes, number>> {
-  switch (position) {
-    case 'GK':
-      return {
-        reflexes: 3,
-        handling: 3,
-        diving: 3,
-        positioning: 2,
-        composure: 1,
-      };
-    case 'CB':
-      return {
-        tackling: 3,
-        heading: 2,
-        strength: 2,
-        positioning: 2,
-        composure: 1,
-      };
-    case 'LB':
-    case 'RB':
-      return { tackling: 2, speed: 2, stamina: 2, passing: 1, positioning: 1 };
-    case 'CDM':
-      return {
-        tackling: 3,
-        positioning: 2,
-        passing: 2,
-        stamina: 1,
-        strength: 1,
-      };
-    case 'CM':
-      return { passing: 3, vision: 2, stamina: 2, positioning: 1, shooting: 1 };
-    case 'CAM':
-      return { passing: 2, vision: 3, dribbling: 2, shooting: 2, composure: 1 };
-    case 'LM':
-    case 'RM':
-      return { speed: 2, dribbling: 2, passing: 2, stamina: 2, shooting: 1 };
-    case 'LW':
-    case 'RW':
-      return { speed: 3, dribbling: 3, shooting: 2, passing: 1, composure: 1 };
-    case 'ST':
-      return {
-        shooting: 3,
-        positioning: 2,
-        heading: 2,
-        composure: 2,
-        dribbling: 1,
-      };
-    default:
-      return { shooting: 1, passing: 1, dribbling: 1, tackling: 1, speed: 1 };
-  }
+// Create default player form (for new players)
+export function createDefaultForm(): PlayerForm {
+  return {
+    form: 70, // Neutral-positive start
+    lastFiveRatings: [],
+    seasonGoals: 0,
+    seasonAssists: 0,
+    seasonMinutes: 0,
+    seasonAvgRating: 0,
+  };
 }

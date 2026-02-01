@@ -1,18 +1,10 @@
 import type { Position } from '@retrofoot/core';
 
-const POSITION_GROUP_COLORS: Record<Position, string> = {
+const POSITION_COLORS: Record<Position, string> = {
   GK: 'bg-green-600',
-  CB: 'bg-yellow-500',
-  LB: 'bg-yellow-500',
-  RB: 'bg-yellow-500',
-  CDM: 'bg-orange-500',
-  CM: 'bg-orange-500',
-  CAM: 'bg-orange-500',
-  LM: 'bg-orange-500',
-  RM: 'bg-orange-500',
-  LW: 'bg-red-600',
-  RW: 'bg-red-600',
-  ST: 'bg-red-600',
+  DEF: 'bg-yellow-500',
+  MID: 'bg-orange-500',
+  ATT: 'bg-red-600',
 };
 
 interface PositionBadgeProps {
@@ -24,7 +16,7 @@ export function PositionBadge({
   position,
   className = '',
 }: PositionBadgeProps) {
-  const bgColor = POSITION_GROUP_COLORS[position] ?? 'bg-slate-600';
+  const bgColor = POSITION_COLORS[position] ?? 'bg-slate-600';
 
   return (
     <span

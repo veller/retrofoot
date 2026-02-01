@@ -55,7 +55,6 @@ CREATE TABLE `players` (
 	`preferred_foot` text NOT NULL,
 	`attributes` text NOT NULL,
 	`potential` integer NOT NULL,
-	`development_rate` real NOT NULL,
 	`morale` integer DEFAULT 70,
 	`fitness` integer DEFAULT 100,
 	`injured` integer DEFAULT false,
@@ -63,6 +62,13 @@ CREATE TABLE `players` (
 	`contract_end_season` integer NOT NULL,
 	`wage` integer NOT NULL,
 	`market_value` integer NOT NULL,
+	`status` text DEFAULT 'active',
+	`form` integer DEFAULT 70,
+	`last_five_ratings` text DEFAULT '[]',
+	`season_goals` integer DEFAULT 0,
+	`season_assists` integer DEFAULT 0,
+	`season_minutes` integer DEFAULT 0,
+	`season_avg_rating` real DEFAULT 0,
 	FOREIGN KEY (`save_id`) REFERENCES `saves`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`team_id`) REFERENCES `teams`(`id`) ON UPDATE no action ON DELETE set null
 );
@@ -136,6 +142,8 @@ CREATE TABLE `teams` (
 	`reputation` integer NOT NULL,
 	`budget` integer NOT NULL,
 	`wage_budget` integer NOT NULL,
+	`momentum` integer DEFAULT 50,
+	`last_five_results` text DEFAULT '[]',
 	FOREIGN KEY (`save_id`) REFERENCES `saves`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint

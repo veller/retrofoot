@@ -7,28 +7,113 @@ import type { Team, Player, Tactics, FormationType, Position } from '../types';
 import { calculateOverall } from '../types';
 import { generatePlayer } from '../player';
 
-// Formation position mappings
+// Formation position mappings (simplified: GK, DEF, MID, ATT)
+// The number after each position type indicates count needed
 const FORMATION_POSITIONS: Record<FormationType, Position[]> = {
-  '4-4-2': ['GK', 'RB', 'CB', 'CB', 'LB', 'RM', 'CM', 'CM', 'LM', 'ST', 'ST'],
-  '4-3-3': ['GK', 'RB', 'CB', 'CB', 'LB', 'CDM', 'CM', 'CM', 'RW', 'ST', 'LW'],
+  '4-4-2': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+    'ATT',
+  ],
+  '4-3-3': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+    'ATT',
+    'ATT',
+  ],
   '4-2-3-1': [
     'GK',
-    'RB',
-    'CB',
-    'CB',
-    'LB',
-    'CDM',
-    'CDM',
-    'RM',
-    'CAM',
-    'LM',
-    'ST',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
   ],
-  '3-5-2': ['GK', 'CB', 'CB', 'CB', 'RM', 'CM', 'CDM', 'CM', 'LM', 'ST', 'ST'],
-  '4-5-1': ['GK', 'RB', 'CB', 'CB', 'LB', 'RM', 'CM', 'CDM', 'CM', 'LM', 'ST'],
-  '5-3-2': ['GK', 'RB', 'CB', 'CB', 'CB', 'LB', 'CM', 'CDM', 'CM', 'ST', 'ST'],
-  '5-4-1': ['GK', 'RB', 'CB', 'CB', 'CB', 'LB', 'RM', 'CM', 'CM', 'LM', 'ST'],
-  '3-4-3': ['GK', 'CB', 'CB', 'CB', 'RM', 'CM', 'CM', 'LM', 'RW', 'ST', 'LW'],
+  '3-5-2': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+    'ATT',
+  ],
+  '4-5-1': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+  ],
+  '5-3-2': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+    'ATT',
+  ],
+  '5-4-1': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+  ],
+  '3-4-3': [
+    'GK',
+    'DEF',
+    'DEF',
+    'DEF',
+    'MID',
+    'MID',
+    'MID',
+    'MID',
+    'ATT',
+    'ATT',
+    'ATT',
+  ],
 };
 
 // Auto-select best lineup for a formation
@@ -69,7 +154,7 @@ export function selectBestLineup(
   return { lineup, substitutes };
 }
 
-// Calculate how well a player fits a position
+// Calculate how well a player fits a position (simplified 4 positions)
 function getPositionScore(player: Player, targetPosition: Position): number {
   const overall = calculateOverall(player);
 
@@ -78,27 +163,24 @@ function getPositionScore(player: Player, targetPosition: Position): number {
     return overall + 10;
   }
 
-  // Similar positions get partial bonus
-  const similarPositions: Record<Position, Position[]> = {
-    GK: [],
-    CB: ['CDM'],
-    LB: ['LM', 'LW'],
-    RB: ['RM', 'RW'],
-    CDM: ['CB', 'CM'],
-    CM: ['CDM', 'CAM'],
-    CAM: ['CM', 'LM', 'RM'],
-    LM: ['LW', 'LB', 'CAM'],
-    RM: ['RW', 'RB', 'CAM'],
-    LW: ['LM', 'ST'],
-    RW: ['RM', 'ST'],
-    ST: ['CAM', 'LW', 'RW'],
-  };
-
-  if (similarPositions[targetPosition]?.includes(player.position)) {
-    return overall; // No penalty for similar positions
+  // GK is unique - can't play other positions well
+  if (targetPosition === 'GK' || player.position === 'GK') {
+    return overall - 30;
   }
 
-  // Wrong position penalty
+  // Adjacent positions have small penalty
+  const adjacentPositions: Record<Position, Position[]> = {
+    GK: [],
+    DEF: ['MID'],
+    MID: ['DEF', 'ATT'],
+    ATT: ['MID'],
+  };
+
+  if (adjacentPositions[targetPosition]?.includes(player.position)) {
+    return overall - 5;
+  }
+
+  // DEF playing ATT or vice versa - bigger penalty
   return overall - 15;
 }
 
@@ -141,7 +223,7 @@ export function createDefaultTactics(team: Team): Tactics {
   };
 }
 
-// Generate a full squad for a team
+// Generate a full squad for a team (simplified positions)
 export function generateSquad(options: {
   teamReputation: number; // 1-100
   budgetTier: 'low' | 'medium' | 'high';
@@ -157,20 +239,12 @@ export function generateSquad(options: {
     Math.min(92, baseOverall + variance),
   ];
 
-  // Standard squad composition
+  // Standard squad composition (~25 players)
   const positions: { position: Position; count: number }[] = [
     { position: 'GK', count: 3 },
-    { position: 'CB', count: 4 },
-    { position: 'LB', count: 2 },
-    { position: 'RB', count: 2 },
-    { position: 'CDM', count: 2 },
-    { position: 'CM', count: 3 },
-    { position: 'CAM', count: 2 },
-    { position: 'LM', count: 2 },
-    { position: 'RM', count: 2 },
-    { position: 'LW', count: 2 },
-    { position: 'RW', count: 2 },
-    { position: 'ST', count: 3 },
+    { position: 'DEF', count: 8 },
+    { position: 'MID', count: 8 },
+    { position: 'ATT', count: 6 },
   ];
 
   const players: Player[] = [];
@@ -209,25 +283,65 @@ export function getTeamStats(team: Team) {
   return {
     squadSize: players.length,
     averageAge:
-      Math.round(
-        (players.reduce((sum, p) => sum + p.age, 0) / players.length) * 10,
-      ) / 10,
+      players.length > 0
+        ? Math.round(
+            (players.reduce((sum, p) => sum + p.age, 0) / players.length) * 10,
+          ) / 10
+        : 0,
     averageOverall: calculateTeamOverall(team),
-    bestPlayer: players.reduce((best, p) =>
-      calculateOverall(p) > calculateOverall(best) ? p : best,
-    ),
+    bestPlayer:
+      players.length > 0
+        ? players.reduce((best, p) =>
+            calculateOverall(p) > calculateOverall(best) ? p : best,
+          )
+        : null,
     totalWageBill: calculateWageBill(team),
     totalSquadValue: players.reduce((sum, p) => sum + p.marketValue, 0),
     injuredPlayers: players.filter((p) => p.injured).length,
     positionCounts: {
       GK: players.filter((p) => p.position === 'GK').length,
-      DEF: players.filter((p) => ['CB', 'LB', 'RB'].includes(p.position))
-        .length,
-      MID: players.filter((p) =>
-        ['CDM', 'CM', 'CAM', 'LM', 'RM'].includes(p.position),
-      ).length,
-      ATT: players.filter((p) => ['LW', 'RW', 'ST'].includes(p.position))
-        .length,
+      DEF: players.filter((p) => p.position === 'DEF').length,
+      MID: players.filter((p) => p.position === 'MID').length,
+      ATT: players.filter((p) => p.position === 'ATT').length,
     },
+    momentum: team.momentum,
+    recentForm: team.lastFiveResults.join(''),
+  };
+}
+
+// Update team momentum after a match result
+export function updateTeamMomentum(team: Team, result: 'W' | 'D' | 'L'): Team {
+  const results = [...team.lastFiveResults, result].slice(-5);
+  const points = results.reduce(
+    (sum, r) => sum + (r === 'W' ? 3 : r === 'D' ? 1 : 0),
+    0,
+  );
+  // 7.5 is average (1.5 ppg * 5 games)
+  const momentum = Math.round(50 + (points - 7.5) * 5);
+
+  return {
+    ...team,
+    momentum: Math.max(1, Math.min(100, momentum)),
+    lastFiveResults: results,
+  };
+}
+
+// Create a team with default values
+export function createDefaultTeam(partial: Partial<Team>): Team {
+  return {
+    id: partial.id ?? `team-${Date.now()}`,
+    name: partial.name ?? 'New Team',
+    shortName: partial.shortName ?? 'NEW',
+    badgeUrl: partial.badgeUrl,
+    primaryColor: partial.primaryColor ?? '#000000',
+    secondaryColor: partial.secondaryColor ?? '#FFFFFF',
+    stadium: partial.stadium ?? 'Stadium',
+    capacity: partial.capacity ?? 30000,
+    reputation: partial.reputation ?? 50,
+    budget: partial.budget ?? 10000000,
+    wageBudget: partial.wageBudget ?? 500000,
+    players: partial.players ?? [],
+    momentum: partial.momentum ?? 50,
+    lastFiveResults: partial.lastFiveResults ?? [],
   };
 }

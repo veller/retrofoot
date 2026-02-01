@@ -100,6 +100,9 @@ export const teams = sqliteTable('teams', {
   reputation: integer('reputation').notNull(),
   budget: integer('budget').notNull(),
   wageBudget: integer('wage_budget').notNull(),
+  // Team form tracking
+  momentum: integer('momentum').default(50),
+  lastFiveResults: text('last_five_results', { mode: 'json' }).default([]),
 });
 
 // ============================================================================
@@ -116,14 +119,13 @@ export const players = sqliteTable('players', {
   nickname: text('nickname'),
   age: integer('age').notNull(),
   nationality: text('nationality').notNull(),
-  position: text('position').notNull(),
+  position: text('position').notNull(), // GK, DEF, MID, ATT
   preferredFoot: text('preferred_foot').notNull(),
 
   // Attributes stored as JSON for flexibility
   attributes: text('attributes', { mode: 'json' }).notNull(),
 
   potential: integer('potential').notNull(),
-  developmentRate: real('development_rate').notNull(),
   morale: integer('morale').default(70),
   fitness: integer('fitness').default(100),
   injured: integer('injured', { mode: 'boolean' }).default(false),
@@ -131,6 +133,15 @@ export const players = sqliteTable('players', {
   contractEndSeason: integer('contract_end_season').notNull(),
   wage: integer('wage').notNull(),
   marketValue: integer('market_value').notNull(),
+
+  // Player status and form tracking
+  status: text('status').default('active'), // active, retiring, retired, deceased, suspended
+  form: integer('form').default(70), // 1-100
+  lastFiveRatings: text('last_five_ratings', { mode: 'json' }).default([]),
+  seasonGoals: integer('season_goals').default(0),
+  seasonAssists: integer('season_assists').default(0),
+  seasonMinutes: integer('season_minutes').default(0),
+  seasonAvgRating: real('season_avg_rating').default(0),
 });
 
 // ============================================================================

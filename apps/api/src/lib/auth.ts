@@ -2,10 +2,7 @@
 // RETROFOOT - Better Auth Configuration
 // ============================================================================
 
-import type {
-  D1Database,
-  IncomingRequestCfProperties,
-} from '@cloudflare/workers-types';
+import type { D1Database } from '@cloudflare/workers-types';
 import { betterAuth } from 'better-auth';
 import { withCloudflare } from 'better-auth-cloudflare';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -31,30 +28,31 @@ const COOKIE_CACHE_MAX_AGE = 60 * 5;
  * This function handles both runtime execution (with actual DB)
  * and CLI schema generation (without DB binding).
  */
-export function createAuth(
-  env?: CloudflareBindings,
-  cf?: IncomingRequestCfProperties,
-) {
+export function createAuth(env?: CloudflareBindings, cf?: unknown) {
   // Use actual DB for runtime, empty object for CLI schema generation
   const db = env
     ? drizzle(env.DB, { schema })
     : ({} as ReturnType<typeof drizzle>);
+
+  // Build the d1 config only when env is available
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d1Config: any = env
+    ? {
+        db,
+        options: {
+          usePlural: true, // Our schema uses plural table names (users, sessions, etc.)
+          debugLogs: env.ENVIRONMENT === 'development',
+        },
+      }
+    : undefined;
 
   return betterAuth({
     ...withCloudflare(
       {
         autoDetectIpAddress: true,
         geolocationTracking: false, // Keep simple for now
-        cf: cf || {},
-        d1: env
-          ? {
-              db,
-              options: {
-                usePlural: true, // Our schema uses plural table names (users, sessions, etc.)
-                debugLogs: env.ENVIRONMENT === 'development',
-              },
-            }
-          : undefined,
+        cf: cf ?? {},
+        d1: d1Config,
       },
       {
         emailAndPassword: {

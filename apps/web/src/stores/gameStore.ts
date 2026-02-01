@@ -56,8 +56,10 @@ function generateLeagueTeams(): Team[] {
       capacity: 40000 + Math.floor(Math.random() * 30000),
       reputation,
       budget: 5_000_000 + Math.floor(Math.random() * 15_000_000),
-      wagebudget: 300_000 + Math.floor(Math.random() * 200_000),
+      wageBudget: 300_000 + Math.floor(Math.random() * 200_000),
       players,
+      momentum: 50,
+      lastFiveResults: [],
     };
   });
 }

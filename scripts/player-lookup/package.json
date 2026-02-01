@@ -1,0 +1,23 @@
+{
+  "name": "player-lookup",
+  "version": "1.0.0",
+  "description": "AI-powered tool to research real players and generate fictional versions for RetroFoot",
+  "type": "module",
+  "scripts": {
+    "lookup": "tsx --env-file=.env src/index.ts lookup",
+    "team": "tsx --env-file=.env src/index.ts team",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "axios": "^1.7.0",
+    "cheerio": "^1.0.0",
+    "commander": "^12.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
