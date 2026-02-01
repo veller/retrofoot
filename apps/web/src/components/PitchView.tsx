@@ -38,27 +38,82 @@ export function PitchView({
   const excessCount = overLimit ? benchCount - benchLimit : 0;
   const coordinates = getFormationSlotCoordinates(formation);
 
+  // Horizontal layout: coord.y = left/right (goal to goal), coord.x = top/bottom (wing to wing)
+  const mapCoord = (coord: SlotCoordinate) => ({
+    left: `${coord.y}%`,
+    top: `${coord.x}%`,
+  });
+
   return (
     <div className="flex flex-col gap-4 items-center">
-      {/* Football pitch - proportional size, aspect ratio 105:68 */}
-      <div className="w-full max-w-[340px]">
+      {/* Football pitch - horizontal, aspect ratio 105:68 (length:width) */}
+      <div className="w-full">
         <div
+          id="pitch-container"
           className="relative w-full rounded-lg overflow-hidden border-2 border-white/80"
           style={{
             aspectRatio: '105 / 68',
             background:
-              'repeating-linear-gradient(180deg, #3b6e4e 0px, #147437 12px, #166534 12px, #166534 24px)',
+              'repeating-linear-gradient(90deg, #50A66E 0px, #50A66E 12px, #489362 12px, #489362 24px)',
           }}
         >
-          {/* Halfway line */}
+          {/* Halfway line - vertical for horizontal pitch */}
           <div
-            className="absolute left-0 right-0 h-0.5 bg-white/80"
-            style={{ top: '50%', transform: 'translateY(-50%)' }}
+            id="pitch-line-halfway"
+            className="absolute top-0 bottom-0 w-0.5 bg-white/80 pointer-events-none"
+            style={{ left: '50%', transform: 'translateX(-50%)' }}
+          />
+
+          {/* Left penalty area (our goal) - 12% width */}
+          <div
+            id="pitch-line-left-penalty-area"
+            className="absolute border-r-2 border-t-2 border-b-2 border-white/70 pointer-events-none"
+            style={{
+              left: 0,
+              top: '20.35%',
+              width: '12%',
+              height: '59.3%',
+            }}
+          />
+          {/* Left goal area (6-yard box) */}
+          <div
+            id="pitch-line-left-goal-area"
+            className="absolute border-r-2 border-t-2 border-b-2 border-white/70 pointer-events-none"
+            style={{
+              left: 0,
+              top: '36.55%',
+              width: '5.24%',
+              height: '26.9%',
+            }}
+          />
+
+          {/* Right penalty area (opposition goal) - 12% width */}
+          <div
+            id="pitch-line-right-penalty-area"
+            className="absolute border-l-2 border-t-2 border-b-2 border-white/70 pointer-events-none"
+            style={{
+              left: '88%',
+              top: '20.35%',
+              width: '12%',
+              height: '59.3%',
+            }}
+          />
+          {/* Right goal area (6-yard box) */}
+          <div
+            id="pitch-line-right-goal-area"
+            className="absolute border-l-2 border-t-2 border-b-2 border-white/70 pointer-events-none"
+            style={{
+              left: '94.76%',
+              top: '36.55%',
+              width: '5.24%',
+              height: '26.9%',
+            }}
           />
 
           {/* Center circle outline */}
           <div
-            className="absolute border-2 border-white/70 rounded-full"
+            id="pitch-line-center-circle"
+            className="absolute border-2 border-white/70 rounded-full pointer-events-none"
             style={{
               left: '50%',
               top: '50%',
@@ -70,7 +125,8 @@ export function PitchView({
 
           {/* Center spot (dot) */}
           <div
-            className="absolute rounded-full bg-white"
+            id="pitch-line-center-spot"
+            className="absolute rounded-full bg-white pointer-events-none"
             style={{
               left: '50%',
               top: '50%',
@@ -80,12 +136,13 @@ export function PitchView({
             }}
           />
 
-        {/* Players on pitch */}
+          {/* Players on pitch */}
         {lineup.map((playerId, index) => {
           const player = playersById.get(playerId);
           const coord = coordinates[index] as SlotCoordinate | undefined;
           if (!coord || !player) return null;
 
+          const pos = mapCoord(coord);
           const displayName =
             player.nickname ?? player.name.split(' ').pop() ?? '?';
           const overall = calculateOverall(player);
@@ -100,10 +157,10 @@ export function PitchView({
           return (
             <div
               key={playerId}
-              className="absolute -translate-x-1/2 -translate-y-1/2 group"
+              className="absolute -translate-x-1/2 -translate-y-1/2 group z-10"
               style={{
-                left: `${coord.x}%`,
-                top: `${coord.y}%`,
+                left: pos.left,
+                top: pos.top,
               }}
             >
               <div

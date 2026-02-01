@@ -17,8 +17,8 @@ import {
 type GameTab = 'squad' | 'match' | 'table' | 'transfers' | 'finances'
 
 const FORMATION_OPTIONS: FormationType[] = [
-  '4-4-2',
   '4-3-3',
+  '4-4-2',
   '4-2-3-1',
   '3-5-2',
   '4-5-1',
@@ -31,6 +31,12 @@ const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'defensive', label: 'Defensive' },
   { value: 'balanced', label: 'Balanced' },
   { value: 'attacking', label: 'Attacking' },
+]
+
+const PLAY_STYLE_OPTIONS: { value: TacticalPosture; label: string }[] = [
+  { value: 'defensive', label: 'Defensive' },
+  { value: 'balanced', label: 'Neutral' },
+  { value: 'attacking', label: 'Offensive' },
 ]
 
 // Position groups for highlighting similar roles (GK, defenders, midfielders, attackers)
@@ -129,6 +135,12 @@ export function GamePage() {
             <span className="text-slate-500">Season:</span>{' '}
             <span className="text-white">{season.year}</span>
           </div>
+          <button
+            onClick={() => setActiveTab('match')}
+            className="bg-pitch-600 hover:bg-pitch-500 text-white font-medium px-4 py-2 rounded text-sm transition-colors"
+          >
+            Go to match
+          </button>
         </div>
       </header>
 
@@ -177,6 +189,7 @@ function SquadPanel() {
   })
   const tactics = useGameStore((s) => s.tactics)
   const setFormation = useGameStore((s) => s.setFormation)
+  const setPosture = useGameStore((s) => s.setPosture)
   const swapLineupWithBench = useGameStore((s) => s.swapLineupWithBench)
   const addToBench = useGameStore((s) => s.addToBench)
   const removeFromBench = useGameStore((s) => s.removeFromBench)
@@ -296,26 +309,38 @@ function SquadPanel() {
         <div className="bg-slate-800 p-6 h-full overflow-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-white">Formation</h2>
-            <div className="flex items-center gap-2">
-              <select
-                value={formation}
-                onChange={(e) =>
-                  setFormation(e.target.value as FormationType)
-                }
-                className="bg-slate-700 text-white text-sm px-3 py-1.5 rounded border border-slate-600"
-              >
-                {FORMATION_OPTIONS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-              {/* <button
-                onClick={autoSelectLineup}
-                className="text-xs bg-pitch-600 hover:bg-pitch-500 text-white px-3 py-1.5 rounded"
-              >
-                Suggest best XI
-              </button> */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <select
+                  value={formation}
+                  onChange={(e) =>
+                    setFormation(e.target.value as FormationType)
+                  }
+                  className="select-chevron bg-slate-700 text-white text-sm pl-3 py-1.5 rounded border border-slate-600"
+                >
+                  {FORMATION_OPTIONS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-sm">Play style</span>
+                <select
+                  value={tactics.posture}
+                  onChange={(e) =>
+                    setPosture(e.target.value as TacticalPosture)
+                  }
+                  className="select-chevron bg-slate-700 text-white text-sm pl-3 py-1.5 rounded border border-slate-600"
+                >
+                  {PLAY_STYLE_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           {selectedSlot && (
