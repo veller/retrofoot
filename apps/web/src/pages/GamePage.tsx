@@ -8,6 +8,8 @@ import {
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
+import { TeamShield } from '../components/TeamShield';
+import { MatchLiveView } from '../components/MatchLiveView';
 import {
   useGameStore,
   useUpcomingFixture,
@@ -68,50 +70,15 @@ function getPositionGroupOrder(position: Position): number {
   return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4;
 }
 
-function TeamShield({ team }: { team: { shortName: string; primaryColor: string; secondaryColor: string; badgeUrl?: string } }) {
-  return (
-    <div className="w-8 h-8 shrink-0 flex items-center justify-center pixel-art">
-      {team.badgeUrl ? (
-        <img
-          src={team.badgeUrl}
-          alt={team.shortName}
-          className="w-full h-full object-contain"
-        />
-      ) : (
-        <svg
-          viewBox="0 0 40 48"
-          className="w-8 h-10"
-        >
-          <path
-            d="M20 2 L36 8 L36 24 Q36 36 20 46 Q4 36 4 24 L4 8 Z"
-            fill={team.primaryColor}
-            stroke={team.secondaryColor}
-            strokeWidth="1"
-          />
-          <text
-            x="20"
-            y="26"
-            textAnchor="middle"
-            fill={team.secondaryColor}
-            fontSize="10"
-            fontWeight="bold"
-            fontFamily="monospace"
-          >
-            {team.shortName}
-          </text>
-        </svg>
-      )}
-    </div>
-  )
-}
-
 export function GamePage() {
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
+  const [matchInProgress, setMatchInProgress] = useState(false);
 
   const _hasHydrated = useGameStore((s) => s._hasHydrated);
   const initializeGame = useGameStore((s) => s.initializeGame);
   const teams = useGameStore((s) => s.teams);
   const playerTeamId = useGameStore((s) => s.playerTeamId);
+  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
 
   const playerTeam = useMemo(
     () => teams.find((t) => t.id === playerTeamId) ?? null,
@@ -137,6 +104,21 @@ export function GamePage() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Initializing game...</p>
+      </div>
+    );
+  }
+
+  // Full-screen match happening view
+  if (matchInProgress && fixture && homeTeam && awayTeam) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col">
+        <MatchLiveView
+          fixture={fixture}
+          homeTeam={homeTeam}
+          awayTeam={awayTeam}
+          teams={teams}
+          onExit={() => setMatchInProgress(false)}
+        />
       </div>
     );
   }
@@ -196,7 +178,9 @@ export function GamePage() {
           {activeTab === 'squad' && (
             <SquadPanel onGoToMatch={() => setActiveTab('match')} />
           )}
-          {activeTab === 'match' && <MatchPanel />}
+          {activeTab === 'match' && (
+            <MatchPanel onSimulateMatch={() => setMatchInProgress(true)} />
+          )}
           {activeTab === 'table' && <TablePanel />}
           {activeTab === 'transfers' && <TransfersPanel />}
           {activeTab === 'finances' && <FinancesPanel />}
@@ -217,6 +201,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
   const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
   const tactics = useGameStore((s) => s.tactics);
   const setFormation = useGameStore((s) => s.setFormation);
+  const setPosture = useGameStore((s) => s.setPosture);
   const swapLineupWithBench = useGameStore((s) => s.swapLineupWithBench);
   const addToBench = useGameStore((s) => s.addToBench);
   const removeFromBench = useGameStore((s) => s.removeFromBench);
@@ -335,9 +320,9 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
       {/* Middle: Pitch + bench */}
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="bg-slate-800 p-6 h-full overflow-auto">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-xl font-bold text-white">Formation</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4 flex-wrap">
               <select
                 value={formation}
                 onChange={(e) => setFormation(e.target.value as FormationType)}
@@ -349,12 +334,22 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
                   </option>
                 ))}
               </select>
-              {/* <button
-                onClick={autoSelectLineup}
-                className="text-xs bg-pitch-600 hover:bg-pitch-500 text-white px-3 py-1.5 rounded"
-              >
-                Suggest best XI
-              </button> */}
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-sm">Tactical posture</span>
+                {POSTURE_OPTIONS.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setPosture(value)}
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                      tactics?.posture === value
+                        ? 'bg-pitch-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {selectedSlot && (
@@ -367,6 +362,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
             substitutes={substitutes}
             playersById={playersById}
             formation={formation}
+            posture={tactics?.posture ?? null}
             onPlayerClick={(slot) => handlePlayerClick(slot)}
             selectedSlot={selectedSlot}
             highlightPositions={highlightPositions}
@@ -430,10 +426,9 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
   );
 }
 
-function MatchPanel() {
+function MatchPanel({ onSimulateMatch }: { onSimulateMatch: () => void }) {
   const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
   const tactics = useGameStore((s) => s.tactics);
-  const setPosture = useGameStore((s) => s.setPosture);
   const season = useGameStore((s) => s.season);
 
   if (!fixture || !homeTeam || !awayTeam || !season) {
@@ -468,27 +463,10 @@ function MatchPanel() {
           </p>
           <p className="text-slate-500 text-sm mt-1">{fixtureDate}</p>
 
-          {/* Tactical posture */}
-          <div className="mt-6">
-            <p className="text-slate-400 text-sm mb-2">Tactical posture</p>
-            <div className="flex gap-2 justify-center flex-wrap">
-              {POSTURE_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setPosture(value)}
-                  className={`px-4 py-2 rounded text-sm font-medium transition-colors ${
-                    tactics?.posture === value
-                      ? 'bg-pitch-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button className="mt-6 bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-3 px-8 transition-colors">
+          <button
+            onClick={onSimulateMatch}
+            className="mt-6 bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-3 px-8 transition-colors"
+          >
             SIMULATE MATCH
           </button>
         </div>
@@ -504,7 +482,7 @@ function MatchPanel() {
             {tactics?.substitutes.length ?? 0} on bench
           </p>
           <p className="text-slate-400 text-xs mt-2">
-            Posture: {tactics?.posture ?? 'balanced'}
+            Posture: {tactics?.posture ?? 'balanced'} (set on Squad)
           </p>
         </div>
       </div>

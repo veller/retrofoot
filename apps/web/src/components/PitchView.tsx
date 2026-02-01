@@ -1,4 +1,9 @@
-import type { Player, FormationType, Position } from '@retrofoot/core';
+import type {
+  Player,
+  FormationType,
+  Position,
+  TacticalPosture,
+} from '@retrofoot/core';
 import {
   getFormationSlotCoordinates,
   calculateOverall,
@@ -14,6 +19,8 @@ interface PitchViewProps {
   substitutes: string[];
   playersById: Map<string, Player>;
   formation: FormationType;
+  /** When defensive/attacking, show a tiny arrow on each player (blue back, red forward). */
+  posture?: TacticalPosture | null;
   onPlayerClick?: (slot: PitchSlot, playerId: string | undefined) => void;
   selectedSlot?: PitchSlot | null;
   /** When set, players with these positions get a highlight (e.g. same defensive/mid/attack group) */
@@ -27,6 +34,7 @@ export function PitchView({
   substitutes,
   playersById,
   formation,
+  posture,
   onPlayerClick,
   selectedSlot,
   highlightPositions,
@@ -147,6 +155,9 @@ export function PitchView({
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
 
+            const showDefensiveArrow = posture === 'defensive';
+            const showAttackingArrow = posture === 'attacking';
+
             return (
               <div
                 key={playerId}
@@ -157,6 +168,31 @@ export function PitchView({
                   top: `${coord.x}%`,
                 }}
               >
+                {/* Tactical arrow: blue backward (defensive), red forward (attacking) */}
+                {(showDefensiveArrow || showAttackingArrow) && (
+                  <div
+                    className={`absolute left-1/2 -top-2 w-3 h-2 flex items-center justify-center pointer-events-none ${
+                      showDefensiveArrow ? 'text-blue-400' : 'text-red-500'
+                    }`}
+                    style={{
+                      transform: showDefensiveArrow
+                        ? 'translate(-50%, 0) rotate(180deg)' /* backward = toward our goal (left) */
+                        : 'translate(-50%, 0) rotate(0deg)' /* forward = toward opposition (right) */,
+                    }}
+                  >
+                    <svg
+                      viewBox="0 0 8 6"
+                      className="w-3 h-2 block"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 3h6M4 1l2 2-2 2" />
+                    </svg>
+                  </div>
+                )}
                 <div
                   role="button"
                   tabIndex={0}
