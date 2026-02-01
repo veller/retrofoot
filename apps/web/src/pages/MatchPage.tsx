@@ -15,6 +15,8 @@ import {
   resumeFromHalfTime,
   selectBestLineup,
   makeSubstitution,
+  formatCurrency,
+  BASE_TICKET_PRICE,
 } from '@retrofoot/core';
 import { useSaveMatchData } from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
@@ -611,6 +613,9 @@ export function MatchPage() {
         r.awayTeamId === matchData.playerTeamId,
     );
 
+    // Check if player's team was home (only home team gets match day revenue)
+    const isPlayerHome = playerResult?.homeTeamId === matchData.playerTeamId;
+
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6">
         <div className="bg-slate-800 rounded-lg border border-slate-700 p-8 max-w-lg w-full text-center">
@@ -622,9 +627,24 @@ export function MatchPage() {
                 {playerHomeTeam.name} {playerResult.homeScore} -{' '}
                 {playerResult.awayScore} {playerAwayTeam.name}
               </div>
-              <p className="text-slate-400">
-                Attendance: {playerResult.attendance.toLocaleString()}
-              </p>
+              <div className="flex justify-center gap-6 text-sm">
+                <p className="text-slate-400">
+                  Attendance: {playerResult.attendance.toLocaleString()}
+                </p>
+                {isPlayerHome && (
+                  <p className="text-pitch-400">
+                    Gate Revenue:{' '}
+                    {formatCurrency(
+                      (playerResult?.attendance ?? 0) * BASE_TICKET_PRICE,
+                    )}
+                  </p>
+                )}
+                {!isPlayerHome && (
+                  <p className="text-slate-500 text-xs">
+                    (Away game - no gate revenue)
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

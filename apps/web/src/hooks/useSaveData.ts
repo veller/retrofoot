@@ -505,3 +505,74 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
     refetch: fetchData,
   };
 }
+
+// ============================================================================
+// Transactions Data Hook
+// ============================================================================
+
+export interface RoundTransaction {
+  round: number;
+  income: { category: string; amount: number; description: string | null }[];
+  expenses: { category: string; amount: number; description: string | null }[];
+  totalIncome: number;
+  totalExpenses: number;
+  net: number;
+}
+
+interface UseTransactionsResult {
+  transactions: RoundTransaction[];
+  isLoading: boolean;
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * Hook to fetch transaction history for a save
+ */
+export function useTransactions(saveId?: string): UseTransactionsResult {
+  const [transactions, setTransactions] = useState<RoundTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    if (!saveId) {
+      setTransactions([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiUrl}/saves/${saveId}/transactions`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch transactions');
+      }
+
+      const data = await response.json();
+      setTransactions(data.transactions || []);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to load transactions',
+      );
+      setTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [saveId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return {
+    transactions,
+    isLoading,
+    error,
+    refetch: fetchData,
+  };
+}

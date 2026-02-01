@@ -415,20 +415,20 @@ export function createTeamFinances(
 }
 
 /**
- * Format currency for display (Brazilian Real style)
+ * Format currency for display
  */
 export function formatCurrency(amount: number): string {
   const absAmount = Math.abs(amount);
   const sign = amount < 0 ? '-' : '';
 
   if (absAmount >= 1_000_000_000) {
-    return `${sign}R$ ${(absAmount / 1_000_000_000).toFixed(1)}B`;
+    return `${sign}$ ${(absAmount / 1_000_000_000).toFixed(1)}B`;
   } else if (absAmount >= 1_000_000) {
-    return `${sign}R$ ${(absAmount / 1_000_000).toFixed(1)}M`;
+    return `${sign}$ ${(absAmount / 1_000_000).toFixed(1)}M`;
   } else if (absAmount >= 1_000) {
-    return `${sign}R$ ${(absAmount / 1_000).toFixed(0)}K`;
+    return `${sign}$ ${(absAmount / 1_000).toFixed(0)}K`;
   }
-  return `${sign}R$ ${absAmount.toLocaleString()}`;
+  return `${sign}$ ${absAmount.toLocaleString()}`;
 }
 
 /**

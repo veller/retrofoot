@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
-import { saves, teams, players, standings } from '@retrofoot/db/schema';
+import { eq, and, desc } from 'drizzle-orm';
+import {
+  saves,
+  teams,
+  players,
+  standings,
+  transactions,
+} from '@retrofoot/db/schema';
 import { seedNewGame, getAvailableTeams } from '../lib/seed';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
@@ -269,6 +275,115 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
     .where(eq(players.teamId, teamId));
 
   return c.json({ squad });
+});
+
+/**
+ * Get transactions for a team in a save
+ */
+saveRoutes.get('/:id/transactions', async (c) => {
+  const auth = createAuth(c.env, c.req.raw.cf);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+
+  if (!session?.user?.id) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const saveId = c.req.param('id');
+  const teamId = c.req.query('teamId');
+  const db = drizzle(c.env.DB);
+
+  // Verify ownership
+  const saveResult = await db
+    .select({ userId: saves.userId, playerTeamId: saves.playerTeamId })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0 || saveResult[0].userId !== session.user.id) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  // Use player team if no teamId provided
+  const targetTeamId = teamId || saveResult[0].playerTeamId;
+
+  // Get transactions ordered by round descending
+  const txns = await db
+    .select({
+      id: transactions.id,
+      type: transactions.type,
+      category: transactions.category,
+      amount: transactions.amount,
+      description: transactions.description,
+      round: transactions.round,
+      createdAt: transactions.createdAt,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.saveId, saveId),
+        eq(transactions.teamId, targetTeamId),
+      ),
+    )
+    .orderBy(desc(transactions.round), desc(transactions.createdAt));
+
+  // Group by round
+  const byRound: Record<
+    number,
+    {
+      round: number;
+      income: {
+        category: string;
+        amount: number;
+        description: string | null;
+      }[];
+      expenses: {
+        category: string;
+        amount: number;
+        description: string | null;
+      }[];
+      totalIncome: number;
+      totalExpenses: number;
+      net: number;
+    }
+  > = {};
+
+  for (const txn of txns) {
+    if (!byRound[txn.round]) {
+      byRound[txn.round] = {
+        round: txn.round,
+        income: [],
+        expenses: [],
+        totalIncome: 0,
+        totalExpenses: 0,
+        net: 0,
+      };
+    }
+
+    const entry = {
+      category: txn.category,
+      amount: txn.amount,
+      description: txn.description,
+    };
+
+    if (txn.type === 'income') {
+      byRound[txn.round].income.push(entry);
+      byRound[txn.round].totalIncome += txn.amount;
+    } else {
+      byRound[txn.round].expenses.push(entry);
+      byRound[txn.round].totalExpenses += txn.amount;
+    }
+    byRound[txn.round].net =
+      byRound[txn.round].totalIncome - byRound[txn.round].totalExpenses;
+  }
+
+  // Convert to array sorted by round descending
+  const groupedTransactions = Object.values(byRound).sort(
+    (a, b) => b.round - a.round,
+  );
+
+  return c.json({ transactions: groupedTransactions });
 });
 
 /**

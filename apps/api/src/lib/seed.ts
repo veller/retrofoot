@@ -17,18 +17,25 @@ import {
   type NewStanding,
   type NewFixture,
 } from '@retrofoot/db/schema';
-import {
-  TEAMS,
-  ALL_PLAYERS,
-  calculateInitialBalance,
-  calculateRoundWages,
-} from '@retrofoot/core';
+import { TEAMS, ALL_PLAYERS, calculateInitialBalance } from '@retrofoot/core';
 
 /**
  * Generate a unique ID
  */
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Shuffle array using Fisher-Yates algorithm
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
 }
 
 /**
@@ -246,7 +253,8 @@ export async function seedNewGame(
   }
 
   // 5. Generate fixtures
-  const teamDbIds = Array.from(teamIdMap.values());
+  // Shuffle team IDs before generating fixtures for balanced home/away distribution
+  const teamDbIds = shuffleArray(Array.from(teamIdMap.values()));
   const fixturesList = generateFixtures(teamDbIds, saveId, season);
 
   // Insert fixtures one by one

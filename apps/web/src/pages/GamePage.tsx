@@ -3,6 +3,10 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
+  calculateRoundSponsorship,
+  calculateStadiumMaintenance,
+  calculateOperatingCosts,
+  formatCurrency,
   type FormationType,
   type TacticalPosture,
   type Position,
@@ -12,7 +16,7 @@ import {
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
-import { useSaveData, useSaveMatchData } from '../hooks';
+import { useSaveData, useSaveMatchData, useTransactions } from '../hooks';
 import { useGameStore } from '../stores/gameStore';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
@@ -175,10 +179,10 @@ export function GamePage() {
             <span className="text-slate-500">Club:</span>{' '}
             <span className="text-white font-medium">{playerTeam.name}</span>
           </div>
-          <div>
-            <span className="text-slate-500">Budget:</span>{' '}
+          <div title="Cash available for player transfers">
+            <span className="text-slate-500">Transfers:</span>{' '}
             <span className="text-pitch-400 font-medium">
-              R$ {playerTeam.budget.toLocaleString('pt-BR')}
+              {formatCurrency(playerTeam.budget)}
             </span>
           </div>
           <div>
@@ -239,6 +243,7 @@ export function GamePage() {
             <FinancesPanel
               playerTeam={playerTeam}
               currentRound={data.currentRound}
+              saveId={saveId}
             />
           )}
         </div>
@@ -450,6 +455,9 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
                       Send to bench
                     </span>
                   )}
+                  <span className="text-amber-400 text-sm">
+                    {formatCurrency(player.wage)}
+                  </span>
                   <span className="text-pitch-400 font-medium">
                     OVR {calculateOverall(player)}
                   </span>
@@ -617,23 +625,41 @@ function TransfersPanel() {
 interface FinancesPanelProps {
   playerTeam: Team;
   currentRound?: number;
+  saveId?: string;
 }
 
-function formatCurrency(amount: number): string {
-  const absAmount = Math.abs(amount);
-  const sign = amount < 0 ? '-' : '';
-
-  if (absAmount >= 1_000_000_000) {
-    return `${sign}R$ ${(absAmount / 1_000_000_000).toFixed(1)}B`;
-  } else if (absAmount >= 1_000_000) {
-    return `${sign}R$ ${(absAmount / 1_000_000).toFixed(1)}M`;
-  } else if (absAmount >= 1_000) {
-    return `${sign}R$ ${(absAmount / 1_000).toFixed(0)}K`;
-  }
-  return `${sign}R$ ${absAmount.toLocaleString('pt-BR')}`;
+function formatCategory(category: string): string {
+  const labels: Record<string, string> = {
+    match_day: 'Match Day',
+    sponsorship: 'Sponsorship',
+    tv_rights: 'TV Rights',
+    wages: 'Player Wages',
+    stadium: 'Stadium Maintenance',
+    operations: 'Operating Costs',
+    transfer: 'Transfer',
+  };
+  return labels[category] || category;
 }
 
-function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
+function FinancesPanel({
+  playerTeam,
+  currentRound = 1,
+  saveId,
+}: FinancesPanelProps) {
+  const { transactions, isLoading: txLoading } = useTransactions(saveId);
+  const [expandedRounds, setExpandedRounds] = useState<Set<number>>(new Set());
+
+  const toggleRound = (round: number) => {
+    setExpandedRounds((prev) => {
+      const next = new Set(prev);
+      if (next.has(round)) {
+        next.delete(round);
+      } else {
+        next.add(round);
+      }
+      return next;
+    });
+  };
   const balance = playerTeam.balance ?? 0;
   const roundWages = playerTeam.roundWages ?? 0;
   const seasonRevenue = playerTeam.seasonRevenue ?? 0;
@@ -647,6 +673,28 @@ function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
   const avgNetPerRound = roundsPlayed > 0 ? netResult / roundsPlayed : 0;
   const projectedEndBalance = balance + avgNetPerRound * remainingRounds;
 
+  // Calculate estimated category breakdown based on formulas
+  const estSponsorshipPerRound = calculateRoundSponsorship(
+    playerTeam.reputation,
+  );
+  const estStadiumPerRound = calculateStadiumMaintenance(playerTeam.capacity);
+  const estOperationsPerRound = calculateOperatingCosts(playerTeam.reputation);
+
+  // Estimated totals for rounds played
+  const estSponsorship = estSponsorshipPerRound * roundsPlayed;
+  const estWages = roundWages * roundsPlayed;
+  const estStadium = estStadiumPerRound * roundsPlayed;
+  const estOperations = estOperationsPerRound * roundsPlayed;
+
+  // Calculate TV rights and match day from remaining revenue
+  const fixedIncomePerRound = estSponsorshipPerRound + 350_000; // ~average TV rights
+  const totalFixedIncome = fixedIncomePerRound * roundsPlayed;
+  const matchDayIncome = Math.max(0, seasonRevenue - totalFixedIncome);
+  const tvRightsIncome = Math.min(
+    seasonRevenue - matchDayIncome,
+    350_000 * roundsPlayed,
+  );
+
   return (
     <div className="space-y-6 p-4">
       {/* Main Balance */}
@@ -655,8 +703,11 @@ function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
 
         {/* Current Balance - Large Display */}
         <div className="bg-slate-900 border border-slate-600 p-6 mb-6 text-center">
-          <p className="text-slate-400 text-sm uppercase tracking-wide mb-2">
-            Current Balance
+          <p className="text-slate-400 text-sm uppercase tracking-wide mb-1">
+            Operating Balance
+          </p>
+          <p className="text-slate-500 text-xs mb-2">
+            Cash for daily operations (wages, maintenance, etc.)
           </p>
           <p
             className={`text-4xl font-bold ${balance >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
@@ -669,12 +720,16 @@ function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="bg-slate-700 p-4 rounded">
             <p className="text-slate-400 text-sm">Transfer Budget</p>
+            <p className="text-slate-500 text-xs">For buying/selling players</p>
             <p className="text-2xl text-pitch-400 font-bold">
               {formatCurrency(playerTeam.budget)}
             </p>
           </div>
           <div className="bg-slate-700 p-4 rounded">
             <p className="text-slate-400 text-sm">Wage Bill (Per Round)</p>
+            <p className="text-slate-500 text-xs">
+              Paid every round to players
+            </p>
             <p className="text-2xl text-amber-400 font-bold">
               {formatCurrency(roundWages)}
             </p>
@@ -722,6 +777,95 @@ function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
             </span>
           </div>
         </div>
+
+        {/* Revenue Breakdown */}
+        {roundsPlayed > 0 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">
+              Revenue Breakdown (Estimated)
+            </h4>
+            <div className="space-y-3">
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">Sponsorship</span>
+                  <p className="text-slate-500 text-xs">
+                    {formatCurrency(estSponsorshipPerRound)}/round based on
+                    reputation ({playerTeam.reputation})
+                  </p>
+                </div>
+                <span className="text-pitch-400">
+                  {formatCurrency(estSponsorship)}
+                </span>
+              </div>
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">TV Rights</span>
+                  <p className="text-slate-500 text-xs">
+                    ~$350K/round, varies by league position
+                  </p>
+                </div>
+                <span className="text-pitch-400">
+                  {formatCurrency(tvRightsIncome)}
+                </span>
+              </div>
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">Match Day</span>
+                  <p className="text-slate-500 text-xs">
+                    Home games only: $50/ticket × attendance
+                  </p>
+                </div>
+                <span className="text-pitch-400">
+                  {formatCurrency(matchDayIncome)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Expense Breakdown */}
+        {roundsPlayed > 0 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">
+              Expense Breakdown (Estimated)
+            </h4>
+            <div className="space-y-3">
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">Player Wages</span>
+                  <p className="text-slate-500 text-xs">
+                    {formatCurrency(roundWages)}/round for{' '}
+                    {playerTeam.players.length} players
+                  </p>
+                </div>
+                <span className="text-red-400">{formatCurrency(estWages)}</span>
+              </div>
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">Stadium Maintenance</span>
+                  <p className="text-slate-500 text-xs">
+                    $0.50/seat × {playerTeam.capacity.toLocaleString()} capacity
+                  </p>
+                </div>
+                <span className="text-red-400">
+                  {formatCurrency(estStadium)}
+                </span>
+              </div>
+              <div className="flex justify-between items-start py-1 text-sm">
+                <div>
+                  <span className="text-slate-300">Operating Costs</span>
+                  <p className="text-slate-500 text-xs">
+                    {formatCurrency(estOperationsPerRound)}/round based on
+                    reputation
+                  </p>
+                </div>
+                <span className="text-red-400">
+                  {formatCurrency(estOperations)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Projection */}
@@ -760,6 +904,118 @@ function FinancesPanel({ playerTeam, currentRound = 1 }: FinancesPanelProps) {
           <div className="mt-4 p-3 bg-red-900/30 border border-red-700 rounded text-red-300 text-sm">
             ⚠️ Warning: At current spending rate, you may end the season in
             debt. Consider selling players or reducing wages.
+          </div>
+        )}
+      </div>
+
+      {/* Transaction History */}
+      <div className="bg-slate-800 border border-slate-700 p-6">
+        <h3 className="text-lg font-bold text-white mb-4">
+          Transaction History
+        </h3>
+
+        {txLoading && (
+          <p className="text-slate-400 text-sm">Loading transactions...</p>
+        )}
+
+        {!txLoading && transactions.length === 0 && (
+          <div className="text-slate-400 text-sm">
+            <p>No transactions recorded yet.</p>
+            {roundsPlayed > 0 && (
+              <p className="text-slate-500 text-xs mt-2">
+                Note: Transaction tracking was recently added. Existing games
+                will start recording from the next round onwards.
+              </p>
+            )}
+          </div>
+        )}
+
+        {!txLoading && transactions.length > 0 && (
+          <div className="space-y-2">
+            {transactions.map((txn) => (
+              <div key={txn.round} className="border border-slate-600 rounded">
+                <button
+                  onClick={() => toggleRound(txn.round)}
+                  className="w-full flex justify-between items-center p-3 text-left hover:bg-slate-700/50 transition-colors"
+                >
+                  <span className="text-white font-medium">
+                    Round {txn.round}
+                  </span>
+                  <div className="flex items-center gap-4">
+                    <span
+                      className={`text-sm font-medium ${txn.net >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+                    >
+                      {txn.net >= 0 ? '+' : ''}
+                      {formatCurrency(txn.net)}
+                    </span>
+                    <span className="text-slate-400 text-sm">
+                      {expandedRounds.has(txn.round) ? '▼' : '▶'}
+                    </span>
+                  </div>
+                </button>
+
+                {expandedRounds.has(txn.round) && (
+                  <div className="p-3 pt-0 border-t border-slate-600 space-y-2">
+                    {/* Income items */}
+                    {txn.income.map((item, i) => (
+                      <div
+                        key={`income-${i}`}
+                        className="flex justify-between items-center text-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-pitch-400">+</span>
+                          <span className="text-slate-300">
+                            {formatCategory(item.category)}
+                          </span>
+                          {item.description && (
+                            <span className="text-slate-500 text-xs">
+                              ({item.description})
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-pitch-400">
+                          {formatCurrency(item.amount)}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Expense items */}
+                    {txn.expenses.map((item, i) => (
+                      <div
+                        key={`expense-${i}`}
+                        className="flex justify-between items-center text-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-red-400">-</span>
+                          <span className="text-slate-300">
+                            {formatCategory(item.category)}
+                          </span>
+                          {item.description && (
+                            <span className="text-slate-500 text-xs">
+                              ({item.description})
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-red-400">
+                          {formatCurrency(item.amount)}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Round totals */}
+                    <div className="pt-2 mt-2 border-t border-slate-700 flex justify-between text-sm">
+                      <span className="text-slate-400">Net this round</span>
+                      <span
+                        className={`font-medium ${txn.net >= 0 ? 'text-pitch-400' : 'text-red-400'}`}
+                      >
+                        {txn.net >= 0 ? '+' : ''}
+                        {formatCurrency(txn.net)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>
