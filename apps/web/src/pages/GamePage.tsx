@@ -7,6 +7,7 @@ import {
   type Position,
 } from '@retrofoot/core'
 import { PitchView, type PitchSlot } from '../components/PitchView'
+import { PositionBadge } from '../components/PositionBadge'
 import {
   useGameStore,
   useUpcomingFixture,
@@ -55,6 +56,16 @@ const POSITION_TO_GROUP: Record<Position, string> = {
 }
 function getSimilarPositions(position: Position): Position[] {
   return POSITION_GROUPS[POSITION_TO_GROUP[position]] ?? [position]
+}
+
+const POSITION_GROUP_ORDER: Record<string, number> = {
+  GK: 0,
+  DEF: 1,
+  MID: 2,
+  ATT: 3,
+}
+function getPositionGroupOrder(position: Position): number {
+  return POSITION_GROUP_ORDER[POSITION_TO_GROUP[position]] ?? 4
 }
 
 export function GamePage() {
@@ -184,21 +195,19 @@ function SquadPanel() {
 
   const sortedPlayers = useMemo(() => {
     const players = [...playerTeam.players]
+    const getTier = (id: string) =>
+      lineupSet.has(id) ? 0 : substitutesSet.has(id) ? 1 : 2
     return players.sort((a, b) => {
-      const aInLineup = lineupSet.has(a.id)
-      const bInLineup = lineupSet.has(b.id)
-      if (aInLineup && !bInLineup) return -1
-      if (!aInLineup && bInLineup) return 1
-      if (aInLineup && bInLineup) {
-        return lineup.indexOf(a.id) - lineup.indexOf(b.id)
-      }
-      const aOnBench = substitutesSet.has(a.id)
-      const bOnBench = substitutesSet.has(b.id)
-      if (aOnBench && !bOnBench) return -1
-      if (!aOnBench && bOnBench) return 1
-      if (aOnBench && bOnBench) {
-        return substitutes.indexOf(a.id) - substitutes.indexOf(b.id)
-      }
+      const aTier = getTier(a.id)
+      const bTier = getTier(b.id)
+      if (aTier !== bTier) return aTier - bTier
+
+      const aGroupOrder = getPositionGroupOrder(a.position)
+      const bGroupOrder = getPositionGroupOrder(b.position)
+      if (aGroupOrder !== bGroupOrder) return aGroupOrder - bGroupOrder
+
+      if (aTier === 0) return lineup.indexOf(a.id) - lineup.indexOf(b.id)
+      if (aTier === 1) return substitutes.indexOf(a.id) - substitutes.indexOf(b.id)
       return calculateOverall(b) - calculateOverall(a)
     })
   }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet])
@@ -260,9 +269,12 @@ function SquadPanel() {
                 onClick={() => canSendToBench && addToBench(player.id)}
                 role={canSendToBench ? 'button' : undefined}
               >
-                <span className="text-white">
-                  {player.position} - {player.nickname ?? player.name}
-                </span>
+                <div className="flex items-center gap-2">
+                  <PositionBadge position={player.position} />
+                  <span className="text-white">
+                    {player.nickname ?? player.name}
+                  </span>
+                </div>
                 <div className="flex items-center gap-3">
                   {canSendToBench && (
                     <span className="text-xs font-medium bg-pitch-600 hover:bg-pitch-500 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity mr-1">
