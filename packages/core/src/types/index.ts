@@ -239,18 +239,29 @@ const POSITION_WEIGHTS: Record<
 // Calculate overall rating based on position-weighted attributes
 export function calculateOverall(player: Player): number {
   const { attributes, position } = player;
+
+  // Defensive checks for corrupted/missing data
+  if (!attributes || !position) {
+    return 50; // Return neutral rating for invalid players
+  }
+
   const weights = POSITION_WEIGHTS[position];
+  if (!weights) {
+    return 50; // Unknown position, return neutral
+  }
 
   let total = 0;
   let weightSum = 0;
 
   for (const [attr, weight] of Object.entries(weights)) {
     const value = attributes[attr as keyof PlayerAttributes];
-    total += value * weight;
-    weightSum += weight;
+    if (typeof value === 'number') {
+      total += value * weight;
+      weightSum += weight;
+    }
   }
 
-  return Math.round(total / weightSum);
+  return weightSum > 0 ? Math.round(total / weightSum) : 50;
 }
 
 // Create default player form (for new players)

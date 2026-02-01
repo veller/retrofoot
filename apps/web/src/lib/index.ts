@@ -6,6 +6,4 @@ export {
   signOut,
   useSession,
   getSession,
-  signInAndRefresh,
-  signUpAndRefresh,
 } from './auth';

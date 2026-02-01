@@ -1,22 +1,22 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import {
   calculateOverall,
+  selectBestLineup,
   type FormationType,
   type TacticalPosture,
   type Position,
+  type Team,
+  type StandingEntry,
+  type Tactics,
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
-import { TeamShield } from '../components/TeamShield';
-import { MatchLiveView } from '../components/MatchLiveView';
-import {
-  useGameStore,
-  useUpcomingFixture,
-  BENCH_LIMIT,
-} from '../stores/gameStore';
+import { useSaveData } from '../hooks';
 
-type GameTab = 'squad' | 'match' | 'table' | 'transfers' | 'finances';
+type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
+
+const BENCH_LIMIT = 7;
 
 const FORMATION_OPTIONS: FormationType[] = [
   '4-3-3',
@@ -59,54 +59,58 @@ function getPositionOrder(position: Position): number {
 }
 
 export function GamePage() {
+  const { saveId } = useParams<{ saveId: string }>();
+  const { data, isLoading, error } = useSaveData(saveId);
+
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
-  const [matchInProgress, setMatchInProgress] = useState(false);
 
-  const _hasHydrated = useGameStore((s) => s._hasHydrated);
-  const initializeGame = useGameStore((s) => s.initializeGame);
-  const teams = useGameStore((s) => s.teams);
-  const playerTeamId = useGameStore((s) => s.playerTeamId);
-  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
+  // Local tactics state - initialized when data loads
+  const [tactics, setTactics] = useState<Tactics | null>(null);
 
-  const playerTeam = useMemo(
-    () => teams.find((t) => t.id === playerTeamId) ?? null,
-    [teams, playerTeamId],
-  );
-  const season = useGameStore((s) => s.season);
+  // Initialize tactics when team data loads
+  const playerTeam = data?.playerTeam ?? null;
 
+  // Initialize tactics on first load
   useEffect(() => {
-    if (_hasHydrated && teams.length === 0) {
-      initializeGame();
+    if (playerTeam && !tactics) {
+      const { lineup, substitutes } = selectBestLineup(playerTeam, '4-3-3');
+      setTactics({
+        formation: '4-3-3',
+        posture: 'balanced',
+        lineup,
+        substitutes,
+      });
     }
-  }, [_hasHydrated, teams.length, initializeGame]);
+  }, [playerTeam, tactics]);
 
-  if (!_hasHydrated) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400">Loading...</p>
+        <p className="text-slate-400">Loading game...</p>
       </div>
     );
   }
 
-  if (!playerTeam || !season) {
+  if (error) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400">Initializing game...</p>
+        <div className="text-center">
+          <p className="text-red-400 mb-4">{error}</p>
+          <Link
+            to="/"
+            className="text-pitch-400 hover:text-pitch-300 underline"
+          >
+            Return to Home
+          </Link>
+        </div>
       </div>
     );
   }
 
-  // Full-screen match happening view
-  if (matchInProgress && fixture && homeTeam && awayTeam) {
+  if (!data || !playerTeam) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col">
-        <MatchLiveView
-          fixture={fixture}
-          homeTeam={homeTeam}
-          awayTeam={awayTeam}
-          teams={teams}
-          onExit={() => setMatchInProgress(false)}
-        />
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <p className="text-slate-400">Game data not found</p>
       </div>
     );
   }
@@ -134,7 +138,11 @@ export function GamePage() {
           </div>
           <div>
             <span className="text-slate-500">Season:</span>{' '}
-            <span className="text-white">{season.year}</span>
+            <span className="text-white">{data.currentSeason}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Round:</span>{' '}
+            <span className="text-white">{data.currentRound}</span>
           </div>
         </div>
       </header>
@@ -142,78 +150,158 @@ export function GamePage() {
       {/* Navigation Tabs */}
       <nav className="bg-slate-800 border-b border-slate-700 px-4">
         <div className="flex gap-1">
-          {(['squad', 'match', 'table', 'transfers', 'finances'] as const).map(
-            (tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-6 py-3 text-sm font-medium uppercase transition-colors ${
-                  activeTab === tab
-                    ? 'text-pitch-400 border-b-2 border-pitch-400'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {tab}
-              </button>
-            ),
-          )}
+          {(['squad', 'table', 'transfers', 'finances'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-3 text-sm font-medium uppercase transition-colors ${
+                activeTab === tab
+                  ? 'text-pitch-400 border-b-2 border-pitch-400'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
       </nav>
 
       {/* Main Content */}
       <main className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 w-full">
-          {activeTab === 'squad' && (
-            <SquadPanel onGoToMatch={() => setActiveTab('match')} />
+          {activeTab === 'squad' && tactics && (
+            <SquadPanel
+              playerTeam={playerTeam}
+              tactics={tactics}
+              setTactics={setTactics}
+            />
           )}
-          {activeTab === 'match' && (
-            <MatchPanel onSimulateMatch={() => setMatchInProgress(true)} />
-          )}
-          {activeTab === 'table' && <TablePanel />}
+          {activeTab === 'table' && <TablePanel standings={data.standings} />}
           {activeTab === 'transfers' && <TransfersPanel />}
-          {activeTab === 'finances' && <FinancesPanel />}
+          {activeTab === 'finances' && (
+            <FinancesPanel playerTeam={playerTeam} />
+          )}
         </div>
       </main>
     </div>
   );
 }
 
-function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
+interface SquadPanelProps {
+  playerTeam: Team;
+  tactics: Tactics;
+  setTactics: React.Dispatch<React.SetStateAction<Tactics | null>>;
+}
+
+function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
   const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null);
 
-  const playerTeam = useGameStore((s) => {
-    const teams = s.teams;
-    const playerTeamId = s.playerTeamId;
-    return teams.find((t) => t.id === playerTeamId) ?? null;
-  });
-  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
-  const tactics = useGameStore((s) => s.tactics);
-  const setFormation = useGameStore((s) => s.setFormation);
-  const setPosture = useGameStore((s) => s.setPosture);
-  const swapLineupWithBench = useGameStore((s) => s.swapLineupWithBench);
-  const addToBench = useGameStore((s) => s.addToBench);
-  const removeFromBench = useGameStore((s) => s.removeFromBench);
+  const lineup = tactics.lineup;
+  const substitutes = tactics.substitutes;
+  const formation = tactics.formation;
 
-  const lineup = useMemo(() => tactics?.lineup ?? [], [tactics?.lineup]);
-  const substitutes = useMemo(
-    () => tactics?.substitutes ?? [],
-    [tactics?.substitutes],
+  const setFormation = useCallback(
+    (newFormation: FormationType) => {
+      const { lineup: newLineup, substitutes: newSubs } = selectBestLineup(
+        playerTeam,
+        newFormation,
+      );
+      setTactics((prev) =>
+        prev
+          ? {
+              ...prev,
+              formation: newFormation,
+              lineup: newLineup,
+              substitutes: newSubs,
+            }
+          : null,
+      );
+    },
+    [playerTeam, setTactics],
   );
-  const formation = tactics?.formation ?? '4-3-3';
+
+  const setPosture = useCallback(
+    (posture: TacticalPosture) => {
+      setTactics((prev) => (prev ? { ...prev, posture } : null));
+    },
+    [setTactics],
+  );
+
+  const swapLineupWithBench = useCallback(
+    (lineupIndex: number, benchIndex: number) => {
+      setTactics((prev) => {
+        if (!prev) return null;
+        if (lineupIndex < 0 || lineupIndex >= prev.lineup.length) return prev;
+        if (benchIndex < 0 || benchIndex >= prev.substitutes.length)
+          return prev;
+
+        const newLineup = [...prev.lineup];
+        const newSubs = [...prev.substitutes];
+        [newLineup[lineupIndex], newSubs[benchIndex]] = [
+          newSubs[benchIndex],
+          newLineup[lineupIndex],
+        ];
+
+        return { ...prev, lineup: newLineup, substitutes: newSubs };
+      });
+    },
+    [setTactics],
+  );
+
+  const addToBench = useCallback(
+    (playerId: string) => {
+      setTactics((prev) => {
+        if (!prev) return null;
+        if (prev.substitutes.includes(playerId)) return prev;
+        if (prev.substitutes.length >= BENCH_LIMIT) return prev;
+
+        const lineupIndex = prev.lineup.indexOf(playerId);
+        const newLineup = [...prev.lineup];
+        const newSubs = [...prev.substitutes];
+
+        if (lineupIndex >= 0) {
+          newLineup.splice(lineupIndex, 1);
+          newSubs.push(playerId);
+          if (newSubs.length > 1) {
+            const firstBench = newSubs.shift()!;
+            newLineup.splice(lineupIndex, 0, firstBench);
+          }
+        } else {
+          newSubs.push(playerId);
+        }
+
+        return { ...prev, lineup: newLineup, substitutes: newSubs };
+      });
+    },
+    [setTactics],
+  );
+
+  const removeFromBench = useCallback(
+    (playerId: string) => {
+      setTactics((prev) => {
+        if (!prev) return null;
+        const newSubs = prev.substitutes.filter((id) => id !== playerId);
+        return { ...prev, substitutes: newSubs };
+      });
+    },
+    [setTactics],
+  );
 
   const playersById = useMemo(
-    () => new Map(playerTeam?.players.map((p) => [p.id, p]) ?? []),
-    [playerTeam?.players],
+    () => new Map(playerTeam.players.map((p) => [p.id, p])),
+    [playerTeam.players],
   );
 
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
   const sortedPlayers = useMemo(() => {
-    if (!playerTeam) return [];
     const players = [...playerTeam.players];
-    const getTier = (id: string) =>
-      lineupSet.has(id) ? 0 : substitutesSet.has(id) ? 1 : 2;
+    function getTier(id: string): number {
+      if (lineupSet.has(id)) return 0;
+      if (substitutesSet.has(id)) return 1;
+      return 2;
+    }
     return players.sort((a, b) => {
       const aTier = getTier(a.id);
       const bTier = getTier(b.id);
@@ -228,7 +316,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
         return substitutes.indexOf(a.id) - substitutes.indexOf(b.id);
       return calculateOverall(b) - calculateOverall(a);
     });
-  }, [playerTeam, lineup, substitutes, lineupSet, substitutesSet]);
+  }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet]);
 
   const highlightPositions = useMemo((): Position[] | null => {
     if (!selectedSlot) return null;
@@ -240,8 +328,6 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
     if (!player) return null;
     return getSimilarPositions(player.position);
   }, [selectedSlot, lineup, substitutes, playersById]);
-
-  if (!playerTeam || !tactics) return null;
 
   function handlePlayerClick(slot: PitchSlot) {
     if (!selectedSlot) {
@@ -262,7 +348,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
 
   return (
     <div className="flex h-full">
-      {/* Left: Squad list - 36% (pitch reduced so list and next round get more) */}
+      {/* Left: Squad list */}
       <div className="w-[36%] min-w-0 shrink-0 bg-slate-800 border-r border-slate-700 p-6 overflow-auto">
         <h2 className="text-xl font-bold text-white mb-4">Squad</h2>
         <p className="text-slate-400 text-sm mb-6">
@@ -273,12 +359,15 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
           {sortedPlayers.map((player) => {
             const inLineup = lineupSet.has(player.id);
             const onBench = substitutesSet.has(player.id);
-            const canSendToBench = !inLineup && !onBench;
-            const rowStyle = inLineup
-              ? 'bg-pitch-900/30 border-l-4 border-pitch-500'
-              : onBench
-                ? 'bg-slate-600/80 border-l-4 border-slate-500'
-                : 'bg-slate-700';
+            const canSendToBench =
+              !inLineup && !onBench && substitutes.length < BENCH_LIMIT;
+
+            let rowStyle = 'bg-slate-700';
+            if (inLineup) {
+              rowStyle = 'bg-pitch-900/30 border-l-4 border-pitch-500';
+            } else if (onBench) {
+              rowStyle = 'bg-slate-600/80 border-l-4 border-slate-500';
+            }
 
             return (
               <div
@@ -311,7 +400,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
         </div>
       </div>
 
-      {/* Middle: Pitch + bench - 38% (reduced so squad and next round get more) */}
+      {/* Middle: Pitch + bench */}
       <div className="w-[38%] min-w-0 shrink-0 flex flex-col">
         <div className="bg-slate-800 p-6 h-full overflow-auto">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -335,7 +424,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
                     key={value}
                     onClick={() => setPosture(value)}
                     className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                      tactics?.posture === value
+                      tactics.posture === value
                         ? 'bg-pitch-600 text-white'
                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
@@ -356,7 +445,7 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
             substitutes={substitutes}
             playersById={playersById}
             formation={formation}
-            posture={tactics?.posture ?? null}
+            posture={tactics.posture}
             onPlayerClick={(slot) => handlePlayerClick(slot)}
             selectedSlot={selectedSlot}
             highlightPositions={highlightPositions}
@@ -366,128 +455,51 @@ function SquadPanel({ onGoToMatch }: { onGoToMatch: () => void }) {
         </div>
       </div>
 
-      {/* Right: Next match preview - 26% (more room with smaller pitch column) */}
+      {/* Right: Team info */}
       <div className="w-[26%] min-w-[200px] shrink-0 p-4 flex flex-col">
-        {fixture && homeTeam && awayTeam ? (
-          <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden shrink-0">
-            <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-200">
-              <p className="text-slate-600 text-xs font-semibold uppercase tracking-wide">
-                Round {fixture.round}
-              </p>
+        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+          <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
+            Team Info
+          </h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Stadium:</span>
+              <span className="text-white">{playerTeam.stadium}</span>
             </div>
-            <div className="p-3 flex items-center justify-between gap-2">
-              <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
-                <TeamShield team={homeTeam} />
-                <span
-                  className="text-slate-800 font-bold text-xs truncate w-full text-center"
-                  title={homeTeam.name}
-                >
-                  {homeTeam.name}
-                </span>
-              </div>
-              <div className="text-slate-400 text-[10px] font-bold py-0.5 px-2 bg-slate-100 rounded shrink-0">
-                VS
-              </div>
-              <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
-                <TeamShield team={awayTeam} />
-                <span
-                  className="text-slate-800 font-bold text-xs truncate w-full text-center"
-                  title={awayTeam.name}
-                >
-                  {awayTeam.name}
-                </span>
-              </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Capacity:</span>
+              <span className="text-white">
+                {playerTeam.capacity.toLocaleString()}
+              </span>
             </div>
-            <div className="p-3 border-t border-slate-200 bg-slate-50">
-              <button
-                onClick={onGoToMatch}
-                className="w-full bg-pitch-600 hover:bg-pitch-500 text-white font-semibold py-2 px-3 rounded-lg text-xs transition-colors"
-              >
-                Go to match
-              </button>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Reputation:</span>
+              <span className="text-white">{playerTeam.reputation}/100</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Squad Size:</span>
+              <span className="text-white">{playerTeam.players.length}</span>
             </div>
           </div>
-        ) : (
-          <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-            <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
-              Next match
-            </h3>
-            <p className="text-slate-500 text-sm">No upcoming fixture</p>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
 }
 
-function MatchPanel({ onSimulateMatch }: { onSimulateMatch: () => void }) {
-  const { fixture, homeTeam, awayTeam } = useUpcomingFixture();
-  const tactics = useGameStore((s) => s.tactics);
-  const season = useGameStore((s) => s.season);
+interface TablePanelProps {
+  standings: StandingEntry[];
+}
 
-  if (!fixture || !homeTeam || !awayTeam || !season) {
+function TablePanel({ standings }: TablePanelProps) {
+  if (standings.length === 0) {
     return (
       <div className="bg-slate-800 border border-slate-700 p-6">
-        <h2 className="text-xl font-bold text-white mb-4">Next Match</h2>
-        <p className="text-slate-400">No upcoming fixture.</p>
+        <h2 className="text-xl font-bold text-white mb-4">League Table</h2>
+        <p className="text-slate-400">No standings data available.</p>
       </div>
     );
   }
-
-  const fixtureDate = new Date(fixture.date).toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-
-  return (
-    <div className="bg-slate-800 border border-slate-700 p-6">
-      <h2 className="text-xl font-bold text-white mb-4">Next Match</h2>
-
-      <div className="flex flex-col md:flex-row gap-8">
-        {/* Fixture card */}
-        <div className="flex-1 text-center py-8">
-          <div className="flex items-center justify-center gap-8 text-2xl flex-wrap">
-            <span className="text-white font-medium">{homeTeam.name}</span>
-            <span className="text-slate-500">vs</span>
-            <span className="text-white font-medium">{awayTeam.name}</span>
-          </div>
-          <p className="text-slate-400 mt-4">
-            Campeonato Brasileiro - Round {fixture.round}
-          </p>
-          <p className="text-slate-500 text-sm mt-1">{fixtureDate}</p>
-
-          <button
-            onClick={onSimulateMatch}
-            className="mt-6 bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-3 px-8 transition-colors"
-          >
-            SIMULATE MATCH
-          </button>
-        </div>
-
-        {/* Lineup summary */}
-        <div className="w-64 shrink-0 bg-slate-700/50 rounded-lg p-4">
-          <p className="text-slate-400 text-sm mb-2">Your lineup</p>
-          <p className="text-white font-medium">
-            {tactics?.formation ?? '—'} formation
-          </p>
-          <p className="text-slate-500 text-xs mt-1">
-            {tactics?.lineup.length ?? 0} starters,{' '}
-            {tactics?.substitutes.length ?? 0} on bench
-          </p>
-          <p className="text-slate-400 text-xs mt-2">
-            Posture: {tactics?.posture ?? 'balanced'} (set on Squad)
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TablePanel() {
-  const season = useGameStore((s) => s.season);
-
-  if (!season) return null;
 
   return (
     <div className="bg-slate-800 border border-slate-700 p-6">
@@ -501,11 +513,13 @@ function TablePanel() {
             <th className="text-center py-2">W</th>
             <th className="text-center py-2">D</th>
             <th className="text-center py-2">L</th>
+            <th className="text-center py-2">GF</th>
+            <th className="text-center py-2">GA</th>
             <th className="text-center py-2">Pts</th>
           </tr>
         </thead>
         <tbody>
-          {season.standings.map((entry) => (
+          {standings.map((entry) => (
             <tr
               key={entry.teamId}
               className="border-b border-slate-700 text-white"
@@ -516,6 +530,8 @@ function TablePanel() {
               <td className="text-center py-2">{entry.won}</td>
               <td className="text-center py-2">{entry.drawn}</td>
               <td className="text-center py-2">{entry.lost}</td>
+              <td className="text-center py-2">{entry.goalsFor}</td>
+              <td className="text-center py-2">{entry.goalsAgainst}</td>
               <td className="text-center py-2 text-pitch-400 font-bold">
                 {entry.points}
               </td>
@@ -538,15 +554,11 @@ function TransfersPanel() {
   );
 }
 
-function FinancesPanel() {
-  const playerTeam = useGameStore((s) => {
-    const teams = s.teams;
-    const playerTeamId = s.playerTeamId;
-    return teams.find((t) => t.id === playerTeamId) ?? null;
-  });
+interface FinancesPanelProps {
+  playerTeam: Team;
+}
 
-  if (!playerTeam) return null;
-
+function FinancesPanel({ playerTeam }: FinancesPanelProps) {
   return (
     <div className="bg-slate-800 border border-slate-700 p-6">
       <h2 className="text-xl font-bold text-white mb-4">Club Finances</h2>

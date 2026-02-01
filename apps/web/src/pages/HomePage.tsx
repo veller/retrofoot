@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/hooks';
+import { useAuth, useSaves } from '@/hooks';
 
 export function HomePage() {
   const { user, signOut } = useAuth();
+  const { currentSave, hasSave, isLoading } = useSaves();
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
@@ -31,18 +32,47 @@ export function HomePage() {
       </header>
 
       <nav className="flex flex-col gap-4 w-full max-w-xs">
-        <Link
-          to="/game"
-          className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
-        >
-          NEW GAME
-        </Link>
-        <button
-          disabled
-          className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
-        >
-          LOAD GAME (Coming Soon)
-        </button>
+        {isLoading ? (
+          <div className="bg-slate-700 text-slate-400 font-bold py-4 px-8 text-center border-2 border-slate-600">
+            Loading...
+          </div>
+        ) : hasSave ? (
+          <>
+            {/* User has a save - show Continue button */}
+            <Link
+              to={`/game/${currentSave?.id}`}
+              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
+            >
+              CONTINUE
+            </Link>
+            <div className="text-center text-slate-500 text-sm -mt-2 mb-2">
+              {currentSave?.name} • {currentSave?.managerName}
+            </div>
+            <button
+              disabled
+              className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
+              title="Delete current save to start a new game"
+            >
+              NEW GAME (1 save limit)
+            </button>
+          </>
+        ) : (
+          <>
+            {/* No save - show New Game button */}
+            <Link
+              to="/game/new"
+              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
+            >
+              NEW GAME
+            </Link>
+            <button
+              disabled
+              className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
+            >
+              LOAD GAME (No saves)
+            </button>
+          </>
+        )}
         <button
           disabled
           className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"

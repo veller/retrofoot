@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signUpAndRefresh } from '@/lib/auth';
+import { signUp, useSession } from '@/lib/auth';
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const session = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +31,7 @@ export function RegisterPage() {
     setLoading(true);
 
     try {
-      const { error: signUpError } = await signUpAndRefresh({
+      const { error: signUpError } = await signUp.email({
         name,
         email,
         password,
@@ -42,7 +43,8 @@ export function RegisterPage() {
         );
         setLoading(false);
       } else {
-        // Session is now refreshed, safe to navigate
+        // Refetch session to update the reactive state before navigating
+        await session.refetch();
         navigate('/', { replace: true });
       }
     } catch (err) {

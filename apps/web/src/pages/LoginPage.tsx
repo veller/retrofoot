@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { signInAndRefresh } from '@/lib/auth';
+import { signIn, useSession } from '@/lib/auth';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const session = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      const { error: signInError } = await signInAndRefresh({
+      const { error: signInError } = await signIn.email({
         email,
         password,
       });
@@ -29,7 +30,8 @@ export function LoginPage() {
         setError(signInError.message || 'Login failed. Please try again.');
         setLoading(false);
       } else {
-        // Session is now refreshed, safe to navigate
+        // Refetch session to update the reactive state before navigating
+        await session.refetch();
         navigate(from, { replace: true });
       }
     } catch (err) {
