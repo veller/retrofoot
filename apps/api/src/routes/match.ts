@@ -64,76 +64,77 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
 
   const save = saveResult[0];
 
-  // Get fixtures for current round
-  const fixturesResult = await db
-    .select({
-      id: fixtures.id,
-      round: fixtures.round,
-      homeTeamId: fixtures.homeTeamId,
-      awayTeamId: fixtures.awayTeamId,
-      date: fixtures.date,
-      played: fixtures.played,
-      homeScore: fixtures.homeScore,
-      awayScore: fixtures.awayScore,
-    })
-    .from(fixtures)
-    .where(
-      and(
-        eq(fixtures.saveId, saveId),
-        eq(fixtures.round, save.currentRound ?? 1),
+  // Fetch fixtures, teams, and players in parallel (Phase 8)
+  const [fixturesResult, teamsResult, playersResult] = await Promise.all([
+    // Get fixtures for current round
+    db
+      .select({
+        id: fixtures.id,
+        round: fixtures.round,
+        homeTeamId: fixtures.homeTeamId,
+        awayTeamId: fixtures.awayTeamId,
+        date: fixtures.date,
+        played: fixtures.played,
+        homeScore: fixtures.homeScore,
+        awayScore: fixtures.awayScore,
+      })
+      .from(fixtures)
+      .where(
+        and(
+          eq(fixtures.saveId, saveId),
+          eq(fixtures.round, save.currentRound ?? 1),
+        ),
       ),
-    );
-
-  // Get all teams with full info
-  const teamsResult = await db
-    .select({
-      id: teams.id,
-      name: teams.name,
-      shortName: teams.shortName,
-      badgeUrl: teams.badgeUrl,
-      primaryColor: teams.primaryColor,
-      secondaryColor: teams.secondaryColor,
-      stadium: teams.stadium,
-      capacity: teams.capacity,
-      reputation: teams.reputation,
-      budget: teams.budget,
-      wageBudget: teams.wageBudget,
-      momentum: teams.momentum,
-      lastFiveResults: teams.lastFiveResults,
-    })
-    .from(teams)
-    .where(eq(teams.saveId, saveId));
-
-  // Get all players for all teams
-  const playersResult = await db
-    .select({
-      id: players.id,
-      teamId: players.teamId,
-      name: players.name,
-      nickname: players.nickname,
-      age: players.age,
-      nationality: players.nationality,
-      position: players.position,
-      preferredFoot: players.preferredFoot,
-      attributes: players.attributes,
-      potential: players.potential,
-      morale: players.morale,
-      fitness: players.fitness,
-      injured: players.injured,
-      injuryWeeks: players.injuryWeeks,
-      contractEndSeason: players.contractEndSeason,
-      wage: players.wage,
-      marketValue: players.marketValue,
-      status: players.status,
-      form: players.form,
-      lastFiveRatings: players.lastFiveRatings,
-      seasonGoals: players.seasonGoals,
-      seasonAssists: players.seasonAssists,
-      seasonMinutes: players.seasonMinutes,
-      seasonAvgRating: players.seasonAvgRating,
-    })
-    .from(players)
-    .where(eq(players.saveId, saveId));
+    // Get all teams with full info
+    db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        shortName: teams.shortName,
+        badgeUrl: teams.badgeUrl,
+        primaryColor: teams.primaryColor,
+        secondaryColor: teams.secondaryColor,
+        stadium: teams.stadium,
+        capacity: teams.capacity,
+        reputation: teams.reputation,
+        budget: teams.budget,
+        wageBudget: teams.wageBudget,
+        momentum: teams.momentum,
+        lastFiveResults: teams.lastFiveResults,
+      })
+      .from(teams)
+      .where(eq(teams.saveId, saveId)),
+    // Get all players for all teams
+    db
+      .select({
+        id: players.id,
+        teamId: players.teamId,
+        name: players.name,
+        nickname: players.nickname,
+        age: players.age,
+        nationality: players.nationality,
+        position: players.position,
+        preferredFoot: players.preferredFoot,
+        attributes: players.attributes,
+        potential: players.potential,
+        morale: players.morale,
+        fitness: players.fitness,
+        injured: players.injured,
+        injuryWeeks: players.injuryWeeks,
+        contractEndSeason: players.contractEndSeason,
+        wage: players.wage,
+        marketValue: players.marketValue,
+        status: players.status,
+        form: players.form,
+        lastFiveRatings: players.lastFiveRatings,
+        seasonGoals: players.seasonGoals,
+        seasonAssists: players.seasonAssists,
+        seasonMinutes: players.seasonMinutes,
+        seasonAvgRating: players.seasonAvgRating,
+      })
+      .from(players)
+      .where(eq(players.saveId, saveId)),
+  ]);
 
   // Group players by team
   const playersByTeam = new Map<string, typeof playersResult>();
@@ -252,21 +253,55 @@ matchRoutes.post('/:saveId/complete', async (c) => {
   }
 
   try {
-    // Process each match result
-    for (const result of body.results) {
-      // Update fixture with score
-      await db
-        .update(fixtures)
-        .set({
-          played: true,
-          homeScore: result.homeScore,
-          awayScore: result.awayScore,
-        })
-        .where(eq(fixtures.id, result.fixtureId));
+    // Pre-fetch all fixtures for this save to map fixtureId -> team IDs
+    const allFixtures = await db
+      .select({
+        id: fixtures.id,
+        homeTeamId: fixtures.homeTeamId,
+        awayTeamId: fixtures.awayTeamId,
+      })
+      .from(fixtures)
+      .where(eq(fixtures.saveId, saveId));
 
-      // Insert match events
+    const fixturesMap = new Map(allFixtures.map((f) => [f.id, f]));
+
+    // Pre-fetch all teams for form updates (Phase 6)
+    const allTeamsData = await db
+      .select({
+        id: teams.id,
+        lastFiveResults: teams.lastFiveResults,
+      })
+      .from(teams)
+      .where(eq(teams.saveId, saveId));
+
+    const teamsFormMap = new Map(
+      allTeamsData.map((t) => [t.id, (t.lastFiveResults as ('W' | 'D' | 'L')[]) ?? []]),
+    );
+
+    // Collect all match events for batch insert (Phase 2)
+    const allMatchEvents: Array<{
+      id: string;
+      fixtureId: string;
+      minute: number;
+      type: string;
+      team: string;
+      playerId?: string;
+      playerName?: string;
+      description?: string;
+    }> = [];
+
+    // Aggregate player goals and assists for batch update (Phase 5)
+    const playerGoals = new Map<string, number>();
+    const playerAssists = new Map<string, number>();
+
+    // Collect form updates (Phase 6)
+    const formUpdates = new Map<string, ('W' | 'D' | 'L')[]>();
+
+    // Process each match result - collect data for batch operations
+    for (const result of body.results) {
+      // Collect match events (Phase 2)
       for (const event of result.events) {
-        await db.insert(matchEvents).values({
+        allMatchEvents.push({
           id: `event-${result.fixtureId}-${event.minute}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           fixtureId: result.fixtureId,
           minute: event.minute,
@@ -278,20 +313,9 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         });
       }
 
-      // Get fixture details to update standings
-      const fixtureResult = await db
-        .select({
-          homeTeamId: fixtures.homeTeamId,
-          awayTeamId: fixtures.awayTeamId,
-        })
-        .from(fixtures)
-        .where(eq(fixtures.id, result.fixtureId))
-        .limit(1);
-
-      if (fixtureResult.length > 0) {
-        const fixture = fixtureResult[0];
-
-        // Update home team standings
+      const fixture = fixturesMap.get(result.fixtureId);
+      if (fixture) {
+        // Update standings (still individual - needed for points calculation)
         await updateTeamStandings(
           db,
           saveId,
@@ -300,8 +324,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
           result.homeScore,
           result.awayScore,
         );
-
-        // Update away team standings
         await updateTeamStandings(
           db,
           saveId,
@@ -311,7 +333,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
           result.homeScore,
         );
 
-        // Update team form (lastFiveResults)
+        // Compute form updates in memory (Phase 6)
         const homeResult: 'W' | 'D' | 'L' =
           result.homeScore > result.awayScore
             ? 'W'
@@ -325,59 +347,96 @@ matchRoutes.post('/:saveId/complete', async (c) => {
               ? 'L'
               : 'D';
 
-        await updateTeamForm(db, saveId, fixture.homeTeamId, homeResult);
-        await updateTeamForm(db, saveId, fixture.awayTeamId, awayResult);
+        const homeCurrentForm = formUpdates.get(fixture.homeTeamId) ?? teamsFormMap.get(fixture.homeTeamId) ?? [];
+        const newHomeForm = [...homeCurrentForm, homeResult].slice(-5);
+        formUpdates.set(fixture.homeTeamId, newHomeForm);
 
-        // Update player stats for goals (not own goals - those don't count for anyone)
+        const awayCurrentForm = formUpdates.get(fixture.awayTeamId) ?? teamsFormMap.get(fixture.awayTeamId) ?? [];
+        const newAwayForm = [...awayCurrentForm, awayResult].slice(-5);
+        formUpdates.set(fixture.awayTeamId, newAwayForm);
+
+        // Aggregate player stats (Phase 5)
         const goalEvents = result.events.filter((e) => e.type === 'goal');
         for (const goal of goalEvents) {
           if (goal.playerId) {
-            await db
-              .update(players)
-              .set({
-                seasonGoals: sql`${players.seasonGoals} + 1`,
-              })
-              .where(eq(players.id, goal.playerId));
+            playerGoals.set(goal.playerId, (playerGoals.get(goal.playerId) || 0) + 1);
           }
-
-          // Track assists
           if (
             'assistPlayerId' in goal &&
             goal.assistPlayerId &&
             typeof goal.assistPlayerId === 'string'
           ) {
-            await db
-              .update(players)
-              .set({
-                seasonAssists: sql`${players.seasonAssists} + 1`,
-              })
-              .where(eq(players.id, goal.assistPlayerId));
+            playerAssists.set(
+              goal.assistPlayerId,
+              (playerAssists.get(goal.assistPlayerId) || 0) + 1,
+            );
           }
         }
-
-        // Own goals don't count toward any player's stats (handled by type 'own_goal')
-        // The goal is credited to the team but not to any player's seasonGoals
-
-        // Update minutes for all players who played
-        // Lineup players get 90 minutes by default
-        // We'll apply growth and form updates for the player's team
       }
     }
 
-    // Recalculate positions
-    await recalculateStandingPositions(db, saveId, save.currentSeason!);
+    // Phase 4: Batch update fixtures using D1 batch API
+    const fixtureStatements = body.results.map((result) =>
+      c.env.DB.prepare(
+        'UPDATE fixtures SET played = 1, home_score = ?, away_score = ? WHERE id = ?',
+      ).bind(result.homeScore, result.awayScore, result.fixtureId),
+    );
+    if (fixtureStatements.length > 0) {
+      await c.env.DB.batch(fixtureStatements);
+    }
+
+    // Phase 2: Batch insert all match events
+    if (allMatchEvents.length > 0) {
+      await db.insert(matchEvents).values(allMatchEvents);
+    }
+
+    // Phase 5: Batch update player stats using D1 batch API
+    const goalStatements = Array.from(playerGoals.entries()).map(([playerId, goals]) =>
+      c.env.DB.prepare('UPDATE players SET season_goals = season_goals + ? WHERE id = ?').bind(
+        goals,
+        playerId,
+      ),
+    );
+    const assistStatements = Array.from(playerAssists.entries()).map(([playerId, assists]) =>
+      c.env.DB.prepare('UPDATE players SET season_assists = season_assists + ? WHERE id = ?').bind(
+        assists,
+        playerId,
+      ),
+    );
+    if (goalStatements.length > 0) {
+      await c.env.DB.batch(goalStatements);
+    }
+    if (assistStatements.length > 0) {
+      await c.env.DB.batch(assistStatements);
+    }
+
+    // Phase 6: Batch update team forms using D1 batch API
+    const formStatements = Array.from(formUpdates.entries()).map(([teamId, form]) =>
+      c.env.DB.prepare('UPDATE teams SET last_five_results = ? WHERE id = ?').bind(
+        JSON.stringify(form),
+        teamId,
+      ),
+    );
+    if (formStatements.length > 0) {
+      await c.env.DB.batch(formStatements);
+    }
+
+    // Recalculate positions (Phase 7: now uses D1 batch)
+    await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason!);
 
     // Process player minutes, form, and growth for player's team
     await processPlayerStatsAndGrowth(
       db,
+      c.env.DB,
       saveId,
       save.playerTeamId!,
       body.results,
     );
 
-    // Process finances for all teams
+    // Process finances for all teams (Phase 3 & 9: batched)
     await processRoundFinances(
       db,
+      c.env.DB,
       saveId,
       save.currentSeason!,
       save.currentRound ?? 1,
@@ -437,70 +496,50 @@ async function updateTeamStandings(
     );
 }
 
-// Helper to recalculate standings positions
+// Helper to recalculate standings positions (Phase 7: uses D1 batch)
 async function recalculateStandingPositions(
-  db: ReturnType<typeof drizzle>,
+  d1: D1Database,
   saveId: string,
   season: string,
 ) {
   // Get all standings sorted by points, goal difference, goals for
-  const allStandings = await db
-    .select()
-    .from(standings)
-    .where(and(eq(standings.saveId, saveId), eq(standings.season, season)));
+  const result = await d1
+    .prepare('SELECT * FROM standings WHERE save_id = ? AND season = ?')
+    .bind(saveId, season)
+    .all();
+
+  const allStandings = result.results as Array<{
+    id: string;
+    points: number | null;
+    goals_for: number | null;
+    goals_against: number | null;
+  }>;
 
   // Sort by points, then goal difference, then goals for
   allStandings.sort((a, b) => {
     const pointsDiff = (b.points ?? 0) - (a.points ?? 0);
     if (pointsDiff !== 0) return pointsDiff;
 
-    const gdA = (a.goalsFor ?? 0) - (a.goalsAgainst ?? 0);
-    const gdB = (b.goalsFor ?? 0) - (b.goalsAgainst ?? 0);
+    const gdA = (a.goals_for ?? 0) - (a.goals_against ?? 0);
+    const gdB = (b.goals_for ?? 0) - (b.goals_against ?? 0);
     const gdDiff = gdB - gdA;
     if (gdDiff !== 0) return gdDiff;
 
-    return (b.goalsFor ?? 0) - (a.goalsFor ?? 0);
+    return (b.goals_for ?? 0) - (a.goals_for ?? 0);
   });
 
-  // Update positions
-  for (let i = 0; i < allStandings.length; i++) {
-    await db
-      .update(standings)
-      .set({ position: i + 1 })
-      .where(eq(standings.id, allStandings[i].id));
+  // Phase 7: Batch update positions using D1 batch API
+  const positionStatements = allStandings.map((standing, i) =>
+    d1.prepare('UPDATE standings SET position = ? WHERE id = ?').bind(i + 1, standing.id),
+  );
+
+  if (positionStatements.length > 0) {
+    await d1.batch(positionStatements);
   }
 }
 
-// Helper to update team form (lastFiveResults)
-async function updateTeamForm(
-  db: ReturnType<typeof drizzle>,
-  saveId: string,
-  teamId: string,
-  result: 'W' | 'D' | 'L',
-) {
-  // Fetch current form
-  const teamResult = await db
-    .select({ lastFiveResults: teams.lastFiveResults })
-    .from(teams)
-    .where(and(eq(teams.saveId, saveId), eq(teams.id, teamId)))
-    .limit(1);
-
-  if (teamResult.length === 0) return;
-
-  // Get current results, append new one, keep last 5
-  const currentResults =
-    (teamResult[0].lastFiveResults as ('W' | 'D' | 'L')[]) ?? [];
-  const newResults = [...currentResults, result].slice(-5);
-
-  // Update team
-  await db
-    .update(teams)
-    .set({ lastFiveResults: newResults })
-    .where(and(eq(teams.saveId, saveId), eq(teams.id, teamId)));
-}
-
-// Helper to process round finances for all teams
-interface MatchResultInput {
+// Helper to process round finances for all teams (Phase 3 & 9: batched)
+interface MatchResultInputFinance {
   fixtureId: string;
   homeScore: number;
   awayScore: number;
@@ -517,10 +556,11 @@ interface MatchResultInput {
 
 async function processRoundFinances(
   db: ReturnType<typeof drizzle>,
+  d1: D1Database,
   saveId: string,
   season: string,
   currentRound: number,
-  matchResults: MatchResultInput[],
+  matchResults: MatchResultInputFinance[],
 ) {
   // Get all teams with their financial data and players
   const allTeams = await db
@@ -583,10 +623,8 @@ async function processRoundFinances(
 
   // Build map of home teams and their opponents
   const homeTeamOpponents = new Map<string, string>();
-  const awayTeams = new Set<string>();
   for (const fixture of roundFixtures) {
     homeTeamOpponents.set(fixture.homeTeamId, fixture.awayTeamId);
-    awayTeams.add(fixture.awayTeamId);
   }
 
   // Build team reputation map for attendance calculation
@@ -595,7 +633,28 @@ async function processRoundFinances(
     teamReputation.set(team.id, team.reputation);
   }
 
-  // Process finances for each team
+  // Collect all transactions and team updates for batch operations
+  const allTransactions: Array<{
+    id: string;
+    saveId: string;
+    teamId: string;
+    type: 'income' | 'expense';
+    category: string;
+    amount: number;
+    description: string;
+    round: number;
+    createdAt: Date;
+  }> = [];
+
+  const teamFinanceUpdates: Array<{
+    teamId: string;
+    balance: number;
+    roundWages: number;
+    seasonRevenue: number;
+    seasonExpenses: number;
+  }> = [];
+
+  // Process finances for each team (collect data, don't write yet)
   for (const team of allTeams) {
     const teamPlayers = playersByTeam.get(team.id) ?? [];
     const leaguePosition = positionByTeam.get(team.id) ?? 10;
@@ -648,26 +707,22 @@ async function processRoundFinances(
     const newSeasonRevenue = (team.seasonRevenue ?? 0) + totalIncome;
     const newSeasonExpenses = (team.seasonExpenses ?? 0) + totalExpenses;
 
-    // Update team financial data
-    await db
-      .update(teams)
-      .set({
-        balance: newBalance,
-        roundWages: wages,
-        seasonRevenue: newSeasonRevenue,
-        seasonExpenses: newSeasonExpenses,
-      })
-      .where(eq(teams.id, team.id));
+    // Collect team financial update (Phase 9)
+    teamFinanceUpdates.push({
+      teamId: team.id,
+      balance: newBalance,
+      roundWages: wages,
+      seasonRevenue: newSeasonRevenue,
+      seasonExpenses: newSeasonExpenses,
+    });
 
-    // Record transactions
-    const transactionsToInsert = [];
-
+    // Collect transactions (Phase 3)
     if (matchDayIncome > 0) {
-      transactionsToInsert.push({
+      allTransactions.push({
         id: generateTransactionId(),
         saveId,
         teamId: team.id,
-        type: 'income' as const,
+        type: 'income',
         category: 'match_day',
         amount: matchDayIncome,
         description: `Match day revenue (${attendance.toLocaleString()} fans)`,
@@ -676,11 +731,11 @@ async function processRoundFinances(
       });
     }
 
-    transactionsToInsert.push({
+    allTransactions.push({
       id: generateTransactionId(),
       saveId,
       teamId: team.id,
-      type: 'income' as const,
+      type: 'income',
       category: 'sponsorship',
       amount: sponsorship,
       description: 'Sponsorship payment',
@@ -688,11 +743,11 @@ async function processRoundFinances(
       createdAt: new Date(),
     });
 
-    transactionsToInsert.push({
+    allTransactions.push({
       id: generateTransactionId(),
       saveId,
       teamId: team.id,
-      type: 'income' as const,
+      type: 'income',
       category: 'tv_rights',
       amount: tvRights,
       description: `TV rights (Position ${leaguePosition})`,
@@ -700,11 +755,11 @@ async function processRoundFinances(
       createdAt: new Date(),
     });
 
-    transactionsToInsert.push({
+    allTransactions.push({
       id: generateTransactionId(),
       saveId,
       teamId: team.id,
-      type: 'expense' as const,
+      type: 'expense',
       category: 'wages',
       amount: wages,
       description: `Player wages (${teamPlayers.length} players)`,
@@ -712,11 +767,11 @@ async function processRoundFinances(
       createdAt: new Date(),
     });
 
-    transactionsToInsert.push({
+    allTransactions.push({
       id: generateTransactionId(),
       saveId,
       teamId: team.id,
-      type: 'expense' as const,
+      type: 'expense',
       category: 'stadium',
       amount: stadiumMaintenance,
       description: 'Stadium maintenance',
@@ -724,22 +779,41 @@ async function processRoundFinances(
       createdAt: new Date(),
     });
 
-    transactionsToInsert.push({
+    allTransactions.push({
       id: generateTransactionId(),
       saveId,
       teamId: team.id,
-      type: 'expense' as const,
+      type: 'expense',
       category: 'operations',
       amount: operatingCosts,
       description: 'Operating costs',
       round: currentRound,
       createdAt: new Date(),
     });
+  }
 
-    // Insert transactions one by one
-    for (const txn of transactionsToInsert) {
-      await db.insert(transactions).values(txn);
-    }
+  // Phase 9: Batch update all team financial data using D1 batch API
+  const teamStatements = teamFinanceUpdates.map((update) =>
+    d1
+      .prepare(
+        'UPDATE teams SET balance = ?, round_wages = ?, season_revenue = ?, season_expenses = ? WHERE id = ?',
+      )
+      .bind(
+        update.balance,
+        update.roundWages,
+        update.seasonRevenue,
+        update.seasonExpenses,
+        update.teamId,
+      ),
+  );
+
+  if (teamStatements.length > 0) {
+    await d1.batch(teamStatements);
+  }
+
+  // Phase 3: Batch insert all transactions
+  if (allTransactions.length > 0) {
+    await db.insert(transactions).values(allTransactions);
   }
 }
 
@@ -766,6 +840,7 @@ interface MatchResultInput {
 
 async function processPlayerStatsAndGrowth(
   db: ReturnType<typeof drizzle>,
+  d1: D1Database,
   saveId: string,
   playerTeamId: string,
   matchResults: MatchResultInput[],
@@ -828,7 +903,6 @@ async function processPlayerStatsAndGrowth(
   if (!fixture) return;
 
   const isHome = fixture.homeTeamId === playerTeamId;
-  const teamScore = isHome ? playerMatch.homeScore : playerMatch.awayScore;
   const opponentScore = isHome ? playerMatch.awayScore : playerMatch.homeScore;
   const isCleanSheet = opponentScore === 0;
 
@@ -854,6 +928,16 @@ async function processPlayerStatsAndGrowth(
   // Get lineup player IDs from the match or assume all starters played 90 mins
   const lineupIds = new Set(playerMatch.lineupPlayerIds || []);
   const subMinutes = playerMatch.substitutionMinutes || {};
+
+  // Collect all player updates for batch operation
+  const playerUpdates: Array<{
+    playerId: string;
+    attributes: string;
+    form: number;
+    lastFiveRatings: string;
+    seasonMinutes: number;
+    seasonAvgRating: number;
+  }> = [];
 
   // Process each player
   for (const dbPlayer of teamPlayers) {
@@ -945,18 +1029,33 @@ async function processPlayerStatsAndGrowth(
     const newAvg =
       matchCount > 0 ? (prevTotal + matchRating) / matchCount : matchRating;
 
-    // Update player in database
-    await db
-      .update(players)
-      .set({
-        // Update attributes if growth occurred
-        attributes: grownPlayer.attributes,
-        // Update form tracking
-        form: newForm,
-        lastFiveRatings: newLastFiveRatings,
-        seasonMinutes: newSeasonMinutes,
-        seasonAvgRating: Math.round(newAvg * 10) / 10,
-      })
-      .where(eq(players.id, dbPlayer.id));
+    // Collect update for batch operation
+    playerUpdates.push({
+      playerId: dbPlayer.id,
+      attributes: JSON.stringify(grownPlayer.attributes),
+      form: newForm,
+      lastFiveRatings: JSON.stringify(newLastFiveRatings),
+      seasonMinutes: newSeasonMinutes,
+      seasonAvgRating: Math.round(newAvg * 10) / 10,
+    });
+  }
+
+  // Batch update all players using D1 batch API
+  if (playerUpdates.length > 0) {
+    const playerStatements = playerUpdates.map((update) =>
+      d1
+        .prepare(
+          'UPDATE players SET attributes = ?, form = ?, last_five_ratings = ?, season_minutes = ?, season_avg_rating = ? WHERE id = ?',
+        )
+        .bind(
+          update.attributes,
+          update.form,
+          update.lastFiveRatings,
+          update.seasonMinutes,
+          update.seasonAvgRating,
+          update.playerId,
+        ),
+    );
+    await d1.batch(playerStatements);
   }
 }
