@@ -9,11 +9,15 @@ import type {
   Fixture,
   StandingEntry,
   MatchResult,
+  Player,
 } from '../types';
+import { createDefaultForm } from '../types';
 import { simulateMatch } from '../match';
 import { createDefaultTactics } from '../team';
+import { shouldRetire } from '../player';
 
 // Generate round-robin fixtures for a league
+// Uses circle method and ensures no team has more than 2 consecutive home/away games
 export function generateFixtures(teams: Team[], seasonYear: string): Fixture[] {
   const n = teams.length;
   const fixtures: Fixture[] = [];
@@ -25,34 +29,89 @@ export function generateFixtures(teams: Team[], seasonYear: string): Fixture[] {
   }
 
   const numTeams = teamIds.length;
-  const rounds = (numTeams - 1) * 2; // Home and away
+  const halfSeasonRounds = numTeams - 1;
   const matchesPerRound = numTeams / 2;
 
-  // Circle method for round-robin scheduling
+  // Circle method: fix first team, rotate the rest
   const fixed = teamIds[0];
   const rotating = teamIds.slice(1);
 
-  for (let round = 0; round < rounds; round++) {
-    const isSecondHalf = round >= numTeams - 1;
+  // Track each team's venue history to enforce max 2 consecutive
+  const teamVenueHistory = new Map<string, ('H' | 'A')[]>();
+  for (const teamId of teamIds) {
+    if (teamId !== 'BYE') {
+      teamVenueHistory.set(teamId, []);
+    }
+  }
 
+  // Helper to check if a team can play at a venue
+  const canPlayAt = (teamId: string, venue: 'H' | 'A'): boolean => {
+    const history = teamVenueHistory.get(teamId) || [];
+    if (history.length < 2) return true;
+    const last2 = history.slice(-2);
+    return !(last2[0] === venue && last2[1] === venue);
+  };
+
+  // Helper to record a venue
+  const recordVenue = (teamId: string, venue: 'H' | 'A') => {
+    const history = teamVenueHistory.get(teamId) || [];
+    history.push(venue);
+    teamVenueHistory.set(teamId, history);
+  };
+
+  // Generate first half fixtures
+  const firstHalfFixtures: Fixture[] = [];
+
+  for (let round = 0; round < halfSeasonRounds; round++) {
     // Create rotation for this round
     const rotation = [fixed, ...rotating];
 
     for (let match = 0; match < matchesPerRound; match++) {
-      const home = rotation[match];
-      const away = rotation[numTeams - 1 - match];
+      const team1 = rotation[match];
+      const team2 = rotation[numTeams - 1 - match];
 
       // Skip bye matches
-      if (home === 'BYE' || away === 'BYE') continue;
+      if (team1 === 'BYE' || team2 === 'BYE') continue;
 
-      // Swap home/away for second half of season
-      const [homeTeam, awayTeam] = isSecondHalf ? [away, home] : [home, away];
+      // Determine home/away based on constraints
+      let homeTeam: string, awayTeam: string;
+
+      const t1CanHome = canPlayAt(team1, 'H');
+      const t1CanAway = canPlayAt(team1, 'A');
+      const t2CanHome = canPlayAt(team2, 'H');
+      const t2CanAway = canPlayAt(team2, 'A');
+
+      if (!t1CanHome && t2CanHome) {
+        // team1 must be away
+        homeTeam = team2;
+        awayTeam = team1;
+      } else if (!t2CanHome && t1CanHome) {
+        // team2 must be away
+        homeTeam = team1;
+        awayTeam = team2;
+      } else if (!t1CanAway && t2CanAway) {
+        // team1 must be home
+        homeTeam = team1;
+        awayTeam = team2;
+      } else if (!t2CanAway && t1CanAway) {
+        // team2 must be home
+        homeTeam = team2;
+        awayTeam = team1;
+      } else {
+        // No constraints - use round+match parity for variation
+        [homeTeam, awayTeam] =
+          (round + match) % 2 === 0 ? [team1, team2] : [team2, team1];
+      }
+
+      // Record venues
+      recordVenue(homeTeam, 'H');
+      recordVenue(awayTeam, 'A');
 
       // Calculate date (one round per week, starting August)
       const startDate = new Date(`${seasonYear.split('/')[0]}-08-01`);
       startDate.setDate(startDate.getDate() + round * 7);
 
-      fixtures.push({
+      firstHalfFixtures.push({
         id: `fixture-${round + 1}-${match + 1}`,
         round: round + 1,
         homeTeamId: homeTeam,
@@ -65,6 +124,27 @@ export function generateFixtures(teams: Team[], seasonYear: string): Fixture[] {
     // Rotate teams (keep first fixed)
     const last = rotating.pop()!;
     rotating.unshift(last);
+  }
+
+  // Add first half to fixtures
+  fixtures.push(...firstHalfFixtures);
+
+  // Generate second half by swapping home/away from first half
+  for (const fixture of firstHalfFixtures) {
+    const secondHalfRound = fixture.round + halfSeasonRounds;
+
+    // Calculate date for second half
+    const startDate = new Date(`${seasonYear.split('/')[0]}-08-01`);
+    startDate.setDate(startDate.getDate() + (secondHalfRound - 1) * 7);
+
+    fixtures.push({
+      id: `fixture-${secondHalfRound}-${fixture.id.split('-')[2]}`,
+      round: secondHalfRound,
+      homeTeamId: fixture.awayTeamId, // Swap home/away
+      awayTeamId: fixture.homeTeamId,
+      date: startDate.toISOString(),
+      played: false,
+    });
   }
 
   return fixtures;
@@ -263,4 +343,64 @@ export function getPromotionRelegationPositions(leagueSize: number): {
   ).reverse();
 
   return { promotion, relegation };
+}
+
+// ============================================================================
+// SEASON END PROCESSING
+// ============================================================================
+
+// Process all players at the end of a season
+// - Age all players by 1 year
+// - Reset season stats
+// - Check for retirements
+export function processSeasonEnd(players: Player[]): {
+  updatedPlayers: Player[];
+  retirements: Player[];
+} {
+  const updatedPlayers: Player[] = [];
+  const retirements: Player[] = [];
+
+  for (const player of players) {
+    const updated: Player = {
+      ...player,
+      attributes: { ...player.attributes },
+      form: { ...player.form },
+    };
+
+    // Age the player
+    updated.age += 1;
+
+    // Reset season stats
+    updated.form = {
+      ...createDefaultForm(),
+      form: updated.form.form, // Keep current form level
+    };
+
+    // Check for retirement (age 33+)
+    if (shouldRetire(updated)) {
+      updated.status = 'retiring';
+      retirements.push(updated);
+    }
+
+    updatedPlayers.push(updated);
+  }
+
+  return { updatedPlayers, retirements };
+}
+
+// Get the next season year string
+export function getNextSeasonYear(currentYear: string): string {
+  // Parse "2024/25" format
+  const parts = currentYear.split('/');
+  if (parts.length !== 2) {
+    // Fallback
+    const year = parseInt(currentYear, 10) || 2024;
+    return `${year + 1}/${(year + 2).toString().slice(-2)}`;
+  }
+
+  const startYear = parseInt(parts[0], 10);
+  const nextStart = startYear + 1;
+  const nextEnd = (nextStart + 1).toString().slice(-2);
+
+  return `${nextStart}/${nextEnd}`;
 }

@@ -270,6 +270,12 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
       form: players.form,
       wage: players.wage,
       marketValue: players.marketValue,
+      // Season stats
+      lastFiveRatings: players.lastFiveRatings,
+      seasonGoals: players.seasonGoals,
+      seasonAssists: players.seasonAssists,
+      seasonMinutes: players.seasonMinutes,
+      seasonAvgRating: players.seasonAvgRating,
     })
     .from(players)
     .where(eq(players.teamId, teamId));

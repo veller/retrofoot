@@ -21,6 +21,10 @@ import {
   calculateStadiumMaintenance,
   calculateOperatingCosts,
   generateTransactionId,
+  calculateMatchRating,
+  applyMatchGrowth,
+  type Player,
+  type PlayerAttributes,
 } from '@retrofoot/core';
 
 // Match management routes
@@ -324,7 +328,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         await updateTeamForm(db, saveId, fixture.homeTeamId, homeResult);
         await updateTeamForm(db, saveId, fixture.awayTeamId, awayResult);
 
-        // Update player stats for goals
+        // Update player stats for goals (not own goals - those don't count for anyone)
         const goalEvents = result.events.filter((e) => e.type === 'goal');
         for (const goal of goalEvents) {
           if (goal.playerId) {
@@ -335,12 +339,41 @@ matchRoutes.post('/:saveId/complete', async (c) => {
               })
               .where(eq(players.id, goal.playerId));
           }
+
+          // Track assists
+          if (
+            'assistPlayerId' in goal &&
+            goal.assistPlayerId &&
+            typeof goal.assistPlayerId === 'string'
+          ) {
+            await db
+              .update(players)
+              .set({
+                seasonAssists: sql`${players.seasonAssists} + 1`,
+              })
+              .where(eq(players.id, goal.assistPlayerId));
+          }
         }
+
+        // Own goals don't count toward any player's stats (handled by type 'own_goal')
+        // The goal is credited to the team but not to any player's seasonGoals
+
+        // Update minutes for all players who played
+        // Lineup players get 90 minutes by default
+        // We'll apply growth and form updates for the player's team
       }
     }
 
     // Recalculate positions
     await recalculateStandingPositions(db, saveId, save.currentSeason!);
+
+    // Process player minutes, form, and growth for player's team
+    await processPlayerStatsAndGrowth(
+      db,
+      saveId,
+      save.playerTeamId!,
+      body.results,
+    );
 
     // Process finances for all teams
     await processRoundFinances(
@@ -707,5 +740,223 @@ async function processRoundFinances(
     for (const txn of transactionsToInsert) {
       await db.insert(transactions).values(txn);
     }
+  }
+}
+
+// Helper to process player stats, form updates, and growth after matches
+interface MatchResultInput {
+  fixtureId: string;
+  homeScore: number;
+  awayScore: number;
+  attendance: number;
+  events: Array<{
+    minute: number;
+    type: string;
+    team: 'home' | 'away';
+    playerId?: string;
+    playerName?: string;
+    assistPlayerId?: string;
+    assistPlayerName?: string;
+    description?: string;
+  }>;
+  // Player minutes tracking
+  lineupPlayerIds?: string[];
+  substitutionMinutes?: Record<string, number>; // playerId -> minute subbed off
+}
+
+async function processPlayerStatsAndGrowth(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  playerTeamId: string,
+  matchResults: MatchResultInput[],
+) {
+  // Get all players for the player's team
+  const teamPlayers = await db
+    .select({
+      id: players.id,
+      name: players.name,
+      nickname: players.nickname,
+      age: players.age,
+      nationality: players.nationality,
+      position: players.position,
+      preferredFoot: players.preferredFoot,
+      attributes: players.attributes,
+      potential: players.potential,
+      morale: players.morale,
+      fitness: players.fitness,
+      injured: players.injured,
+      injuryWeeks: players.injuryWeeks,
+      contractEndSeason: players.contractEndSeason,
+      wage: players.wage,
+      marketValue: players.marketValue,
+      status: players.status,
+      form: players.form,
+      lastFiveRatings: players.lastFiveRatings,
+      seasonGoals: players.seasonGoals,
+      seasonAssists: players.seasonAssists,
+      seasonMinutes: players.seasonMinutes,
+      seasonAvgRating: players.seasonAvgRating,
+    })
+    .from(players)
+    .where(and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)));
+
+  // Find the player team's match
+  const playerFixtures = await db
+    .select({
+      id: fixtures.id,
+      homeTeamId: fixtures.homeTeamId,
+      awayTeamId: fixtures.awayTeamId,
+      homeScore: fixtures.homeScore,
+      awayScore: fixtures.awayScore,
+    })
+    .from(fixtures)
+    .where(eq(fixtures.saveId, saveId));
+
+  // Find the match result for player's team
+  const playerMatch = matchResults.find((result) => {
+    const fixture = playerFixtures.find((f) => f.id === result.fixtureId);
+    return (
+      fixture &&
+      (fixture.homeTeamId === playerTeamId ||
+        fixture.awayTeamId === playerTeamId)
+    );
+  });
+
+  if (!playerMatch) return;
+
+  const fixture = playerFixtures.find((f) => f.id === playerMatch.fixtureId);
+  if (!fixture) return;
+
+  const isHome = fixture.homeTeamId === playerTeamId;
+  const teamScore = isHome ? playerMatch.homeScore : playerMatch.awayScore;
+  const opponentScore = isHome ? playerMatch.awayScore : playerMatch.homeScore;
+  const isCleanSheet = opponentScore === 0;
+
+  // Count goals and assists per player
+  const playerGoals = new Map<string, number>();
+  const playerAssists = new Map<string, number>();
+
+  for (const event of playerMatch.events) {
+    if (event.type === 'goal' && event.playerId) {
+      playerGoals.set(
+        event.playerId,
+        (playerGoals.get(event.playerId) || 0) + 1,
+      );
+      if (event.assistPlayerId) {
+        playerAssists.set(
+          event.assistPlayerId,
+          (playerAssists.get(event.assistPlayerId) || 0) + 1,
+        );
+      }
+    }
+  }
+
+  // Get lineup player IDs from the match or assume all starters played 90 mins
+  const lineupIds = new Set(playerMatch.lineupPlayerIds || []);
+  const subMinutes = playerMatch.substitutionMinutes || {};
+
+  // Process each player
+  for (const dbPlayer of teamPlayers) {
+    // Determine minutes played
+    let minutesPlayed = 0;
+    if (lineupIds.size > 0) {
+      if (lineupIds.has(dbPlayer.id)) {
+        // Starter - check if subbed off
+        minutesPlayed = subMinutes[dbPlayer.id] ?? 90;
+      } else if (subMinutes[dbPlayer.id] !== undefined) {
+        // Sub who came on
+        minutesPlayed = 90 - subMinutes[dbPlayer.id];
+      }
+    } else {
+      // Fallback: assume first 11 players by ID in events played 90 mins
+      // For simplicity, give all players in goal events 90 mins
+      const wasInvolved =
+        playerGoals.has(dbPlayer.id) || playerAssists.has(dbPlayer.id);
+      minutesPlayed = wasInvolved ? 90 : 0;
+    }
+
+    if (minutesPlayed === 0) continue;
+
+    const goals = playerGoals.get(dbPlayer.id) || 0;
+    const assists = playerAssists.get(dbPlayer.id) || 0;
+
+    // Build a Player object for the core functions
+    const player: Player = {
+      id: dbPlayer.id,
+      name: dbPlayer.name,
+      nickname: dbPlayer.nickname ?? undefined,
+      age: dbPlayer.age,
+      nationality: dbPlayer.nationality,
+      position: dbPlayer.position as 'GK' | 'DEF' | 'MID' | 'ATT',
+      preferredFoot: dbPlayer.preferredFoot as 'left' | 'right' | 'both',
+      attributes: dbPlayer.attributes as PlayerAttributes,
+      potential: dbPlayer.potential,
+      morale: dbPlayer.morale ?? 70,
+      fitness: dbPlayer.fitness ?? 100,
+      injured: dbPlayer.injured ?? false,
+      injuryWeeks: dbPlayer.injuryWeeks ?? 0,
+      contractEndSeason: dbPlayer.contractEndSeason,
+      wage: dbPlayer.wage,
+      marketValue: dbPlayer.marketValue,
+      status: (dbPlayer.status ?? 'active') as
+        | 'active'
+        | 'retiring'
+        | 'retired'
+        | 'deceased'
+        | 'suspended',
+      form: {
+        form: dbPlayer.form ?? 70,
+        lastFiveRatings: (dbPlayer.lastFiveRatings as number[]) ?? [],
+        seasonGoals: dbPlayer.seasonGoals ?? 0,
+        seasonAssists: dbPlayer.seasonAssists ?? 0,
+        seasonMinutes: dbPlayer.seasonMinutes ?? 0,
+        seasonAvgRating: dbPlayer.seasonAvgRating ?? 0,
+      },
+    };
+
+    // Calculate match rating
+    const matchRating = calculateMatchRating(
+      player,
+      minutesPlayed,
+      goals,
+      assists,
+      isCleanSheet,
+    );
+
+    // Apply in-season growth
+    const grownPlayer = applyMatchGrowth(player, minutesPlayed, matchRating);
+
+    // Update form ratings
+    const newLastFiveRatings = [
+      ...player.form.lastFiveRatings,
+      matchRating,
+    ].slice(-5);
+    const avgRecent =
+      newLastFiveRatings.reduce((a, b) => a + b, 0) / newLastFiveRatings.length;
+    const newForm = Math.max(
+      1,
+      Math.min(100, Math.round(player.form.form * 0.7 + avgRecent * 10 * 0.3)),
+    );
+
+    // Calculate new season average rating
+    const newSeasonMinutes = player.form.seasonMinutes + minutesPlayed;
+    const matchCount = newLastFiveRatings.length;
+    const prevTotal = player.form.seasonAvgRating * (matchCount - 1);
+    const newAvg =
+      matchCount > 0 ? (prevTotal + matchRating) / matchCount : matchRating;
+
+    // Update player in database
+    await db
+      .update(players)
+      .set({
+        // Update attributes if growth occurred
+        attributes: grownPlayer.attributes,
+        // Update form tracking
+        form: newForm,
+        lastFiveRatings: newLastFiveRatings,
+        seasonMinutes: newSeasonMinutes,
+        seasonAvgRating: Math.round(newAvg * 10) / 10,
+      })
+      .where(eq(players.id, dbPlayer.id));
   }
 }

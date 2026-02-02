@@ -158,6 +158,11 @@ function MatchEventsSummary({
                       (P missed)
                     </span>
                   )}
+                  {e.type === 'goal' && e.assistPlayerName && (
+                    <span className="text-slate-400 text-xs ml-1">
+                      (ast: {e.assistPlayerName})
+                    </span>
+                  )}
                 </span>
                 <span className="text-slate-500 text-xs">
                   {e.team === 'home' ? homeTeamShortName : awayTeamShortName}
@@ -505,6 +510,8 @@ export function MatchPage() {
               team: e.team,
               playerId: e.playerId,
               playerName: e.playerName,
+              assistPlayerId: e.assistPlayerId,
+              assistPlayerName: e.assistPlayerName,
               description: e.description,
             })),
           })),
@@ -623,9 +630,12 @@ export function MatchPage() {
 
           {playerResult && (
             <div className="mb-6">
-              <div className="text-white text-3xl font-bold mb-2">
-                {playerHomeTeam.name} {playerResult.homeScore} -{' '}
-                {playerResult.awayScore} {playerAwayTeam.name}
+              <div className="text-white text-2xl sm:text-3xl font-bold mb-2 whitespace-nowrap">
+                {playerHomeTeam.shortName} {playerResult.homeScore} -{' '}
+                {playerResult.awayScore} {playerAwayTeam.shortName}
+              </div>
+              <div className="text-slate-400 text-sm mb-2">
+                {playerHomeTeam.name} vs {playerAwayTeam.name}
               </div>
               <div className="flex justify-center gap-6 text-sm">
                 <p className="text-slate-400">

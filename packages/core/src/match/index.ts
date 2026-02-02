@@ -71,6 +71,64 @@ function weightedRandom(weights: number[]): number {
   return weights.length - 1;
 }
 
+// Goal type distribution based on real-world stats:
+// ~73% assisted, ~24% unassisted, ~3% own goals
+type GoalType = 'assisted' | 'unassisted' | 'own_goal';
+
+function determineGoalType(): GoalType {
+  const roll = random();
+  if (roll < 0.03) return 'own_goal'; // 3% own goals
+  if (roll < 0.27) return 'unassisted'; // 24% unassisted (penalties, solo, deflection)
+  return 'assisted'; // 73% have assists
+}
+
+// Pick an assist player (not the scorer, weighted by passing + vision)
+function pickAssister(
+  players: Player[],
+  tactics: Tactics,
+  scorerId: string,
+): Player | undefined {
+  const lineupPlayers = players.filter(
+    (p) =>
+      tactics.lineup.includes(p.id) && p.id !== scorerId && p.position !== 'GK',
+  );
+
+  if (lineupPlayers.length === 0) return undefined;
+
+  // Weight by passing and vision
+  const weights = lineupPlayers.map(
+    (p) => p.attributes.passing + p.attributes.vision,
+  );
+  const idx = weightedRandom(weights);
+  return lineupPlayers[idx];
+}
+
+// Pick a defender for own goal (weighted by lower composure = higher chance of OG)
+function pickOwnGoalPlayer(
+  players: Player[],
+  tactics: Tactics,
+): Player | undefined {
+  const lineupPlayers = players.filter(
+    (p) =>
+      tactics.lineup.includes(p.id) &&
+      (p.position === 'DEF' || p.position === 'GK'),
+  );
+
+  if (lineupPlayers.length === 0) {
+    // Fallback to any outfield player
+    const outfield = players.filter(
+      (p) => tactics.lineup.includes(p.id) && p.position !== 'GK',
+    );
+    if (outfield.length === 0) return undefined;
+    return outfield[randomInt(0, outfield.length - 1)];
+  }
+
+  // Weight inversely by composure (lower composure = more likely OG)
+  const weights = lineupPlayers.map((p) => 100 - p.attributes.composure);
+  const idx = weightedRandom(weights);
+  return lineupPlayers[idx];
+}
+
 // Calculate team strength from lineup
 function calculateTeamStrength(players: Player[], tactics: Tactics): number {
   const lineupPlayers = players.filter((p) => tactics.lineup.includes(p.id));
@@ -261,22 +319,70 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
     );
 
     if (random() < successChance) {
-      // GOAL!
-      const scorer = pickScorer(attackingPlayers, attackingTactics);
-      if (attackingTeam === 'home') {
-        state.homeScore++;
-      } else {
-        state.awayScore++;
-      }
+      // GOAL! Determine the type
+      const goalType = determineGoalType();
+      const defendingTactics =
+        attackingTeam === 'home' ? state.awayTactics : state.homeTactics;
 
-      state.events.push({
-        minute: state.minute,
-        type: 'goal',
-        team: attackingTeam,
-        playerId: scorer?.id,
-        playerName: scorer?.nickname || scorer?.name || 'Unknown',
-        description: `GOAL! ${scorer?.nickname || scorer?.name} scores for ${teamObj.name}!`,
-      });
+      if (goalType === 'own_goal') {
+        // Own goal by defending team
+        const ownGoalPlayer = pickOwnGoalPlayer(
+          defendingPlayers,
+          defendingTactics,
+        );
+        if (attackingTeam === 'home') {
+          state.homeScore++;
+        } else {
+          state.awayScore++;
+        }
+
+        state.events.push({
+          minute: state.minute,
+          type: 'own_goal',
+          team: attackingTeam, // Credit goes to attacking team
+          playerId: ownGoalPlayer?.id,
+          playerName:
+            ownGoalPlayer?.nickname || ownGoalPlayer?.name || 'Defender',
+          description: `OWN GOAL! ${ownGoalPlayer?.nickname || ownGoalPlayer?.name} puts the ball into their own net!`,
+        });
+      } else {
+        // Regular goal (assisted or unassisted)
+        const scorer = pickScorer(attackingPlayers, attackingTactics);
+        if (attackingTeam === 'home') {
+          state.homeScore++;
+        } else {
+          state.awayScore++;
+        }
+
+        // Pick assister for assisted goals
+        let assistPlayer: Player | undefined;
+        if (goalType === 'assisted' && scorer) {
+          assistPlayer = pickAssister(
+            attackingPlayers,
+            attackingTactics,
+            scorer.id,
+          );
+        }
+
+        const scorerName = scorer?.nickname || scorer?.name || 'Unknown';
+        let description = `GOAL! ${scorerName} scores for ${teamObj.name}!`;
+        if (assistPlayer) {
+          const assisterName =
+            assistPlayer.nickname || assistPlayer.name || 'Unknown';
+          description = `GOAL! ${scorerName} scores for ${teamObj.name}! Assist: ${assisterName}`;
+        }
+
+        state.events.push({
+          minute: state.minute,
+          type: 'goal',
+          team: attackingTeam,
+          playerId: scorer?.id,
+          playerName: scorerName,
+          assistPlayerId: assistPlayer?.id,
+          assistPlayerName: assistPlayer?.nickname || assistPlayer?.name,
+          description,
+        });
+      }
     } else {
       // Chance missed
       const shooter = pickScorer(attackingPlayers, attackingTactics);

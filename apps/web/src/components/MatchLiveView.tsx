@@ -65,7 +65,7 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
 
   return (
     <div
-      className={`grid grid-cols-[120px_1fr_80px_1fr_200px] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors ${
+      className={`grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors ${
         isPlayerMatch
           ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
           : 'bg-slate-800 hover:bg-slate-750'
@@ -76,7 +76,7 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
         <div className="font-mono text-white">
           {attendance.toLocaleString()}
         </div>
-        <div className="truncate">{homeTeam.stadium}</div>
+        <div>{homeTeam.stadium}</div>
       </div>
 
       {/* Home Team */}
@@ -99,14 +99,28 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
       </div>
 
       {/* Latest Event */}
-      <div className="text-sm truncate">
+      <div className="text-sm">
         {latestEvent && (
           <span className="flex items-center gap-1">
             <span className="text-slate-400 font-mono">
               {latestEvent.minute}'
             </span>
             <EventIcon type={latestEvent.type} />
-            <span className="text-white">{latestEvent.playerName}</span>
+            {latestEvent.type === 'own_goal' && (
+              <span className="text-red-400 text-xs font-bold">OG</span>
+            )}
+            <span
+              className={
+                latestEvent.type === 'own_goal' ? 'text-red-300' : 'text-white'
+              }
+            >
+              {latestEvent.playerName}
+            </span>
+            {latestEvent.type === 'goal' && latestEvent.assistPlayerName && (
+              <span className="text-slate-400 text-xs">
+                (ast: {latestEvent.assistPlayerName})
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -176,7 +190,7 @@ export function MatchLiveView({
       <main className="flex-1 overflow-auto">
         <div className="border border-slate-700 rounded-lg m-4 overflow-hidden">
           {/* Column Headers */}
-          <div className="grid grid-cols-[120px_1fr_80px_1fr_200px] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
+          <div className="grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
             <div>Attendance</div>
             <div className="text-right">Home</div>
             <div className="text-center">Score</div>

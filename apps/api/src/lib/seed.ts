@@ -40,8 +40,7 @@ function shuffleArray<T>(array: T[]): T[] {
 
 /**
  * Generate round-robin fixtures for a season using the circle method
- * Ensures each team plays exactly once per round
- * Returns (N-1)*2 rounds for N teams (home and away)
+ * Ensures no team has more than 2 consecutive home or away games
  */
 function generateFixtures(
   teamIds: string[],
@@ -58,35 +57,101 @@ function generateFixtures(
   }
 
   const numTeams = teams.length;
-  const rounds = (numTeams - 1) * 2; // Home and away
+  const halfSeasonRounds = numTeams - 1;
   const matchesPerRound = numTeams / 2;
 
   // Circle method: fix first team, rotate the rest
   const fixed = teams[0];
   const rotating = teams.slice(1);
 
-  for (let round = 0; round < rounds; round++) {
-    const isSecondHalf = round >= numTeams - 1;
+  // Track each team's venue history to enforce max 2 consecutive
+  const teamVenueHistory = new Map<string, ('H' | 'A')[]>();
+  for (const teamId of teams) {
+    if (teamId !== 'BYE') {
+      teamVenueHistory.set(teamId, []);
+    }
+  }
+
+  // Helper to check if a team can play at a venue
+  const canPlayAt = (teamId: string, venue: 'H' | 'A'): boolean => {
+    const history = teamVenueHistory.get(teamId) || [];
+    if (history.length < 2) return true;
+    const last2 = history.slice(-2);
+    return !(last2[0] === venue && last2[1] === venue);
+  };
+
+  // Helper to record a venue
+  const recordVenue = (teamId: string, venue: 'H' | 'A') => {
+    const history = teamVenueHistory.get(teamId) || [];
+    history.push(venue);
+    teamVenueHistory.set(teamId, history);
+  };
+
+  // Generate first half fixtures
+  interface FirstHalfFixture {
+    round: number;
+    homeTeamId: string;
+    awayTeamId: string;
+  }
+  const firstHalfFixtures: FirstHalfFixture[] = [];
+
+  for (let round = 0; round < halfSeasonRounds; round++) {
     const roundNumber = round + 1;
 
     // Create rotation for this round
     const rotation = [fixed, ...rotating];
 
     for (let match = 0; match < matchesPerRound; match++) {
-      const home = rotation[match];
-      const away = rotation[numTeams - 1 - match];
+      const team1 = rotation[match];
+      const team2 = rotation[numTeams - 1 - match];
 
       // Skip bye matches
-      if (home === 'BYE' || away === 'BYE') continue;
+      if (team1 === 'BYE' || team2 === 'BYE') continue;
 
-      // Swap home/away for second half of season
-      const [homeTeam, awayTeam] = isSecondHalf ? [away, home] : [home, away];
+      // Determine home/away based on constraints
+      let homeTeam: string, awayTeam: string;
+
+      const t1CanHome = canPlayAt(team1, 'H');
+      const t1CanAway = canPlayAt(team1, 'A');
+      const t2CanHome = canPlayAt(team2, 'H');
+      const t2CanAway = canPlayAt(team2, 'A');
+
+      if (!t1CanHome && t2CanHome) {
+        // team1 must be away
+        homeTeam = team2;
+        awayTeam = team1;
+      } else if (!t2CanHome && t1CanHome) {
+        // team2 must be away
+        homeTeam = team1;
+        awayTeam = team2;
+      } else if (!t1CanAway && t2CanAway) {
+        // team1 must be home
+        homeTeam = team1;
+        awayTeam = team2;
+      } else if (!t2CanAway && t1CanAway) {
+        // team2 must be home
+        homeTeam = team2;
+        awayTeam = team1;
+      } else {
+        // No constraints - use round+match parity for variation
+        [homeTeam, awayTeam] =
+          (round + match) % 2 === 0 ? [team1, team2] : [team2, team1];
+      }
+
+      // Record venues
+      recordVenue(homeTeam, 'H');
+      recordVenue(awayTeam, 'A');
+
+      firstHalfFixtures.push({
+        round: roundNumber,
+        homeTeamId: homeTeam,
+        awayTeamId: awayTeam,
+      });
 
       // Calculate date (one round per week, starting April)
-      const startMonth = isSecondHalf ? 8 : 4; // August for second half, April for first
-      const roundInHalf = isSecondHalf ? round - (numTeams - 1) : round;
-      const monthOffset = Math.floor(roundInHalf / 4);
-      const dayOffset = (roundInHalf % 4) * 7 + 1;
+      const startMonth = 4;
+      const monthOffset = Math.floor(round / 4);
+      const dayOffset = (round % 4) * 7 + 1;
 
       matches.push({
         id: generateId(),
@@ -103,6 +168,28 @@ function generateFixtures(
     // Rotate teams (keep first fixed)
     const last = rotating.pop()!;
     rotating.unshift(last);
+  }
+
+  // Generate second half by swapping home/away from first half
+  for (const fixture of firstHalfFixtures) {
+    const secondHalfRound = fixture.round + halfSeasonRounds;
+
+    // Calculate date for second half (starting August)
+    const roundInHalf = secondHalfRound - halfSeasonRounds - 1;
+    const startMonth = 8;
+    const monthOffset = Math.floor(roundInHalf / 4);
+    const dayOffset = (roundInHalf % 4) * 7 + 1;
+
+    matches.push({
+      id: generateId(),
+      saveId,
+      season,
+      round: secondHalfRound,
+      homeTeamId: fixture.awayTeamId, // Swap home/away
+      awayTeamId: fixture.homeTeamId,
+      date: `2026-${String(startMonth + monthOffset).padStart(2, '0')}-${String(dayOffset).padStart(2, '0')}`,
+      played: false,
+    });
   }
 
   return matches;

@@ -60,6 +60,12 @@ interface ApiPlayerResponse {
   form: number;
   wage: number;
   marketValue: number;
+  // Season stats
+  lastFiveRatings?: number[];
+  seasonGoals?: number;
+  seasonAssists?: number;
+  seasonMinutes?: number;
+  seasonAvgRating?: number;
 }
 
 interface ApiStandingResponse {
@@ -119,11 +125,11 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
     status: 'active',
     form: {
       form: apiPlayer.form ?? 70,
-      lastFiveRatings: [],
-      seasonGoals: 0,
-      seasonAssists: 0,
-      seasonMinutes: 0,
-      seasonAvgRating: 0,
+      lastFiveRatings: (apiPlayer.lastFiveRatings as number[]) ?? [],
+      seasonGoals: apiPlayer.seasonGoals ?? 0,
+      seasonAssists: apiPlayer.seasonAssists ?? 0,
+      seasonMinutes: apiPlayer.seasonMinutes ?? 0,
+      seasonAvgRating: apiPlayer.seasonAvgRating ?? 0,
     } as PlayerForm,
   };
 }
@@ -544,8 +550,7 @@ export function useTransactions(saveId?: string): UseTransactionsResult {
     setError(null);
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${apiUrl}/saves/${saveId}/transactions`, {
+      const response = await fetch(`/api/save/${saveId}/transactions`, {
         credentials: 'include',
       });
 

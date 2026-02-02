@@ -457,3 +457,168 @@ export function updatePlayerForm(
     },
   };
 }
+
+// ============================================================================
+// IN-SEASON PLAYER PROGRESSION
+// ============================================================================
+// Players can grow/decline during the season based on match performance
+
+// Apply growth/decline after a match based on age, potential, and performance
+export function applyMatchGrowth(
+  player: Player,
+  minutesPlayed: number,
+  matchRating: number,
+): Player {
+  // Only players who played can grow/decline
+  if (minutesPlayed === 0) return player;
+
+  const updated = {
+    ...player,
+    attributes: { ...player.attributes },
+  };
+
+  const minutesFactor = Math.min(1.0, minutesPlayed / 90);
+  const performanceFactor = (matchRating - 5) / 10; // -0.5 to +0.5 based on 0-10 rating
+
+  if (player.age < 24) {
+    // Young players: grow toward potential
+    const currentOvr = calculateOverall(player);
+    const growthRoom = player.potential - currentOvr;
+
+    if (growthRoom > 0) {
+      // Base growth rate adjusted by minutes and performance
+      const growthRate = 0.02 * minutesFactor * (1 + performanceFactor);
+      const pointsToDistribute = growthRoom * growthRate;
+
+      if (pointsToDistribute >= 0.5) {
+        // Apply small growth to random attributes
+        applyAttributeGrowthPoints(
+          updated.attributes,
+          Math.floor(pointsToDistribute),
+        );
+      }
+    }
+  } else if (player.age >= 30) {
+    // Older players: slight decline risk after poor performances
+    if (matchRating < 5.5) {
+      const declineRate = (0.01 * minutesFactor * (player.age - 29)) / 5;
+
+      if (random() < declineRate) {
+        // Apply small decline to physical attributes
+        applyAttributeDeclinePoints(updated.attributes, 1, 'physical');
+      }
+    }
+  }
+  // Prime (24-29): no automatic attribute change
+
+  return updated;
+}
+
+// Apply growth points to random non-GK attributes (for outfield players)
+function applyAttributeGrowthPoints(
+  attributes: PlayerAttributes,
+  points: number,
+): void {
+  const growableAttrs: (keyof PlayerAttributes)[] = [
+    'speed',
+    'strength',
+    'stamina',
+    'shooting',
+    'passing',
+    'dribbling',
+    'heading',
+    'tackling',
+    'positioning',
+    'vision',
+    'composure',
+  ];
+
+  for (let i = 0; i < points; i++) {
+    const attr = randomFromArray(growableAttrs);
+    attributes[attr] = Math.min(99, attributes[attr] + 1);
+  }
+}
+
+// Apply decline points (physical attributes decline faster)
+function applyAttributeDeclinePoints(
+  attributes: PlayerAttributes,
+  points: number,
+  focus: 'physical' | 'all' = 'all',
+): void {
+  const physicalAttrs: (keyof PlayerAttributes)[] = [
+    'speed',
+    'stamina',
+    'strength',
+  ];
+  const allAttrs: (keyof PlayerAttributes)[] = [
+    'speed',
+    'strength',
+    'stamina',
+    'shooting',
+    'passing',
+    'dribbling',
+    'heading',
+    'tackling',
+    'positioning',
+    'vision',
+    'composure',
+  ];
+
+  for (let i = 0; i < points; i++) {
+    const attr =
+      focus === 'physical' || random() < 0.6
+        ? randomFromArray(physicalAttrs)
+        : randomFromArray(allAttrs);
+    attributes[attr] = Math.max(1, attributes[attr] - 1);
+  }
+}
+
+// Calculate a match rating for a player based on their performance
+export function calculateMatchRating(
+  player: Player,
+  minutesPlayed: number,
+  goals: number,
+  assists: number,
+  isCleanSheet: boolean,
+): number {
+  // Base rating
+  let rating = 6.0;
+
+  // Minutes factor (full 90 = full weight)
+  const minutesFactor = Math.min(1.0, minutesPlayed / 60);
+
+  // Goal contributions
+  rating += goals * 1.0;
+  rating += assists * 0.5;
+
+  // Position-specific bonuses
+  if (player.position === 'GK' || player.position === 'DEF') {
+    if (isCleanSheet) {
+      rating += 0.5;
+    }
+  }
+
+  // Random variance for realism
+  rating += (random() - 0.5) * 1.0;
+
+  // Scale by minutes played (sub appearances get lower ratings)
+  rating = 6.0 + (rating - 6.0) * minutesFactor;
+
+  // Clamp to 0-10 range
+  return Math.max(0, Math.min(10, Math.round(rating * 10) / 10));
+}
+
+// Calculate form trend based on last five ratings
+export function calculateFormTrend(
+  ratings: number[],
+): 'up' | 'down' | 'stable' {
+  if (ratings.length < 3) return 'stable';
+
+  const recent = ratings.slice(-2).reduce((a, b) => a + b, 0) / 2;
+  const older =
+    ratings.slice(0, -2).reduce((a, b) => a + b, 0) / (ratings.length - 2);
+
+  if (recent > older + 0.5) return 'up';
+  if (recent < older - 0.5) return 'down';
+  return 'stable';
+}

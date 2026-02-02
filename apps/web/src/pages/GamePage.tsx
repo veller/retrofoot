@@ -7,12 +7,14 @@ import {
   calculateStadiumMaintenance,
   calculateOperatingCosts,
   formatCurrency,
+  calculateFormTrend,
   type FormationType,
   type TacticalPosture,
   type Position,
   type Team,
   type StandingEntry,
   type Tactics,
+  type Player,
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
@@ -252,6 +254,31 @@ export function GamePage() {
   );
 }
 
+// Form trend icon component
+function FormTrendIcon({ player }: { player: Player }) {
+  const trend = calculateFormTrend(player.form.lastFiveRatings);
+
+  if (trend === 'up') {
+    return (
+      <span className="text-green-400 text-sm" title="Form improving">
+        ↑
+      </span>
+    );
+  }
+  if (trend === 'down') {
+    return (
+      <span className="text-red-400 text-sm" title="Form declining">
+        ↓
+      </span>
+    );
+  }
+  return (
+    <span className="text-slate-500 text-sm" title="Form stable">
+      →
+    </span>
+  );
+}
+
 interface SquadPanelProps {
   playerTeam: Team;
   tactics: Tactics;
@@ -434,6 +461,9 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
               rowStyle = 'bg-slate-600/80 border-l-4 border-slate-500';
             }
 
+            const hasStats =
+              player.form.seasonGoals > 0 || player.form.seasonAssists > 0;
+
             return (
               <div
                 key={player.id}
@@ -448,11 +478,23 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
                   <span className="text-white">
                     {player.nickname ?? player.name}
                   </span>
+                  <span className="text-slate-400 text-xs">{player.age}y</span>
                 </div>
                 <div className="flex items-center gap-3">
                   {canSendToBench && (
                     <span className="text-xs font-medium bg-pitch-600 hover:bg-pitch-500 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity mr-1">
                       Send to bench
+                    </span>
+                  )}
+                  {/* Form trend indicator */}
+                  <FormTrendIcon player={player} />
+                  {/* Goals/Assists */}
+                  {hasStats && (
+                    <span
+                      className="text-slate-300 text-xs"
+                      title={`${player.form.seasonGoals} goals, ${player.form.seasonAssists} assists`}
+                    >
+                      {player.form.seasonGoals}G/{player.form.seasonAssists}A
                     </span>
                   )}
                   <span className="text-amber-400 text-sm">
@@ -523,8 +565,8 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
         </div>
       </div>
 
-      {/* Right: Team info */}
-      <div className="w-[26%] min-w-[200px] shrink-0 p-4 flex flex-col">
+      {/* Right: Team info + Leaderboards */}
+      <div className="w-[26%] min-w-[200px] shrink-0 p-4 flex flex-col gap-4 overflow-auto">
         <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
             Team Info
@@ -550,6 +592,97 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
             </div>
           </div>
         </div>
+
+        {/* Top Scorers */}
+        <SquadLeaderboard
+          title="Top Scorers"
+          players={playerTeam.players}
+          statKey="goals"
+        />
+
+        {/* Top Assists */}
+        <SquadLeaderboard
+          title="Top Assists"
+          players={playerTeam.players}
+          statKey="assists"
+        />
+      </div>
+    </div>
+  );
+}
+
+// Squad leaderboard component for top scorers/assists
+function SquadLeaderboard({
+  title,
+  players,
+  statKey,
+}: {
+  title: string;
+  players: Player[];
+  statKey: 'goals' | 'assists';
+}) {
+  const sortedPlayers = useMemo(() => {
+    const getValue = (p: Player) =>
+      statKey === 'goals' ? p.form.seasonGoals : p.form.seasonAssists;
+
+    return [...players]
+      .filter((p) => getValue(p) > 0)
+      .sort((a, b) => getValue(b) - getValue(a))
+      .slice(0, 5);
+  }, [players, statKey]);
+
+  if (sortedPlayers.length === 0) {
+    return (
+      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+        <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
+          {title}
+        </h3>
+        <p className="text-slate-500 text-xs">No stats yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+      <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
+        {title}
+      </h3>
+      <div className="space-y-2">
+        {sortedPlayers.map((player, index) => {
+          const value =
+            statKey === 'goals'
+              ? player.form.seasonGoals
+              : player.form.seasonAssists;
+
+          return (
+            <div
+              key={player.id}
+              className="flex items-center justify-between text-sm gap-3"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className={`w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0
+                      ? 'bg-amber-500 text-slate-900'
+                      : index === 1
+                        ? 'bg-slate-400 text-slate-900'
+                        : index === 2
+                          ? 'bg-amber-700 text-white'
+                          : 'bg-slate-600 text-slate-300'
+                  }`}
+                >
+                  {index + 1}
+                </span>
+                <span className="text-white">
+                  {player.nickname ?? player.name}
+                </span>
+              </div>
+              <span className="text-pitch-400 font-bold flex-shrink-0">
+                {value}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -673,27 +806,64 @@ function FinancesPanel({
   const avgNetPerRound = roundsPlayed > 0 ? netResult / roundsPlayed : 0;
   const projectedEndBalance = balance + avgNetPerRound * remainingRounds;
 
-  // Calculate estimated category breakdown based on formulas
+  // Calculate estimated category breakdown based on formulas (for per-round display)
   const estSponsorshipPerRound = calculateRoundSponsorship(
     playerTeam.reputation,
   );
   const estStadiumPerRound = calculateStadiumMaintenance(playerTeam.capacity);
   const estOperationsPerRound = calculateOperatingCosts(playerTeam.reputation);
 
-  // Estimated totals for rounds played
-  const estSponsorship = estSponsorshipPerRound * roundsPlayed;
-  const estWages = roundWages * roundsPlayed;
-  const estStadium = estStadiumPerRound * roundsPlayed;
-  const estOperations = estOperationsPerRound * roundsPlayed;
+  // Calculate actual totals from transaction data
+  const actualMatchDayIncome = transactions
+    .flatMap((round) => round.income)
+    .filter((t) => t.category === 'match_day')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-  // Calculate TV rights and match day from remaining revenue
-  const fixedIncomePerRound = estSponsorshipPerRound + 350_000; // ~average TV rights
-  const totalFixedIncome = fixedIncomePerRound * roundsPlayed;
-  const matchDayIncome = Math.max(0, seasonRevenue - totalFixedIncome);
-  const tvRightsIncome = Math.min(
-    seasonRevenue - matchDayIncome,
-    350_000 * roundsPlayed,
-  );
+  const actualTvRightsIncome = transactions
+    .flatMap((round) => round.income)
+    .filter((t) => t.category === 'tv_rights')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const actualSponsorshipIncome = transactions
+    .flatMap((round) => round.income)
+    .filter((t) => t.category === 'sponsorship')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const actualWagesExpense = transactions
+    .flatMap((round) => round.expenses)
+    .filter((t) => t.category === 'wages')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const actualStadiumExpense = transactions
+    .flatMap((round) => round.expenses)
+    .filter((t) => t.category === 'stadium')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const actualOperationsExpense = transactions
+    .flatMap((round) => round.expenses)
+    .filter((t) => t.category === 'operations')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Use actual data if available, otherwise fall back to estimates
+  const hasTransactionData = transactions.length > 0;
+  const matchDayIncome = hasTransactionData
+    ? actualMatchDayIncome
+    : 0;
+  const tvRightsIncome = hasTransactionData
+    ? actualTvRightsIncome
+    : 0;
+  const sponsorshipIncome = hasTransactionData
+    ? actualSponsorshipIncome
+    : estSponsorshipPerRound * roundsPlayed;
+  const wagesExpense = hasTransactionData
+    ? actualWagesExpense
+    : roundWages * roundsPlayed;
+  const stadiumExpense = hasTransactionData
+    ? actualStadiumExpense
+    : estStadiumPerRound * roundsPlayed;
+  const operationsExpense = hasTransactionData
+    ? actualOperationsExpense
+    : estOperationsPerRound * roundsPlayed;
 
   return (
     <div className="space-y-6 p-4">
@@ -782,7 +952,7 @@ function FinancesPanel({
         {roundsPlayed > 0 && (
           <div className="mt-6">
             <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">
-              Revenue Breakdown (Estimated)
+              Revenue Breakdown{hasTransactionData ? '' : ' (Estimated)'}
             </h4>
             <div className="space-y-3">
               <div className="flex justify-between items-start py-1 text-sm">
@@ -794,14 +964,14 @@ function FinancesPanel({
                   </p>
                 </div>
                 <span className="text-pitch-400">
-                  {formatCurrency(estSponsorship)}
+                  {formatCurrency(sponsorshipIncome)}
                 </span>
               </div>
               <div className="flex justify-between items-start py-1 text-sm">
                 <div>
                   <span className="text-slate-300">TV Rights</span>
                   <p className="text-slate-500 text-xs">
-                    ~$350K/round, varies by league position
+                    Varies by league position
                   </p>
                 </div>
                 <span className="text-pitch-400">
@@ -827,7 +997,7 @@ function FinancesPanel({
         {roundsPlayed > 0 && (
           <div className="mt-6">
             <h4 className="text-sm font-bold text-slate-400 uppercase mb-3">
-              Expense Breakdown (Estimated)
+              Expense Breakdown{hasTransactionData ? '' : ' (Estimated)'}
             </h4>
             <div className="space-y-3">
               <div className="flex justify-between items-start py-1 text-sm">
@@ -838,7 +1008,9 @@ function FinancesPanel({
                     {playerTeam.players.length} players
                   </p>
                 </div>
-                <span className="text-red-400">{formatCurrency(estWages)}</span>
+                <span className="text-red-400">
+                  {formatCurrency(wagesExpense)}
+                </span>
               </div>
               <div className="flex justify-between items-start py-1 text-sm">
                 <div>
@@ -848,7 +1020,7 @@ function FinancesPanel({
                   </p>
                 </div>
                 <span className="text-red-400">
-                  {formatCurrency(estStadium)}
+                  {formatCurrency(stadiumExpense)}
                 </span>
               </div>
               <div className="flex justify-between items-start py-1 text-sm">
@@ -860,7 +1032,7 @@ function FinancesPanel({
                   </p>
                 </div>
                 <span className="text-red-400">
-                  {formatCurrency(estOperations)}
+                  {formatCurrency(operationsExpense)}
                 </span>
               </div>
             </div>
