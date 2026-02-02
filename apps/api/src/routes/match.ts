@@ -405,9 +405,13 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       await c.env.DB.batch(fixtureStatements);
     }
 
-    // Phase 2: Batch insert all match events
+    // Phase 2: Batch insert all match events (chunked to avoid SQLite variable limit)
     if (allMatchEvents.length > 0) {
-      await db.insert(matchEvents).values(allMatchEvents);
+      const CHUNK_SIZE = 100; // ~8 columns per event, 100 rows = 800 variables (under 999 limit)
+      for (let i = 0; i < allMatchEvents.length; i += CHUNK_SIZE) {
+        const chunk = allMatchEvents.slice(i, i + CHUNK_SIZE);
+        await db.insert(matchEvents).values(chunk);
+      }
     }
 
     // Phase 5: Batch update player stats using D1 batch API
@@ -837,9 +841,13 @@ async function processRoundFinances(
     await d1.batch(teamStatements);
   }
 
-  // Phase 3: Batch insert all transactions
+  // Phase 3: Batch insert all transactions (chunked to avoid SQLite variable limit)
   if (allTransactions.length > 0) {
-    await db.insert(transactions).values(allTransactions);
+    const CHUNK_SIZE = 50; // ~10 columns per row, 50 rows = 500 variables (under 999 limit)
+    for (let i = 0; i < allTransactions.length; i += CHUNK_SIZE) {
+      const chunk = allTransactions.slice(i, i + CHUNK_SIZE);
+      await db.insert(transactions).values(chunk);
+    }
   }
 }
 
