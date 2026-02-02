@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
+import type { D1Database } from '@cloudflare/workers-types';
 import {
   saves,
   fixtures,
@@ -248,34 +249,53 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
   const body = await c.req.json<{ results: MatchResultInput[] }>();
 
-  if (!body.results || !Array.isArray(body.results)) {
-    return c.json({ error: 'Missing results array' }, 400);
+  if (!body.results || !Array.isArray(body.results) || body.results.length === 0) {
+    return c.json({ error: 'Missing or empty results array' }, 400);
   }
 
   try {
-    // Pre-fetch all fixtures for this save to map fixtureId -> team IDs
-    const allFixtures = await db
+    // Only fetch fixtures that are in the results (not all fixtures)
+    const resultFixtureIds = body.results.map((r) => r.fixtureId);
+    const roundFixturesData = await db
       .select({
         id: fixtures.id,
         homeTeamId: fixtures.homeTeamId,
         awayTeamId: fixtures.awayTeamId,
       })
       .from(fixtures)
-      .where(eq(fixtures.saveId, saveId));
+      .where(
+        and(
+          eq(fixtures.saveId, saveId),
+          inArray(fixtures.id, resultFixtureIds),
+        ),
+      );
 
-    const fixturesMap = new Map(allFixtures.map((f) => [f.id, f]));
+    const fixturesMap = new Map(roundFixturesData.map((f) => [f.id, f]));
 
-    // Pre-fetch all teams for form updates (Phase 6)
-    const allTeamsData = await db
+    // Get team IDs that played in this round
+    const playingTeamIds = new Set<string>();
+    for (const f of roundFixturesData) {
+      playingTeamIds.add(f.homeTeamId);
+      playingTeamIds.add(f.awayTeamId);
+    }
+    const teamIdArray = Array.from(playingTeamIds);
+
+    // Pre-fetch only teams that played for form updates (Phase 6)
+    const playingTeamsData = await db
       .select({
         id: teams.id,
         lastFiveResults: teams.lastFiveResults,
       })
       .from(teams)
-      .where(eq(teams.saveId, saveId));
+      .where(
+        and(
+          eq(teams.saveId, saveId),
+          inArray(teams.id, teamIdArray),
+        ),
+      );
 
     const teamsFormMap = new Map(
-      allTeamsData.map((t) => [t.id, (t.lastFiveResults as ('W' | 'D' | 'L')[]) ?? []]),
+      playingTeamsData.map((t) => [t.id, (t.lastFiveResults as ('W' | 'D' | 'L')[]) ?? []]),
     );
 
     // Collect all match events for batch insert (Phase 2)
@@ -875,7 +895,8 @@ async function processPlayerStatsAndGrowth(
     .from(players)
     .where(and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)));
 
-  // Find the player team's match
+  // Find the player team's match - only fetch fixtures from the match results
+  const fixtureIds = matchResults.map((r) => r.fixtureId);
   const playerFixtures = await db
     .select({
       id: fixtures.id,
@@ -885,7 +906,12 @@ async function processPlayerStatsAndGrowth(
       awayScore: fixtures.awayScore,
     })
     .from(fixtures)
-    .where(eq(fixtures.saveId, saveId));
+    .where(
+      and(
+        eq(fixtures.saveId, saveId),
+        inArray(fixtures.id, fixtureIds),
+      ),
+    );
 
   // Find the match result for player's team
   const playerMatch = matchResults.find((result) => {
