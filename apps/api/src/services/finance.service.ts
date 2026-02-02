@@ -9,7 +9,6 @@ import type { D1Database } from '@cloudflare/workers-types';
 const DEFAULT_LEAGUE_POSITION = 10;
 const DEFAULT_MOMENTUM = 50;
 const DEFAULT_REPUTATION = 50;
-const TRANSACTIONS_COLUMNS = 10; // Number of columns in transactions table
 import type { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
 import {
@@ -36,10 +35,6 @@ import type {
 } from '../types/match.types';
 import { batchInsertChunked } from '../lib/db/batch';
 
-/**
- * Process round finances for all teams
- * Calculates income (match day, sponsorship, TV rights) and expenses (wages, stadium, operations)
- */
 export async function processRoundFinances(
   db: ReturnType<typeof drizzle>,
   d1: D1Database,
@@ -48,7 +43,6 @@ export async function processRoundFinances(
   currentRound: number,
   matchResults: MatchResultInput[],
 ): Promise<void> {
-  // Get all teams with their financial data and players
   const allTeams = await db
     .select({
       id: teams.id,
@@ -63,7 +57,6 @@ export async function processRoundFinances(
     .from(teams)
     .where(eq(teams.saveId, saveId));
 
-  // Get all players to calculate wages per team
   const allPlayers = await db
     .select({
       id: players.id,
@@ -73,7 +66,6 @@ export async function processRoundFinances(
     .from(players)
     .where(eq(players.saveId, saveId));
 
-  // Group players by team
   const playersByTeam = new Map<string, { wage: number }[]>();
   for (const player of allPlayers) {
     if (!player.teamId) continue;
@@ -85,7 +77,6 @@ export async function processRoundFinances(
     }
   }
 
-  // Get standings for league positions
   const standingsResult = await db
     .select({
       teamId: standings.teamId,
@@ -99,7 +90,6 @@ export async function processRoundFinances(
     positionByTeam.set(s.teamId, s.position);
   }
 
-  // Get fixtures to determine home/away for this round
   const roundFixtures = await db
     .select({
       id: fixtures.id,
@@ -109,19 +99,16 @@ export async function processRoundFinances(
     .from(fixtures)
     .where(and(eq(fixtures.saveId, saveId), eq(fixtures.round, currentRound)));
 
-  // Build map of home teams and their opponents
   const homeTeamOpponents = new Map<string, string>();
   for (const fixture of roundFixtures) {
     homeTeamOpponents.set(fixture.homeTeamId, fixture.awayTeamId);
   }
 
-  // Build team reputation map for attendance calculation
   const teamReputation = new Map<string, number>();
   for (const team of allTeams) {
     teamReputation.set(team.id, team.reputation);
   }
 
-  // Pre-compute lookup maps for O(1) access
   const fixtureByIdMap = new Map(roundFixtures.map((f) => [f.id, f]));
   const matchResultByHomeTeam = new Map<string, MatchResultInput>();
   for (const r of matchResults) {
@@ -131,17 +118,14 @@ export async function processRoundFinances(
     }
   }
 
-  // Collect all transactions and team updates for batch operations
   const allTransactions: TransactionRecord[] = [];
   const teamFinanceUpdates: TeamFinanceUpdate[] = [];
 
-  // Process finances for each team
   for (const team of allTeams) {
     const teamPlayers = playersByTeam.get(team.id) ?? [];
     const leaguePosition = positionByTeam.get(team.id) ?? DEFAULT_LEAGUE_POSITION;
     const isHomeGame = homeTeamOpponents.has(team.id);
 
-    // Calculate income
     const sponsorship = calculateRoundSponsorship(team.reputation);
     const tvRights = calculateRoundTVRights(leaguePosition, allTeams.length);
 
@@ -153,14 +137,12 @@ export async function processRoundFinances(
       if (!awayTeamId) continue; // Safety check - should not happen if isHomeGame is true
       const awayRep = teamReputation.get(awayTeamId) ?? DEFAULT_REPUTATION;
 
-      // Calculate attendance
       attendance = calculateAttendance(
         { reputation: team.reputation, momentum: team.momentum ?? DEFAULT_MOMENTUM },
         { reputation: awayRep },
         team.capacity,
       );
 
-      // Use actual attendance from match result if available
       const matchResult = matchResultByHomeTeam.get(team.id);
       if (matchResult) {
         attendance = matchResult.attendance;
@@ -171,21 +153,16 @@ export async function processRoundFinances(
 
     const totalIncome = sponsorship + tvRights + matchDayIncome;
 
-    // Calculate expenses
     const wages = calculateRoundWages(teamPlayers);
     const stadiumMaintenance = calculateStadiumMaintenance(team.capacity);
     const operatingCosts = calculateOperatingCosts(team.reputation);
     const totalExpenses = wages + stadiumMaintenance + operatingCosts;
 
-    // Calculate new balance
     const currentBalance = team.balance ?? 0;
     const newBalance = currentBalance + totalIncome - totalExpenses;
-
-    // Update season totals
     const newSeasonRevenue = (team.seasonRevenue ?? 0) + totalIncome;
     const newSeasonExpenses = (team.seasonExpenses ?? 0) + totalExpenses;
 
-    // Collect team financial update
     teamFinanceUpdates.push({
       teamId: team.id,
       balance: newBalance,
@@ -194,7 +171,6 @@ export async function processRoundFinances(
       seasonExpenses: newSeasonExpenses,
     });
 
-    // Collect transactions
     if (matchDayIncome > 0) {
       allTransactions.push({
         id: generateTransactionId(),
@@ -270,7 +246,6 @@ export async function processRoundFinances(
     });
   }
 
-  // Batch update all team financial data using D1 batch API
   const teamStatements = teamFinanceUpdates.map((update) =>
     d1
       .prepare(
@@ -289,6 +264,5 @@ export async function processRoundFinances(
     await d1.batch(teamStatements);
   }
 
-  // Batch insert all transactions (chunked to avoid D1 variable limit)
-  await batchInsertChunked(db, transactions, allTransactions, TRANSACTIONS_COLUMNS);
+  await batchInsertChunked(db, transactions, allTransactions);
 }

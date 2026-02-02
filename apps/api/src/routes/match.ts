@@ -30,9 +30,6 @@ const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
 
 export const matchRoutes = new Hono<{ Bindings: Env }>();
 
-/**
- * Get current round fixtures for a save with full team and player data
- */
 matchRoutes.get('/:saveId/fixtures', async (c) => {
   const auth = createAuth(c.env);
   const session = await auth.api.getSession({
@@ -65,7 +62,6 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
   const save = saveResult[0];
   const currentRound = save.currentRound ?? DEFAULT_ROUND;
 
-  // Fetch fixtures, teams, and players in parallel
   const [fixturesResult, teamsResult, playersResult] = await Promise.all([
     db
       .select({
@@ -131,7 +127,6 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
       .where(eq(players.saveId, saveId)),
   ]);
 
-  // Group players by team
   const playersByTeam = new Map<string, typeof playersResult>();
   for (const player of playersResult) {
     if (!player.teamId) continue;
@@ -143,7 +138,6 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
     }
   }
 
-  // Build teams with players
   const teamsWithPlayers = teamsResult.map((t) => ({
     ...t,
     lastFiveResults: (t.lastFiveResults as ('W' | 'D' | 'L')[]) ?? DEFAULT_FORM,
@@ -193,9 +187,6 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
   });
 });
 
-/**
- * Complete a round of matches - save results, update standings, advance round
- */
 matchRoutes.post('/:saveId/complete', async (c) => {
   const auth = createAuth(c.env);
   const session = await auth.api.getSession({
@@ -299,7 +290,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       ]),
     );
 
-    // Collect data for batch operations
     const allMatchEvents: Array<{
       id: string;
       fixtureId: string;
@@ -316,9 +306,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     const formUpdates = new Map<string, ('W' | 'D' | 'L')[]>();
     const standingsUpdates: StandingsUpdate[] = [];
 
-    // Process each match result
     for (const result of body.results) {
-      // Collect match events with proper unique IDs
       for (const event of result.events) {
         allMatchEvents.push({
           id: nanoid(),
@@ -334,7 +322,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
       const fixture = fixturesMap.get(result.fixtureId);
       if (fixture) {
-        // Collect standings updates
         standingsUpdates.push({
           teamId: fixture.homeTeamId,
           goalsFor: result.homeScore,
@@ -350,7 +337,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
           isDraw: result.homeScore === result.awayScore,
         });
 
-        // Compute form updates
         const homeResult: 'W' | 'D' | 'L' =
           result.homeScore > result.awayScore
             ? 'W'
@@ -378,7 +364,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         const newAwayForm = [...awayCurrentForm, awayResult].slice(-FORM_HISTORY_LENGTH);
         formUpdates.set(fixture.awayTeamId, newAwayForm);
 
-        // Aggregate player stats
         const goalEvents = result.events.filter((e) => e.type === 'goal');
         for (const goal of goalEvents) {
           if (goal.playerId) {
@@ -394,7 +379,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       }
     }
 
-    // Build batch statements
     const standingsStatements = buildStandingsStatements(
       c.env.DB,
       standingsUpdates,
@@ -428,11 +412,9 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       ),
     );
 
-    // Insert match events in chunks (8 columns per row)
     const insertMatchEventsChunked = () =>
-      batchInsertChunked(db, matchEvents, allMatchEvents, 8);
+      batchInsertChunked(db, matchEvents, allMatchEvents);
 
-    // Run independent batch operations in parallel
     await Promise.all([
       standingsStatements.length > 0
         ? c.env.DB.batch(standingsStatements)
@@ -448,10 +430,8 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       formStatements.length > 0 ? c.env.DB.batch(formStatements) : Promise.resolve(),
     ]);
 
-    // Recalculate standings positions
     await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason);
 
-    // Run player stats and finance processing in parallel
     await Promise.all([
       processPlayerStatsAndGrowth(
         db,
@@ -470,7 +450,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       ),
     ]);
 
-    // Advance round
     const newRound = currentRound + 1;
     await db
       .update(saves)
@@ -489,7 +468,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     console.error('Failed to complete round:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-    // Only include stack trace in development
     const isDevelopment = c.env.ENVIRONMENT === 'development';
     const errorStack = isDevelopment && error instanceof Error ? error.stack : undefined;
 

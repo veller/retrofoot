@@ -27,17 +27,18 @@ export function calculateChunkSize(columnsPerRow: number): number {
  * @param db Drizzle database instance
  * @param table Drizzle table to insert into
  * @param values Array of values to insert
- * @param columnsPerRow Number of columns per row (for chunk size calculation)
+ * @param columnsPerRow Optional - auto-detected from first record if not provided
  */
-export async function batchInsertChunked<T>(
+export async function batchInsertChunked<T extends object>(
   db: ReturnType<typeof drizzle>,
   table: Parameters<ReturnType<typeof drizzle>['insert']>[0],
   values: T[],
-  columnsPerRow: number,
+  columnsPerRow?: number,
 ): Promise<void> {
   if (values.length === 0) return;
 
-  const chunkSize = calculateChunkSize(columnsPerRow);
+  const columns = columnsPerRow ?? Object.keys(values[0] as object).length;
+  const chunkSize = calculateChunkSize(columns);
 
   for (let i = 0; i < values.length; i += chunkSize) {
     const chunk = values.slice(i, i + chunkSize);
@@ -45,12 +46,6 @@ export async function batchInsertChunked<T>(
   }
 }
 
-/**
- * Execute prepared statements in batch, chunking if necessary
- *
- * @param d1 D1 database instance
- * @param statements Array of prepared statements
- */
 export async function executeBatch(
   d1: D1Database,
   statements: D1PreparedStatement[],
@@ -59,11 +54,6 @@ export async function executeBatch(
   await d1.batch(statements);
 }
 
-/**
- * Execute multiple independent batch operations in parallel
- *
- * @param operations Array of batch operations (each returns a promise)
- */
 export async function executeBatchParallel(
   operations: Array<Promise<unknown> | (() => Promise<unknown>)>,
 ): Promise<void> {
@@ -74,21 +64,6 @@ export async function executeBatchParallel(
 }
 
 /**
- * Build D1 prepared statements from an array of updates
- *
- * @param d1 D1 database instance
- * @param sql SQL template with ? placeholders
- * @param updates Array of update objects
- * @param bindFn Function to extract bind values from each update
- */
-/**
- * Build D1 prepared statements from an array of updates
- *
- * @param d1 D1 database instance
- * @param sql SQL template with ? placeholders
- * @param updates Array of update objects
- * @param bindFn Function to extract bind values from each update
- *
  * @example
  * const statements = buildStatements(
  *   d1,
