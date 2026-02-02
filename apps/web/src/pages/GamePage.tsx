@@ -738,22 +738,24 @@ function TablePanel({ standings, playerTeamId, teams }: TablePanelProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-slate-400 border-b border-slate-600">
-            <th className="text-left py-2 w-8">#</th>
-            <th className="text-left py-2">Team</th>
-            <th className="text-left py-2 w-32">Form</th>
-            <th className="text-center py-2">P</th>
-            <th className="text-center py-2">W</th>
-            <th className="text-center py-2">D</th>
-            <th className="text-center py-2">L</th>
-            <th className="text-center py-2">GF</th>
-            <th className="text-center py-2">GA</th>
-            <th className="text-center py-2">Pts</th>
+            <th className="text-center py-2 w-12 pl-3">Pos</th>
+            <th className="text-left py-2">Club</th>
+            <th className="text-center py-2 w-10">Pld</th>
+            <th className="text-center py-2 w-10">W</th>
+            <th className="text-center py-2 w-10">D</th>
+            <th className="text-center py-2 w-10">L</th>
+            <th className="text-center py-2 w-10">GF</th>
+            <th className="text-center py-2 w-10">GA</th>
+            <th className="text-center py-2 w-10">GD</th>
+            <th className="text-center py-2 w-12">Pts</th>
+            <th className="text-center py-2 w-36">Form</th>
           </tr>
         </thead>
         <tbody>
           {standings.map((entry) => {
             const isPlayerTeam = entry.teamId === playerTeamId;
             const teamForm = teamFormMap.get(entry.teamId) || [];
+            const goalDifference = entry.goalsFor - entry.goalsAgainst;
 
             return (
               <tr
@@ -764,25 +766,28 @@ function TablePanel({ standings, playerTeamId, teams }: TablePanelProps) {
                     : ''
                 }`}
               >
-                <td className="py-2">{entry.position}</td>
+                <td className="text-center py-2 pl-3">{entry.position}</td>
                 <td className="py-2">{entry.teamName}</td>
-                <td className="py-2">
-                  <div className="flex gap-1">
-                    {teamForm.length > 0 ? (
-                      teamForm.map((r, i) => <FormBadge key={i} result={r} />)
-                    ) : (
-                      <span className="text-slate-500 text-xs">-</span>
-                    )}
-                  </div>
-                </td>
                 <td className="text-center py-2">{entry.played}</td>
                 <td className="text-center py-2">{entry.won}</td>
                 <td className="text-center py-2">{entry.drawn}</td>
                 <td className="text-center py-2">{entry.lost}</td>
                 <td className="text-center py-2">{entry.goalsFor}</td>
                 <td className="text-center py-2">{entry.goalsAgainst}</td>
+                <td className={`text-center py-2 ${goalDifference > 0 ? 'text-green-400' : goalDifference < 0 ? 'text-red-400' : ''}`}>
+                  {goalDifference > 0 ? `+${goalDifference}` : goalDifference}
+                </td>
                 <td className="text-center py-2 text-pitch-400 font-bold">
                   {entry.points}
+                </td>
+                <td className="py-2">
+                  <div className="flex gap-1 justify-center">
+                    {teamForm.length > 0 ? (
+                      teamForm.map((r, i) => <FormBadge key={i} result={r} />)
+                    ) : (
+                      <span className="text-slate-500 text-xs">-</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             );
