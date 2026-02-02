@@ -1,9 +1,9 @@
 // API configuration
-// In development, Vite proxies /api to localhost:8787
-// In production, we need to call the API directly
-export const API_BASE_URL = import.meta.env.PROD
-  ? 'https://retrofoot-api.vellerbauer.workers.dev'
-  : '';
+// In both development and production, we use relative /api paths
+// - Development: Vite proxies /api to localhost:8787
+// - Production: Cloudflare Pages Functions proxy /api to the Workers API
+// This keeps auth cookies first-party (same domain) avoiding third-party cookie blocking
+export const API_BASE_URL = '';
 
 export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
