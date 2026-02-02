@@ -479,7 +479,13 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     });
   } catch (error) {
     console.error('Failed to complete round:', error);
-    return c.json({ error: 'Failed to save match results' }, 500);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    return c.json({
+      error: 'Failed to save match results',
+      details: errorMessage,
+      stack: errorStack
+    }, 500);
   }
 });
 
