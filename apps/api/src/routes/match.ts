@@ -34,7 +34,7 @@ export const matchRoutes = new Hono<{ Bindings: Env }>();
  * Get current round fixtures for a save with full team and player data
  */
 matchRoutes.get('/:saveId/fixtures', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -199,7 +199,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
  * Complete a round of matches - save results, update standings, advance round
  */
 matchRoutes.post('/:saveId/complete', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

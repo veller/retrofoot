@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../lib/api';
 
 export interface SaveSummary {
   id: string;
@@ -37,9 +38,7 @@ export function useSaves(): UseSavesResult {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch('/api/save', {
-        credentials: 'include',
-      });
+      const response = await apiFetch('/api/save');
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -65,9 +64,8 @@ export function useSaves(): UseSavesResult {
       setIsDeleting(true);
       setError(null);
 
-      const response = await fetch(`/api/save/${saveId}`, {
+      const response = await apiFetch(`/api/save/${saveId}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -131,12 +129,11 @@ export function useCreateSave(): UseCreateSaveResult {
         setIsCreating(true);
         setError(null);
 
-        const response = await fetch('/api/save', {
+        const response = await apiFetch('/api/save', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          credentials: 'include',
           body: JSON.stringify(params),
         });
 

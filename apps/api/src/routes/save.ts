@@ -27,7 +27,7 @@ saveRoutes.get('/teams', async (c) => {
  * List all saves for current user
  */
 saveRoutes.get('/', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -59,7 +59,7 @@ saveRoutes.get('/', async (c) => {
  * Create new save (seeds the game)
  */
 saveRoutes.post('/', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -109,7 +109,7 @@ saveRoutes.post('/', async (c) => {
  * Get save details with team and player counts
  */
 saveRoutes.get('/:id', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -179,7 +179,7 @@ saveRoutes.get('/:id', async (c) => {
  * Get standings for a save
  */
 saveRoutes.get('/:id/standings', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -229,7 +229,7 @@ saveRoutes.get('/:id/standings', async (c) => {
  * Get squad for a team in a save
  */
 saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -287,7 +287,7 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
  * Get transactions for a team in a save
  */
 saveRoutes.get('/:id/transactions', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -396,7 +396,7 @@ saveRoutes.get('/:id/transactions', async (c) => {
  * Delete save
  */
 saveRoutes.delete('/:id', async (c) => {
-  const auth = createAuth(c.env, c.req.raw.cf);
+  const auth = createAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

@@ -18,9 +18,9 @@ export const authRoutes = new Hono<{ Bindings: CloudflareBindings }>();
  * GET  /api/auth/session - Get current session
  * GET  /api/auth/get-session - Alternative session endpoint
  */
-authRoutes.on(['GET', 'POST'], '/*', async (c) => {
-  // Create auth instance with environment bindings and Cloudflare context
-  const auth = createAuth(c.env, c.req.raw.cf);
+authRoutes.on(['GET', 'POST', 'OPTIONS'], '/*', async (c) => {
+  // Create auth instance with environment bindings
+  const auth = createAuth(c.env);
 
   // Let Better Auth handle the request
   return auth.handler(c.req.raw);

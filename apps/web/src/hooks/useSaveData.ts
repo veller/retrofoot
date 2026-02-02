@@ -7,6 +7,7 @@ import type {
   Position,
   StandingEntry,
 } from '@retrofoot/core';
+import { apiFetch } from '../lib/api';
 
 // API response types (from database)
 interface ApiSaveResponse {
@@ -315,9 +316,7 @@ export function useSaveMatchData(
       setError(null);
 
       // Fetch match fixtures with teams and players
-      const response = await fetch(`/api/match/${saveId}/fixtures`, {
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/api/match/${saveId}/fixtures`);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -399,9 +398,7 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
       setError(null);
 
       // Fetch save details
-      const saveResponse = await fetch(`/api/save/${saveId}`, {
-        credentials: 'include',
-      });
+      const saveResponse = await apiFetch(`/api/save/${saveId}`);
 
       if (!saveResponse.ok) {
         if (saveResponse.status === 401) {
@@ -420,9 +417,8 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
       }
 
       // Fetch player squad
-      const squadResponse = await fetch(
+      const squadResponse = await apiFetch(
         `/api/save/${saveId}/team/${saveData.playerTeam.id}/squad`,
-        { credentials: 'include' },
       );
 
       if (!squadResponse.ok) {
@@ -433,9 +429,7 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
         await squadResponse.json();
 
       // Fetch standings
-      const standingsResponse = await fetch(`/api/save/${saveId}/standings`, {
-        credentials: 'include',
-      });
+      const standingsResponse = await apiFetch(`/api/save/${saveId}/standings`);
 
       let standings: StandingEntry[] = [];
       if (standingsResponse.ok) {
@@ -550,9 +544,7 @@ export function useTransactions(saveId?: string): UseTransactionsResult {
     setError(null);
 
     try {
-      const response = await fetch(`/api/save/${saveId}/transactions`, {
-        credentials: 'include',
-      });
+      const response = await apiFetch(`/api/save/${saveId}/transactions`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch transactions');

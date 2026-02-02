@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { createAuthClient } from 'better-auth/react';
+import { API_BASE_URL } from './api';
 
 /**
  * Better Auth client for React
@@ -11,8 +12,10 @@ import { createAuthClient } from 'better-auth/react';
  * In production, use the full API URL from environment
  */
 export const authClient = createAuthClient({
-  // Base URL for auth API - defaults to current origin in production
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: API_BASE_URL,
+  fetchOptions: {
+    credentials: 'include',
+  },
 });
 
 // Export commonly used methods for convenience

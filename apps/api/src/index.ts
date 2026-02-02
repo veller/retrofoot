@@ -21,7 +21,7 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://localhost:5173',
-      'https://retrofoot.pages.dev',
+      'https://retrofoot-web.pages.dev',
     ],
     credentials: true,
   }),

@@ -18,6 +18,7 @@ import {
   formatCurrency,
   BASE_TICKET_PRICE,
 } from '@retrofoot/core';
+import { apiFetch } from '../lib/api';
 import { useSaveMatchData } from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
@@ -494,10 +495,9 @@ export function MatchPage() {
 
     try {
       // Send results to API
-      const response = await fetch(`/api/match/${saveId}/complete`, {
+      const response = await apiFetch(`/api/match/${saveId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           results: results.map((r) => ({
             fixtureId: r.id,

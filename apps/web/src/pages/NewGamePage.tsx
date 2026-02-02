@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCreateSave, useSaves } from '@/hooks';
+import { apiFetch } from '@/lib/api';
 
 interface TeamOption {
   id: string;
@@ -33,7 +34,7 @@ export function NewGamePage() {
   useEffect(() => {
     async function fetchTeams() {
       try {
-        const response = await fetch('/api/save/teams');
+        const response = await apiFetch('/api/save/teams');
         if (response.ok) {
           const data = await response.json();
           setTeams(data.teams || []);
