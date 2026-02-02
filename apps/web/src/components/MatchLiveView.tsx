@@ -183,7 +183,46 @@ export function MatchLiveView({
             )}
           </div>
         </div>
-        <div className="w-32" /> {/* Spacer for centering */}
+        {/* Controls */}
+        <div className="flex items-center gap-3">
+          {isLive && (
+            <>
+              {isPaused ? (
+                <button
+                  onClick={onResume}
+                  className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+                >
+                  Resume
+                </button>
+              ) : (
+                <button
+                  onClick={onPause}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                >
+                  Pause
+                </button>
+              )}
+            </>
+          )}
+
+          {phase === 'half_time' && (
+            <button
+              onClick={onResume}
+              className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+            >
+              Play 2nd Half
+            </button>
+          )}
+
+          {canSubstitute && (
+            <button
+              onClick={onSubstitutions}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+            >
+              Substitutions
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Match List */}
@@ -208,47 +247,6 @@ export function MatchLiveView({
           ))}
         </div>
       </main>
-
-      {/* Controls */}
-      <footer className="bg-slate-800 border-t border-slate-700 px-6 py-4 flex justify-center gap-4">
-        {isLive && (
-          <>
-            {isPaused ? (
-              <button
-                onClick={onResume}
-                className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-              >
-                Resume
-              </button>
-            ) : (
-              <button
-                onClick={onPause}
-                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
-              >
-                Pause
-              </button>
-            )}
-          </>
-        )}
-
-        {phase === 'half_time' && (
-          <button
-            onClick={onResume}
-            className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-          >
-            Play 2nd Half
-          </button>
-        )}
-
-        {canSubstitute && (
-          <button
-            onClick={onSubstitutions}
-            className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
-          >
-            Substitutions
-          </button>
-        )}
-      </footer>
     </div>
   );
 }

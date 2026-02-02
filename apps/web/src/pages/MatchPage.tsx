@@ -27,6 +27,18 @@ import { useGameStore } from '../stores/gameStore';
 
 type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
 
+// Event types that should be persisted to the database
+const PERSISTENT_EVENT_TYPES = new Set([
+  'goal',
+  'own_goal',
+  'penalty_scored',
+  'penalty_missed',
+  'yellow_card',
+  'red_card',
+  'substitution',
+  'injury',
+]);
+
 // Tick interval in ms - each tick advances some seconds, 10 ticks = 1 game minute
 const SECONDS_PER_TICK = 6; // 6 seconds per tick
 const TICK_INTERVAL_MS = 100; // 100ms between ticks = 10 ticks per second real time
@@ -494,7 +506,7 @@ export function MatchPage() {
     setIsSaving(true);
 
     try {
-      // Send results to API
+      // Send results to API - only include persistent events
       const response = await apiFetch(`/api/match/${saveId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -504,31 +516,36 @@ export function MatchPage() {
             homeScore: r.homeScore,
             awayScore: r.awayScore,
             attendance: r.attendance,
-            events: r.events.map((e) => ({
-              minute: e.minute,
-              type: e.type,
-              team: e.team,
-              playerId: e.playerId,
-              playerName: e.playerName,
-              assistPlayerId: e.assistPlayerId,
-              assistPlayerName: e.assistPlayerName,
-              description: e.description,
-            })),
+            events: r.events
+              .filter((e) => PERSISTENT_EVENT_TYPES.has(e.type))
+              .map((e) => ({
+                minute: e.minute,
+                type: e.type,
+                team: e.team,
+                playerId: e.playerId,
+                playerName: e.playerName,
+                assistPlayerId: e.assistPlayerId,
+                assistPlayerName: e.assistPlayerName,
+                description: e.description,
+              })),
           })),
         }),
       });
 
       if (!response.ok) {
-        console.error('Failed to save match results');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to save match results:', errorData);
+        setIsSaving(false);
+        return; // Don't navigate on failure
       }
+
+      // Navigate back to game page using saveId
+      navigate(`/game/${saveId}`);
     } catch (err) {
       console.error('Error saving match results:', err);
-    } finally {
       setIsSaving(false);
+      return; // Don't navigate on failure
     }
-
-    // Navigate back to game page using saveId
-    navigate(`/game/${saveId}`);
   }, [results, saveId, navigate]);
 
   // Loading state

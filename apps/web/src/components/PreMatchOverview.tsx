@@ -176,12 +176,20 @@ export function PreMatchOverview({
               Round {fixture.round} · Série A
             </p>
           </div>
-          <button
-            onClick={onBack}
-            className="text-slate-400 hover:text-white transition-colors"
-          >
-            &larr; Back
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBack}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+            >
+              Go Back
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
+            >
+              Play Match
+            </button>
+          </div>
         </div>
       </header>
 
@@ -214,7 +222,7 @@ export function PreMatchOverview({
         </div>
 
         {/* Team Comparison - Home team first, Away team second */}
-        <div className="grid grid-cols-2 gap-6 max-w-4xl mx-auto mb-8">
+        <div className="grid grid-cols-2 gap-6 max-w-4xl mx-auto">
           <TeamOverview
             team={homeTeam}
             tactics={isPlayerHome ? playerTactics : undefined}
@@ -227,27 +235,6 @@ export function PreMatchOverview({
             isOpponent={isPlayerHome}
             formation={!isPlayerHome ? playerTactics.formation : undefined}
           />
-        </div>
-
-        {/* Confirmation */}
-        <div className="text-center">
-          <p className="text-slate-400 mb-4">
-            Are you ready to play this match?
-          </p>
-          <div className="flex gap-4 justify-center">
-            <button
-              onClick={onBack}
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
-            >
-              Go Back
-            </button>
-            <button
-              onClick={onConfirm}
-              className="px-8 py-3 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
-            >
-              Play Match
-            </button>
-          </div>
         </div>
       </main>
     </div>

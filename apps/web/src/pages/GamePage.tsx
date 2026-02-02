@@ -239,7 +239,13 @@ export function GamePage() {
               setTactics={setTactics}
             />
           )}
-          {activeTab === 'table' && <TablePanel standings={data.standings} />}
+          {activeTab === 'table' && (
+            <TablePanel
+              standings={data.standings}
+              playerTeamId={playerTeam.id}
+              teams={matchData?.teams}
+            />
+          )}
           {activeTab === 'transfers' && <TransfersPanel />}
           {activeTab === 'finances' && (
             <FinancesPanel
@@ -690,9 +696,33 @@ function SquadLeaderboard({
 
 interface TablePanelProps {
   standings: StandingEntry[];
+  playerTeamId: string;
+  teams?: Team[];
 }
 
-function TablePanel({ standings }: TablePanelProps) {
+function FormBadge({ result }: { result: 'W' | 'D' | 'L' }) {
+  const colors = {
+    W: 'bg-green-600',
+    D: 'bg-yellow-500',
+    L: 'bg-red-600',
+  };
+
+  return (
+    <span
+      className={`${colors[result]} text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded`}
+    >
+      {result}
+    </span>
+  );
+}
+
+function TablePanel({ standings, playerTeamId, teams }: TablePanelProps) {
+  // Create a lookup map for team form data
+  const teamFormMap = useMemo(() => {
+    if (!teams) return new Map<string, ('W' | 'D' | 'L')[]>();
+    return new Map(teams.map((t) => [t.id, t.lastFiveResults || []]));
+  }, [teams]);
+
   if (standings.length === 0) {
     return (
       <div className="bg-slate-800 border border-slate-700 p-6">
@@ -708,8 +738,9 @@ function TablePanel({ standings }: TablePanelProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-slate-400 border-b border-slate-600">
-            <th className="text-left py-2">#</th>
+            <th className="text-left py-2 w-8">#</th>
             <th className="text-left py-2">Team</th>
+            <th className="text-left py-2 w-32">Form</th>
             <th className="text-center py-2">P</th>
             <th className="text-center py-2">W</th>
             <th className="text-center py-2">D</th>
@@ -720,24 +751,42 @@ function TablePanel({ standings }: TablePanelProps) {
           </tr>
         </thead>
         <tbody>
-          {standings.map((entry) => (
-            <tr
-              key={entry.teamId}
-              className="border-b border-slate-700 text-white"
-            >
-              <td className="py-2">{entry.position}</td>
-              <td className="py-2">{entry.teamName}</td>
-              <td className="text-center py-2">{entry.played}</td>
-              <td className="text-center py-2">{entry.won}</td>
-              <td className="text-center py-2">{entry.drawn}</td>
-              <td className="text-center py-2">{entry.lost}</td>
-              <td className="text-center py-2">{entry.goalsFor}</td>
-              <td className="text-center py-2">{entry.goalsAgainst}</td>
-              <td className="text-center py-2 text-pitch-400 font-bold">
-                {entry.points}
-              </td>
-            </tr>
-          ))}
+          {standings.map((entry) => {
+            const isPlayerTeam = entry.teamId === playerTeamId;
+            const teamForm = teamFormMap.get(entry.teamId) || [];
+
+            return (
+              <tr
+                key={entry.teamId}
+                className={`border-b border-slate-700 text-white ${
+                  isPlayerTeam
+                    ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
+                    : ''
+                }`}
+              >
+                <td className="py-2">{entry.position}</td>
+                <td className="py-2">{entry.teamName}</td>
+                <td className="py-2">
+                  <div className="flex gap-1">
+                    {teamForm.length > 0 ? (
+                      teamForm.map((r, i) => <FormBadge key={i} result={r} />)
+                    ) : (
+                      <span className="text-slate-500 text-xs">-</span>
+                    )}
+                  </div>
+                </td>
+                <td className="text-center py-2">{entry.played}</td>
+                <td className="text-center py-2">{entry.won}</td>
+                <td className="text-center py-2">{entry.drawn}</td>
+                <td className="text-center py-2">{entry.lost}</td>
+                <td className="text-center py-2">{entry.goalsFor}</td>
+                <td className="text-center py-2">{entry.goalsAgainst}</td>
+                <td className="text-center py-2 text-pitch-400 font-bold">
+                  {entry.points}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
