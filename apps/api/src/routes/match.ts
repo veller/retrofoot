@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   saves,
@@ -317,6 +317,15 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     // Collect form updates (Phase 6)
     const formUpdates = new Map<string, ('W' | 'D' | 'L')[]>();
 
+    // Collect standings updates for batch operation (Optimization 1)
+    const standingsUpdates: Array<{
+      teamId: string;
+      goalsFor: number;
+      goalsAgainst: number;
+      isWin: boolean;
+      isDraw: boolean;
+    }> = [];
+
     // Process each match result - collect data for batch operations
     for (const result of body.results) {
       // Collect match events (Phase 2)
@@ -335,23 +344,21 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
       const fixture = fixturesMap.get(result.fixtureId);
       if (fixture) {
-        // Update standings (still individual - needed for points calculation)
-        await updateTeamStandings(
-          db,
-          saveId,
-          save.currentSeason!,
-          fixture.homeTeamId,
-          result.homeScore,
-          result.awayScore,
-        );
-        await updateTeamStandings(
-          db,
-          saveId,
-          save.currentSeason!,
-          fixture.awayTeamId,
-          result.awayScore,
-          result.homeScore,
-        );
+        // Collect standings updates for batch (Optimization 1)
+        standingsUpdates.push({
+          teamId: fixture.homeTeamId,
+          goalsFor: result.homeScore,
+          goalsAgainst: result.awayScore,
+          isWin: result.homeScore > result.awayScore,
+          isDraw: result.homeScore === result.awayScore,
+        });
+        standingsUpdates.push({
+          teamId: fixture.awayTeamId,
+          goalsFor: result.awayScore,
+          goalsAgainst: result.homeScore,
+          isWin: result.awayScore > result.homeScore,
+          isDraw: result.homeScore === result.awayScore,
+        });
 
         // Compute form updates in memory (Phase 6)
         const homeResult: 'W' | 'D' | 'L' =
@@ -395,24 +402,38 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       }
     }
 
+    // Optimization 1: Batch update standings using D1 batch API (20 DB trips → 1)
+    const standingsStatements = standingsUpdates.map((u) => {
+      const points = u.isWin ? 3 : u.isDraw ? 1 : 0;
+      return c.env.DB.prepare(
+        `UPDATE standings SET
+          played = played + 1,
+          won = won + ?,
+          drawn = drawn + ?,
+          lost = lost + ?,
+          goals_for = goals_for + ?,
+          goals_against = goals_against + ?,
+          points = points + ?
+        WHERE save_id = ? AND season = ? AND team_id = ?`
+      ).bind(
+        u.isWin ? 1 : 0,
+        u.isDraw ? 1 : 0,
+        !u.isWin && !u.isDraw ? 1 : 0,
+        u.goalsFor,
+        u.goalsAgainst,
+        points,
+        saveId,
+        save.currentSeason!,
+        u.teamId,
+      );
+    });
+
     // Phase 4: Batch update fixtures using D1 batch API
     const fixtureStatements = body.results.map((result) =>
       c.env.DB.prepare(
         'UPDATE fixtures SET played = 1, home_score = ?, away_score = ? WHERE id = ?',
       ).bind(result.homeScore, result.awayScore, result.fixtureId),
     );
-    if (fixtureStatements.length > 0) {
-      await c.env.DB.batch(fixtureStatements);
-    }
-
-    // Phase 2: Batch insert all match events (chunked to avoid SQLite variable limit)
-    if (allMatchEvents.length > 0) {
-      const CHUNK_SIZE = 100; // ~8 columns per event, 100 rows = 800 variables (under 999 limit)
-      for (let i = 0; i < allMatchEvents.length; i += CHUNK_SIZE) {
-        const chunk = allMatchEvents.slice(i, i + CHUNK_SIZE);
-        await db.insert(matchEvents).values(chunk);
-      }
-    }
 
     // Phase 5: Batch update player stats using D1 batch API
     const goalStatements = Array.from(playerGoals.entries()).map(([playerId, goals]) =>
@@ -427,12 +448,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         playerId,
       ),
     );
-    if (goalStatements.length > 0) {
-      await c.env.DB.batch(goalStatements);
-    }
-    if (assistStatements.length > 0) {
-      await c.env.DB.batch(assistStatements);
-    }
 
     // Phase 6: Batch update team forms using D1 batch API
     const formStatements = Array.from(formUpdates.entries()).map(([teamId, form]) =>
@@ -441,31 +456,48 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         teamId,
       ),
     );
-    if (formStatements.length > 0) {
-      await c.env.DB.batch(formStatements);
-    }
+
+    // Helper to insert match events in chunks
+    const insertMatchEventsChunked = async () => {
+      if (allMatchEvents.length === 0) return;
+      const CHUNK_SIZE = 10; // D1 limit is 100 variables; 10 rows × 8 cols = 80
+      for (let i = 0; i < allMatchEvents.length; i += CHUNK_SIZE) {
+        const chunk = allMatchEvents.slice(i, i + CHUNK_SIZE);
+        await db.insert(matchEvents).values(chunk);
+      }
+    };
+
+    // Optimization 3: Run independent batch operations in parallel (5 sequential → 1 parallel wait)
+    await Promise.all([
+      standingsStatements.length > 0 ? c.env.DB.batch(standingsStatements) : Promise.resolve(),
+      fixtureStatements.length > 0 ? c.env.DB.batch(fixtureStatements) : Promise.resolve(),
+      insertMatchEventsChunked(),
+      goalStatements.length > 0 ? c.env.DB.batch(goalStatements) : Promise.resolve(),
+      assistStatements.length > 0 ? c.env.DB.batch(assistStatements) : Promise.resolve(),
+      formStatements.length > 0 ? c.env.DB.batch(formStatements) : Promise.resolve(),
+    ]);
 
     // Recalculate positions (Phase 7: now uses D1 batch)
     await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason!);
 
-    // Process player minutes, form, and growth for player's team
-    await processPlayerStatsAndGrowth(
-      db,
-      c.env.DB,
-      saveId,
-      save.playerTeamId!,
-      body.results,
-    );
-
-    // Process finances for all teams (Phase 3 & 9: batched)
-    await processRoundFinances(
-      db,
-      c.env.DB,
-      saveId,
-      save.currentSeason!,
-      save.currentRound ?? 1,
-      body.results,
-    );
+    // Optimization 2: Run independent helper functions in parallel
+    await Promise.all([
+      processPlayerStatsAndGrowth(
+        db,
+        c.env.DB,
+        saveId,
+        save.playerTeamId!,
+        body.results,
+      ),
+      processRoundFinances(
+        db,
+        c.env.DB,
+        saveId,
+        save.currentSeason!,
+        save.currentRound ?? 1,
+        body.results,
+      ),
+    ]);
 
     // Advance round
     await db
@@ -492,39 +524,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     }, 500);
   }
 });
-
-// Helper to update team standings
-async function updateTeamStandings(
-  db: ReturnType<typeof drizzle>,
-  saveId: string,
-  season: string,
-  teamId: string,
-  goalsFor: number,
-  goalsAgainst: number,
-) {
-  const isWin = goalsFor > goalsAgainst;
-  const isDraw = goalsFor === goalsAgainst;
-  const points = isWin ? 3 : isDraw ? 1 : 0;
-
-  await db
-    .update(standings)
-    .set({
-      played: sql`${standings.played} + 1`,
-      won: isWin ? sql`${standings.won} + 1` : standings.won,
-      drawn: isDraw ? sql`${standings.drawn} + 1` : standings.drawn,
-      lost: !isWin && !isDraw ? sql`${standings.lost} + 1` : standings.lost,
-      goalsFor: sql`${standings.goalsFor} + ${goalsFor}`,
-      goalsAgainst: sql`${standings.goalsAgainst} + ${goalsAgainst}`,
-      points: sql`${standings.points} + ${points}`,
-    })
-    .where(
-      and(
-        eq(standings.saveId, saveId),
-        eq(standings.season, season),
-        eq(standings.teamId, teamId),
-      ),
-    );
-}
 
 // Helper to recalculate standings positions (Phase 7: uses D1 batch)
 async function recalculateStandingPositions(
@@ -663,6 +662,16 @@ async function processRoundFinances(
     teamReputation.set(team.id, team.reputation);
   }
 
+  // Optimization 4: Pre-compute lookup maps for O(1) access (O(n³) → O(n))
+  const fixtureByIdMap = new Map(roundFixtures.map(f => [f.id, f]));
+  const matchResultByHomeTeam = new Map<string, MatchResultInputFinance>();
+  for (const r of matchResults) {
+    const fixture = fixtureByIdMap.get(r.fixtureId);
+    if (fixture) {
+      matchResultByHomeTeam.set(fixture.homeTeamId, r);
+    }
+  }
+
   // Collect all transactions and team updates for batch operations
   const allTransactions: Array<{
     id: string;
@@ -708,12 +717,8 @@ async function processRoundFinances(
         team.capacity,
       );
 
-      // Use actual attendance from match result if available
-      const matchResult = matchResults.find((r) => {
-        const fixture = roundFixtures.find((f) => f.id === r.fixtureId);
-        return fixture?.homeTeamId === team.id;
-      });
-
+      // Use actual attendance from match result if available (Optimization 4: O(1) lookup)
+      const matchResult = matchResultByHomeTeam.get(team.id);
       if (matchResult) {
         attendance = matchResult.attendance;
       }
@@ -841,9 +846,9 @@ async function processRoundFinances(
     await d1.batch(teamStatements);
   }
 
-  // Phase 3: Batch insert all transactions (chunked to avoid SQLite variable limit)
+  // Phase 3: Batch insert all transactions (chunked to avoid D1 variable limit)
   if (allTransactions.length > 0) {
-    const CHUNK_SIZE = 50; // ~10 columns per row, 50 rows = 500 variables (under 999 limit)
+    const CHUNK_SIZE = 8; // D1 limit is 100 variables; 8 rows × 10 cols = 80
     for (let i = 0; i < allTransactions.length; i += CHUNK_SIZE) {
       const chunk = allTransactions.slice(i, i + CHUNK_SIZE);
       await db.insert(transactions).values(chunk);
