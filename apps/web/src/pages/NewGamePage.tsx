@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCreateSave, useSaves } from '@/hooks';
 import { apiFetch } from '@/lib/api';
+import { SaveCreationLoader } from '@/components/SaveCreationLoader';
 
 interface TeamOption {
   id: string;
@@ -66,6 +67,9 @@ export function NewGamePage() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
+      {isCreating && (
+        <SaveCreationLoader accentColor={selectedTeamData?.primaryColor} />
+      )}
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
