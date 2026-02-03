@@ -1,6 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
+import {
+  MatchEventsModal,
+  EventIcon,
+  isSignificantEvent,
+} from './MatchEventsModal';
 
 interface MatchLiveViewProps {
   matches: LiveMatchState[];
@@ -15,47 +20,39 @@ interface MatchLiveViewProps {
   round: number;
 }
 
-function EventIcon({ type }: { type: MatchEvent['type'] }) {
-  switch (type) {
-    case 'goal':
-      return <span className="text-yellow-400">⚽</span>;
-    case 'own_goal':
-      return <span className="text-red-400">⚽</span>;
-    case 'yellow_card':
-      return <span className="text-yellow-400">🟨</span>;
-    case 'red_card':
-      return <span className="text-red-600">🟥</span>;
-    case 'penalty_scored':
-      return <span className="text-green-400">⚽</span>;
-    case 'penalty_missed':
-      return <span className="text-red-400">❌</span>;
-    default:
-      return null;
-  }
-}
-
 function formatTime(minute: number, seconds: number): string {
-  return `${String(minute).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const m = String(minute).padStart(2, '0');
+  const s = String(seconds).padStart(2, '0');
+  return `${m}:${s}`;
 }
 
 function getLatestSignificantEvent(
   events: MatchEvent[],
 ): MatchEvent | undefined {
-  // Only show goals and cards as significant events in the ticker
-  const significant = events.filter((e) =>
-    ['goal', 'own_goal', 'penalty_scored', 'yellow_card', 'red_card'].includes(
-      e.type,
-    ),
-  );
+  const significant = events.filter((e) => isSignificantEvent(e.type));
   return significant[significant.length - 1];
+}
+
+function getPhaseLabel(phase: MatchLiveViewProps['phase']): string {
+  switch (phase) {
+    case 'first_half':
+      return '1st Half';
+    case 'half_time':
+      return 'Half Time';
+    case 'second_half':
+      return '2nd Half';
+    case 'full_time':
+      return 'Full Time';
+  }
 }
 
 interface MatchRowProps {
   match: LiveMatchState;
   isPlayerMatch: boolean;
+  onClick: () => void;
 }
 
-function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
+function MatchRow({ match, isPlayerMatch, onClick }: MatchRowProps) {
   const { homeTeam, awayTeam, state, attendance } = match;
 
   const latestEvent = useMemo(
@@ -63,15 +60,15 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
     [state.events],
   );
 
+  const rowClassName = isPlayerMatch
+    ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500 hover:bg-pitch-900/60'
+    : 'bg-slate-800 hover:bg-slate-700';
+
   return (
     <div
-      className={`grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors ${
-        isPlayerMatch
-          ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
-          : 'bg-slate-800 hover:bg-slate-750'
-      }`}
+      onClick={onClick}
+      className={`grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors cursor-pointer ${rowClassName}`}
     >
-      {/* Attendance + Stadium */}
       <div className="text-slate-400 text-xs">
         <div className="font-mono text-white">
           {attendance.toLocaleString()}
@@ -79,33 +76,29 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
         <div>{homeTeam.stadium}</div>
       </div>
 
-      {/* Home Team */}
       <div className="flex items-center gap-2 justify-end">
         <span className="text-white font-medium truncate">{homeTeam.name}</span>
         <TeamShield team={homeTeam} />
       </div>
 
-      {/* Score */}
       <div className="text-center">
         <span className="text-white font-bold text-xl font-mono">
           {state.homeScore} x {state.awayScore}
         </span>
       </div>
 
-      {/* Away Team */}
       <div className="flex items-center gap-2">
         <TeamShield team={awayTeam} />
         <span className="text-white font-medium truncate">{awayTeam.name}</span>
       </div>
 
-      {/* Latest Event */}
       <div className="text-sm">
         {latestEvent && (
           <span className="flex items-center gap-1">
             <span className="text-slate-400 font-mono">
               {latestEvent.minute}'
             </span>
-            <EventIcon type={latestEvent.type} />
+            <EventIcon type={latestEvent.type} variant="colored" />
             {latestEvent.type === 'own_goal' && (
               <span className="text-red-400 text-xs font-bold">OG</span>
             )}
@@ -128,6 +121,86 @@ function MatchRow({ match, isPlayerMatch }: MatchRowProps) {
   );
 }
 
+interface LiveIndicatorProps {
+  isLive: boolean;
+  isPaused: boolean;
+}
+
+function LiveIndicator({ isLive, isPaused }: LiveIndicatorProps) {
+  if (isPaused) {
+    return (
+      <div className="text-yellow-500 text-xs font-bold uppercase">PAUSED</div>
+    );
+  }
+  if (isLive) {
+    return (
+      <div className="text-red-500 text-xs font-bold uppercase animate-pulse">
+        LIVE
+      </div>
+    );
+  }
+  return null;
+}
+
+interface ControlButtonsProps {
+  phase: MatchLiveViewProps['phase'];
+  isPaused: boolean;
+  onPause: () => void;
+  onResume: () => void;
+  onSubstitutions: () => void;
+}
+
+function ControlButtons({
+  phase,
+  isPaused,
+  onPause,
+  onResume,
+  onSubstitutions,
+}: ControlButtonsProps) {
+  const isLive = phase === 'first_half' || phase === 'second_half';
+  const canSubstitute = phase === 'half_time' || isPaused;
+
+  return (
+    <div className="flex items-center gap-3">
+      {isLive && !isPaused && (
+        <button
+          onClick={onPause}
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+        >
+          Pause
+        </button>
+      )}
+
+      {isLive && isPaused && (
+        <button
+          onClick={onResume}
+          className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+        >
+          Resume
+        </button>
+      )}
+
+      {phase === 'half_time' && (
+        <button
+          onClick={onResume}
+          className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+        >
+          Play 2nd Half
+        </button>
+      )}
+
+      {canSubstitute && (
+        <button
+          onClick={onSubstitutions}
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+        >
+          Substitutions
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function MatchLiveView({
   matches,
   playerMatchIndex,
@@ -140,95 +213,44 @@ export function MatchLiveView({
   onSubstitutions,
   round,
 }: MatchLiveViewProps) {
-  const phaseLabel = useMemo(() => {
-    switch (phase) {
-      case 'first_half':
-        return '1st Half';
-      case 'half_time':
-        return 'Half Time';
-      case 'second_half':
-        return '2nd Half';
-      case 'full_time':
-        return 'Full Time';
-    }
-  }, [phase]);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
+  const selectedMatch = selectedMatchId
+    ? matches.find((m) => m.fixtureId === selectedMatchId) ?? null
+    : null;
+
+  const phaseLabel = getPhaseLabel(phase);
   const isLive = phase === 'first_half' || phase === 'second_half';
-  const canSubstitute = phase === 'half_time' || isPaused;
 
   return (
     <div className="flex flex-col h-full bg-slate-900">
-      {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-6 py-3 flex items-center justify-between">
         <div>
           <h1 className="font-pixel text-sm text-pitch-400">SÉRIE A</h1>
           <p className="text-slate-400 text-sm">Round {round}</p>
         </div>
+
         <div className="flex items-center gap-4">
-          {/* Timer */}
           <div className="text-center">
             <div className="text-slate-400 text-xs uppercase">{phaseLabel}</div>
             <div className="text-white font-mono text-3xl font-bold">
               {formatTime(currentMinute, currentSeconds)}
             </div>
-            {isLive && !isPaused && (
-              <div className="text-red-500 text-xs font-bold uppercase animate-pulse">
-                LIVE
-              </div>
-            )}
-            {isPaused && (
-              <div className="text-yellow-500 text-xs font-bold uppercase">
-                PAUSED
-              </div>
-            )}
+            <LiveIndicator isLive={isLive} isPaused={isPaused} />
           </div>
         </div>
-        {/* Controls */}
-        <div className="flex items-center gap-3">
-          {isLive && (
-            <>
-              {isPaused ? (
-                <button
-                  onClick={onResume}
-                  className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-                >
-                  Resume
-                </button>
-              ) : (
-                <button
-                  onClick={onPause}
-                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
-                >
-                  Pause
-                </button>
-              )}
-            </>
-          )}
 
-          {phase === 'half_time' && (
-            <button
-              onClick={onResume}
-              className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-            >
-              Play 2nd Half
-            </button>
-          )}
-
-          {canSubstitute && (
-            <button
-              onClick={onSubstitutions}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
-            >
-              Substitutions
-            </button>
-          )}
-        </div>
+        <ControlButtons
+          phase={phase}
+          isPaused={isPaused}
+          onPause={onPause}
+          onResume={onResume}
+          onSubstitutions={onSubstitutions}
+        />
       </header>
 
-      {/* Match List */}
       <main className="flex-1 overflow-auto">
         <div className="border border-slate-700 rounded-lg m-4 overflow-hidden">
-          {/* Column Headers */}
           <div className="grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
             <div>Attendance</div>
             <div className="text-right">Home</div>
@@ -237,16 +259,23 @@ export function MatchLiveView({
             <div>Latest Event</div>
           </div>
 
-          {/* Match Rows */}
           {matches.map((match, index) => (
             <MatchRow
               key={match.fixtureId}
               match={match}
               isPlayerMatch={index === playerMatchIndex}
+              onClick={() => setSelectedMatchId(match.fixtureId)}
             />
           ))}
         </div>
       </main>
+
+      {selectedMatch && (
+        <MatchEventsModal
+          match={selectedMatch}
+          onClose={() => setSelectedMatchId(null)}
+        />
+      )}
     </div>
   );
 }
