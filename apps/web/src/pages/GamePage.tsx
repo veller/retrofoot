@@ -17,12 +17,17 @@ import {
   type Player,
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
+import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
+import { TransferMarketPanel } from '../components/TransferMarket';
 import {
   useSaveData,
   useSaveMatchData,
   useTransactions,
   useLeaderboards,
+  useTeamListings,
+  listPlayerForSale,
+  removePlayerListing,
   type LeaderboardEntry,
 } from '../hooks';
 import { useGameStore } from '../stores/gameStore';
@@ -327,11 +332,12 @@ export function GamePage() {
       {/* Main Content */}
       <main className="flex-1 min-h-0 flex flex-col">
         <div className="flex-1 min-h-0 w-full">
-          {activeTab === 'squad' && tactics && (
+          {activeTab === 'squad' && tactics && saveId && (
             <SquadPanel
               playerTeam={playerTeam}
               tactics={tactics}
               setTactics={setTactics}
+              saveId={saveId}
             />
           )}
           {activeTab === 'table' && (
@@ -342,7 +348,13 @@ export function GamePage() {
               saveId={saveId}
             />
           )}
-          {activeTab === 'transfers' && <TransfersPanel />}
+          {activeTab === 'transfers' && saveId && (
+            <TransfersPanel
+              saveId={saveId}
+              playerTeam={playerTeam}
+              currentRound={data.currentRound}
+            />
+          )}
           {activeTab === 'finances' && (
             <FinancesPanel
               playerTeam={playerTeam}
@@ -392,11 +404,18 @@ interface SquadPanelProps {
   playerTeam: Team;
   tactics: Tactics;
   setTactics: React.Dispatch<React.SetStateAction<Tactics | null>>;
+  saveId: string;
 }
 
-function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
+function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps) {
   const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null);
   const [mobileView, setMobileView] = useState<MobileSquadView>('squad');
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch team's current listings to know which players are already listed
+  const { listings, refetch: refetchListings } = useTeamListings(saveId, playerTeam.id);
+  const listedPlayerIds = useMemo(() => new Set(listings.map((l) => l.playerId)), [listings]);
 
   const lineup = tactics.lineup;
   const substitutes = tactics.substitutes;
@@ -548,8 +567,62 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
     setSelectedSlot(null);
   }
 
+  // Get the selected player for the modal
+  const selectedPlayer = selectedPlayerId
+    ? playersById.get(selectedPlayerId)
+    : undefined;
+
+  const handleListForSale = async (askingPrice?: number) => {
+    if (!selectedPlayerId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await listPlayerForSale(saveId, selectedPlayerId, askingPrice);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to list player');
+      }
+      refetchListings();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveListing = async () => {
+    if (!selectedPlayerId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await removePlayerListing(saveId, selectedPlayerId);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to remove listing');
+      }
+      refetchListings();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-0">
+      {/* Player Action Modal */}
+      {selectedPlayer && (
+        <PlayerActionModal
+          player={selectedPlayer}
+          isListed={listedPlayerIds.has(selectedPlayer.id)}
+          isInLineup={lineupSet.has(selectedPlayer.id)}
+          isOnBench={substitutesSet.has(selectedPlayer.id)}
+          canAddToBench={
+            !lineupSet.has(selectedPlayer.id) &&
+            !substitutesSet.has(selectedPlayer.id) &&
+            substitutes.length < BENCH_LIMIT
+          }
+          onClose={() => setSelectedPlayerId(null)}
+          onListForSale={handleListForSale}
+          onRemoveListing={handleRemoveListing}
+          onAddToBench={() => addToBench(selectedPlayer.id)}
+          onRemoveFromBench={() => removeFromBench(selectedPlayer.id)}
+          isSubmitting={isSubmitting}
+        />
+      )}
+
       {/* Mobile Sub-tabs */}
       <div className="lg:hidden bg-slate-800 border-b border-slate-700 px-4 flex-shrink-0">
         <div className="flex gap-1">
@@ -586,15 +659,14 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
             const hasStats =
               player.form.seasonGoals > 0 || player.form.seasonAssists > 0;
             const playerDisplayName = player.nickname ?? player.name;
+            const isListed = listedPlayerIds.has(player.id);
 
             return (
               <div
                 key={player.id}
-                className={`${rowStyle} group relative px-3 lg:px-4 py-2 lg:py-3 flex justify-between items-center ${
-                  canSendToBench ? 'cursor-pointer hover:bg-slate-600/50' : ''
-                }`}
-                onClick={() => canSendToBench && addToBench(player.id)}
-                role={canSendToBench ? 'button' : undefined}
+                className={`${rowStyle} group relative px-3 lg:px-4 py-2 lg:py-3 flex justify-between items-center cursor-pointer hover:bg-slate-600/50`}
+                onClick={() => setSelectedPlayerId(player.id)}
+                role="button"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <PositionBadge position={player.position} />
@@ -602,11 +674,16 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
                     {playerDisplayName}
                   </span>
                   <span className="text-slate-400 text-xs flex-shrink-0">{player.age}y</span>
+                  {isListed && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
+                      LISTED
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
                   {canSendToBench && (
                     <span className="hidden lg:inline text-xs font-medium bg-pitch-600 hover:bg-pitch-500 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity mr-1">
-                      Send to bench
+                      Tap for actions
                     </span>
                   )}
                   {/* Form trend indicator */}
@@ -1024,14 +1101,21 @@ function LeaderboardRow({ entry, rank, isPlayerTeam }: LeaderboardRowProps) {
   );
 }
 
-function TransfersPanel() {
+function TransfersPanel({
+  saveId,
+  playerTeam,
+  currentRound,
+}: {
+  saveId: string;
+  playerTeam: Team;
+  currentRound: number;
+}) {
   return (
-    <div className="bg-slate-800 border border-slate-700 p-6">
-      <h2 className="text-xl font-bold text-white mb-4">Transfer Market</h2>
-      <p className="text-slate-400">
-        Search for players and make offers. The transfer window is open.
-      </p>
-    </div>
+    <TransferMarketPanel
+      saveId={saveId}
+      playerTeam={playerTeam}
+      currentRound={currentRound}
+    />
   );
 }
 

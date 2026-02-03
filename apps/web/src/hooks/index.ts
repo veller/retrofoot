@@ -11,3 +11,20 @@ export type {
 } from './useSaveData';
 export { useLeaderboards } from './useLeaderboards';
 export type { LeaderboardEntry, LeaderboardsData } from './useLeaderboards';
+export {
+  useTransferMarket,
+  useTeamListings,
+  useTeamOffers,
+  listPlayerForSale,
+  removePlayerListing,
+  makeTransferOffer,
+  respondToOffer,
+  acceptCounterOffer,
+  completeTransfer,
+} from './useTransfers';
+export type {
+  MarketPlayer,
+  ActiveOffer,
+  MarketData,
+  OffersData,
+} from './useTransfers';

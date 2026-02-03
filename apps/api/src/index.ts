@@ -5,6 +5,7 @@ import { gameRoutes } from './routes/game';
 import { saveRoutes } from './routes/save';
 import { authRoutes } from './routes/auth';
 import { matchRoutes } from './routes/match';
+import { transferRoutes } from './routes/transfer';
 import type { CloudflareBindings } from './lib/auth';
 
 // Re-export the Env type for use in other files
@@ -41,6 +42,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/game', gameRoutes);
 app.route('/api/save', saveRoutes);
 app.route('/api/match', matchRoutes);
+app.route('/api/transfer', transferRoutes);
 
 // 404 handler
 app.notFound((c) => {

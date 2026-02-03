@@ -226,6 +226,65 @@ export interface TransferOffer {
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
 }
 
+
+// ============================================================================
+// TRANSFER MARKET TYPES
+// ============================================================================
+
+// Status for players in the transfer market
+export type TransferListingStatus =
+  | 'available' // Listed for sale by club
+  | 'contract_expiring' // Contract ending soon, may leave
+  | 'free_agent'; // No club, available immediately
+
+// A player listing in the transfer market
+export interface TransferListing {
+  id: string;
+  playerId: string;
+  playerName: string;
+  position: Position;
+  age: number;
+  overall: number;
+  potential: number;
+  teamId: string | null; // null = free agent
+  teamName: string | null;
+  askingPrice: number;
+  currentWage: number;
+  status: TransferListingStatus;
+  contractEndSeason: number;
+  listedRound: number;
+}
+
+// Extended offer status for negotiations
+export type TransferOfferStatus =
+  | 'pending' // Waiting for response
+  | 'accepted' // Offer accepted, ready to complete
+  | 'rejected' // Offer rejected
+  | 'counter' // Counter-offer made
+  | 'expired' // Time limit passed
+  | 'completed'; // Transfer finalized
+
+// Extended transfer offer with negotiation support
+export interface TransferNegotiation {
+  id: string;
+  saveId: string;
+  playerId: string;
+  playerName: string;
+  fromTeamId: string | null; // null = free agent
+  fromTeamName: string | null;
+  toTeamId: string;
+  toTeamName: string;
+  offerAmount: number;
+  offeredWage: number;
+  contractYears: number;
+  status: TransferOfferStatus;
+  counterAmount?: number; // Counter-offer fee
+  counterWage?: number; // Counter-offer wage
+  createdRound: number;
+  expiresRound: number;
+  respondedRound?: number;
+}
+
 // ============================================================================
 // FINANCIAL SYSTEM TYPES
 // ============================================================================
@@ -318,5 +377,46 @@ export function createDefaultForm(): PlayerForm {
     seasonAssists: 0,
     seasonMinutes: 0,
     seasonAvgRating: 0,
+  };
+}
+
+/**
+ * Create a minimal Player object for calculation functions
+ * Useful when you only have partial player data from DB queries
+ */
+export function createPlayerForCalc(data: {
+  attributes: Record<string, number>;
+  position: string;
+  age?: number;
+  potential?: number;
+  marketValue?: number;
+  contractEndSeason?: number;
+  wage?: number;
+}): Player {
+  return {
+    id: '',
+    name: '',
+    age: data.age ?? 25,
+    nationality: 'Brazil',
+    position: data.position as Position,
+    preferredFoot: 'right',
+    attributes: data.attributes as unknown as PlayerAttributes,
+    potential: data.potential ?? 70,
+    morale: 70,
+    fitness: 100,
+    injured: false,
+    injuryWeeks: 0,
+    contractEndSeason: data.contractEndSeason ?? 2028,
+    wage: data.wage ?? 10000,
+    marketValue: data.marketValue ?? 1000000,
+    status: 'active',
+    form: {
+      form: 70,
+      lastFiveRatings: [],
+      seasonGoals: 0,
+      seasonAssists: 0,
+      seasonMinutes: 0,
+      seasonAvgRating: 0,
+    },
   };
 }

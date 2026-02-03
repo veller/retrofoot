@@ -21,6 +21,7 @@ import {
 } from '../services/standings.service';
 import { processRoundFinances } from '../services/finance.service';
 import { processPlayerStatsAndGrowth } from '../services/player-stats.service';
+import { processAITransfers } from '../services/ai-transfer.service';
 import { batchInsertChunked } from '../lib/db/batch';
 
 // Constants
@@ -458,6 +459,17 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(saves.id, saveId));
+
+    // Process AI transfer activity (non-blocking)
+    processAITransfers(
+      db,
+      saveId,
+      save.playerTeamId,
+      save.currentSeason,
+      newRound,
+    ).catch((err) => {
+      console.error('AI transfer processing failed:', err);
+    });
 
     return c.json({
       success: true,

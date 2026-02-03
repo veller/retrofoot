@@ -2,7 +2,7 @@
 // RETROFOOT - Database Schema (Drizzle + SQLite/D1)
 // ============================================================================
 
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // ============================================================================
 // Users & Authentication
@@ -232,6 +232,57 @@ export const transfers = sqliteTable('transfers', {
   date: text('date').notNull(),
 });
 
+
+// ============================================================================
+// Transfer Listings (players for sale / free agents)
+// ============================================================================
+
+export const transferListings = sqliteTable('transfer_listings', {
+  id: text('id').primaryKey(),
+  saveId: text('save_id')
+    .notNull()
+    .references(() => saves.id, { onDelete: 'cascade' }),
+  playerId: text('player_id')
+    .notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  teamId: text('team_id').references(() => teams.id, { onDelete: 'cascade' }), // null = free agent
+  askingPrice: integer('asking_price').notNull(),
+  status: text('status').notNull(), // 'available' | 'contract_expiring' | 'free_agent'
+  listedRound: integer('listed_round').notNull(),
+}, (table) => ({
+  // Unique constraint: a player can only be listed once per save
+  savePlayerUnique: uniqueIndex('transfer_listings_save_player_unique').on(table.saveId, table.playerId),
+}));
+
+// ============================================================================
+// Transfer Offers (active negotiations)
+// ============================================================================
+
+export const transferOffers = sqliteTable('transfer_offers', {
+  id: text('id').primaryKey(),
+  saveId: text('save_id')
+    .notNull()
+    .references(() => saves.id, { onDelete: 'cascade' }),
+  playerId: text('player_id')
+    .notNull()
+    .references(() => players.id, { onDelete: 'cascade' }),
+  fromTeamId: text('from_team_id').references(() => teams.id, {
+    onDelete: 'cascade',
+  }), // null = free agent
+  toTeamId: text('to_team_id')
+    .notNull()
+    .references(() => teams.id, { onDelete: 'cascade' }),
+  offerAmount: integer('offer_amount').notNull(),
+  offeredWage: integer('offered_wage').notNull(),
+  contractYears: integer('contract_years').notNull(),
+  status: text('status').notNull(), // pending, accepted, rejected, counter, expired, completed
+  counterAmount: integer('counter_amount'), // Counter-offer fee
+  counterWage: integer('counter_wage'), // Counter-offer wage
+  createdRound: integer('created_round').notNull(),
+  expiresRound: integer('expires_round').notNull(),
+  respondedRound: integer('responded_round'),
+});
+
 // ============================================================================
 // Tactics (per team per save)
 // ============================================================================
@@ -312,3 +363,10 @@ export type NewTactics = typeof tactics.$inferInsert;
 
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+
+
+export type TransferListing = typeof transferListings.$inferSelect;
+export type NewTransferListing = typeof transferListings.$inferInsert;
+
+export type TransferOffer = typeof transferOffers.$inferSelect;
+export type NewTransferOffer = typeof transferOffers.$inferInsert;

@@ -17,7 +17,12 @@ import {
   type NewStanding,
   type NewFixture,
 } from '@retrofoot/db/schema';
-import { TEAMS, ALL_PLAYERS, calculateInitialBalance } from '@retrofoot/core';
+import {
+  TEAMS,
+  ALL_PLAYERS,
+  calculateInitialBalance,
+  generateInitialFreeAgents,
+} from '@retrofoot/core';
 import { batchInsertChunked } from './db/batch';
 
 function generateId(): string {
@@ -256,7 +261,7 @@ export async function seedNewGame(
       .where(eq(saves.id, saveId));
   }
 
-  // 3. Create all players
+  // 3. Create all players (team players)
   const newPlayers: NewPlayer[] = ALL_PLAYERS.map((player) => {
     const teamDbId = teamIdMap.get(player.teamId);
 
@@ -289,7 +294,41 @@ export async function seedNewGame(
     };
   });
 
-  await batchInsertChunked(db, players, newPlayers);
+  // 3b. Generate free agents (players without teams)
+  const currentSeasonNum = parseInt(season, 10);
+  const freeAgents = generateInitialFreeAgents(currentSeasonNum);
+
+  const freeAgentPlayers: NewPlayer[] = freeAgents.map((fa) => ({
+    id: `${saveId}-free-${fa.templateId}`,
+    saveId,
+    teamId: null, // Free agents have no team
+    name: fa.name,
+    nickname: fa.nickname,
+    age: fa.age,
+    nationality: fa.nationality,
+    position: fa.position,
+    preferredFoot: fa.preferredFoot,
+    attributes: fa.attributes,
+    potential: fa.potential,
+    morale: 50, // Lower morale for free agents
+    fitness: 80, // Slightly lower fitness
+    injured: false,
+    injuryWeeks: 0,
+    contractEndSeason: fa.contractEndSeason,
+    wage: fa.wage,
+    marketValue: fa.marketValue,
+    status: fa.status,
+    form: fa.form.form,
+    lastFiveRatings: [],
+    seasonGoals: 0,
+    seasonAssists: 0,
+    seasonMinutes: 0,
+    seasonAvgRating: 0,
+  }));
+
+  // Combine team players and free agents
+  const allPlayers = [...newPlayers, ...freeAgentPlayers];
+  await batchInsertChunked(db, players, allPlayers);
 
   // 4. Create standings for all teams
   const newStandings: NewStanding[] = TEAMS.map((team, index) => ({
@@ -319,7 +358,7 @@ export async function seedNewGame(
   return {
     saveId,
     teamCount: newTeams.length,
-    playerCount: newPlayers.length,
+    playerCount: allPlayers.length,
   };
 }
 

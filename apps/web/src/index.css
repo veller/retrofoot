@@ -65,3 +65,22 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
 }
+
+/* Bottom sheet slide-up animation for mobile modals */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out;
+}
+
+/* Safe area padding for mobile devices with notches */
+.h-safe-area-inset-bottom {
+  height: env(safe-area-inset-bottom, 0px);
+}
