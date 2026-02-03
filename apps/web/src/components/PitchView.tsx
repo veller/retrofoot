@@ -14,6 +14,26 @@ export type PitchSlot =
   | { type: 'lineup'; index: number }
   | { type: 'bench'; index: number };
 
+function getPlayerBorderStyle(isSelected: boolean, isHighlighted: boolean | 0 | undefined): string {
+  if (isSelected) {
+    return 'border-yellow-400 ring-2 ring-yellow-400 ring-offset-1 md:ring-offset-2 ring-offset-slate-900';
+  }
+  if (isHighlighted) {
+    return 'border-cyan-400 ring-2 ring-cyan-400/60 ring-offset-1 md:ring-offset-2 ring-offset-slate-900';
+  }
+  return 'border-pitch-400';
+}
+
+function getBenchSlotStyle(isSelected: boolean, isHighlighted: boolean | 0 | undefined): string {
+  if (isSelected) {
+    return 'bg-yellow-900/40 border-2 border-yellow-400';
+  }
+  if (isHighlighted) {
+    return 'bg-cyan-900/30 border-2 border-cyan-500/70';
+  }
+  return 'bg-slate-700/80';
+}
+
 interface PitchViewProps {
   lineup: string[];
   substitutes: string[];
@@ -155,34 +175,28 @@ export function PitchView({
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
 
-            const showDefensiveArrow = posture === 'defensive';
-            const showAttackingArrow = posture === 'attacking';
+            const showTacticalArrow = posture === 'defensive' || posture === 'attacking';
+            const isDefensive = posture === 'defensive';
 
             return (
               <div
                 key={playerId}
                 className="absolute -translate-x-1/2 -translate-y-1/2 group"
                 style={{
-                  /* Horizontal pitch: goal-to-goal = left/right (y), touchline = top/bottom (x) */
                   left: `${coord.y}%`,
                   top: `${coord.x}%`,
                 }}
               >
-                {/* Tactical arrow: blue backward (defensive), red forward (attacking) */}
-                {(showDefensiveArrow || showAttackingArrow) && (
+                {showTacticalArrow && (
                   <div
-                    className={`absolute left-1/2 -top-2 w-3 h-2 flex items-center justify-center pointer-events-none ${
-                      showDefensiveArrow ? 'text-blue-400' : 'text-red-500'
-                    }`}
+                    className={`absolute left-1/2 -top-1.5 md:-top-2 w-2.5 md:w-3 h-1.5 md:h-2 flex items-center justify-center pointer-events-none ${isDefensive ? 'text-blue-400' : 'text-red-500'}`}
                     style={{
-                      transform: showDefensiveArrow
-                        ? 'translate(-50%, 0) rotate(180deg)' /* backward = toward our goal (left) */
-                        : 'translate(-50%, 0) rotate(0deg)' /* forward = toward opposition (right) */,
+                      transform: `translate(-50%, 0) rotate(${isDefensive ? '180' : '0'}deg)`,
                     }}
                   >
                     <svg
                       viewBox="0 0 8 6"
-                      className="w-3 h-2 block"
+                      className="w-2.5 md:w-3 h-1.5 md:h-2 block"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.5"
@@ -203,13 +217,7 @@ export function PitchView({
                     (e.key === 'Enter' || e.key === ' ') &&
                     onPlayerClick?.({ type: 'lineup', index }, playerId)
                   }
-                  className={`w-10 h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-xs font-bold text-white shadow-lg ${
-                    isSelected
-                      ? 'border-yellow-400 ring-2 ring-yellow-400 ring-offset-2 ring-offset-slate-900'
-                      : isHighlighted
-                        ? 'border-cyan-400 ring-2 ring-cyan-400/60 ring-offset-2 ring-offset-slate-900'
-                        : 'border-pitch-400'
-                  } ${onPlayerClick ? 'cursor-pointer hover:border-pitch-300' : 'cursor-default'}`}
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${onPlayerClick ? 'cursor-pointer hover:border-pitch-300' : 'cursor-default'}`}
                   title={`${player.name} - OVR ${overall}`}
                 >
                   {player.position}
@@ -224,9 +232,9 @@ export function PitchView({
       </div>
 
       {/* Bench area */}
-      <div className="w-full bg-slate-800 border border-slate-700 rounded-lg p-4">
-        <div className="mb-3">
-          <h3 className="text-sm font-bold text-slate-400 uppercase">
+      <div className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 md:p-4">
+        <div className="mb-2 md:mb-3">
+          <h3 className="text-xs md:text-sm font-bold text-slate-400 uppercase">
             Bench ({benchCount}/{benchLimit})
           </h3>
           {overLimit && (
@@ -235,7 +243,7 @@ export function PitchView({
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5 md:gap-2">
           {substitutes.map((playerId, i) => {
             const player = playersById.get(playerId);
             const isSelected =
@@ -249,13 +257,7 @@ export function PitchView({
             return (
               <div
                 key={playerId}
-                className={`flex items-center gap-2 px-3 py-2 rounded min-w-[100px] ${
-                  isSelected
-                    ? 'bg-yellow-900/40 border-2 border-yellow-400'
-                    : isHighlighted
-                      ? 'bg-cyan-900/30 border-2 border-cyan-500/70'
-                      : 'bg-slate-700/80'
-                } ${onPlayerClick ? 'cursor-pointer hover:bg-slate-600/80' : ''}`}
+                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${onPlayerClick ? 'cursor-pointer hover:bg-slate-600/80' : ''}`}
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
@@ -273,14 +275,14 @@ export function PitchView({
               >
                 {player ? (
                   <>
-                    <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text-[10px] font-bold text-pitch-400 shrink-0">
+                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold text-pitch-400 shrink-0">
                       {player.position}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs text-white truncate">
+                      <p className="text-[10px] md:text-xs text-white truncate">
                         {player.nickname ?? player.name.split(' ').pop() ?? '?'}
                       </p>
-                      <p className="text-[10px] text-slate-400">
+                      <p className="text-[9px] md:text-[10px] text-slate-400">
                         OVR {calculateOverall(player)}
                       </p>
                     </div>
@@ -292,7 +294,7 @@ export function PitchView({
                           e.stopPropagation();
                           onRemoveFromBench(playerId);
                         }}
-                        className="text-slate-400 hover:text-white shrink-0 p-1 rounded"
+                        className="text-slate-400 hover:text-white shrink-0 p-0.5 md:p-1 rounded min-w-[24px] min-h-[24px] flex items-center justify-center"
                         title="Remove from bench"
                         aria-label="Remove from bench"
                       >
