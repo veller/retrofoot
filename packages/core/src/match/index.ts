@@ -392,18 +392,18 @@ export function createMatchState(config: MatchConfig): MatchState {
     homeScore: 0,
     awayScore: 0,
     events: [],
-    homeLineup: homeTeam.players.filter((p) =>
-      homeTactics.lineup.includes(p.id),
-    ),
-    awayLineup: awayTeam.players.filter((p) =>
-      awayTactics.lineup.includes(p.id),
-    ),
-    homeSubs: homeTeam.players.filter((p) =>
-      homeTactics.substitutes.includes(p.id),
-    ),
-    awaySubs: awayTeam.players.filter((p) =>
-      awayTactics.substitutes.includes(p.id),
-    ),
+    homeLineup: homeTactics.lineup
+      .map((id) => homeTeam.players.find((p) => p.id === id))
+      .filter((p): p is Player => p !== undefined),
+    awayLineup: awayTactics.lineup
+      .map((id) => awayTeam.players.find((p) => p.id === id))
+      .filter((p): p is Player => p !== undefined),
+    homeSubs: homeTactics.substitutes
+      .map((id) => homeTeam.players.find((p) => p.id === id))
+      .filter((p): p is Player => p !== undefined),
+    awaySubs: awayTactics.substitutes
+      .map((id) => awayTeam.players.find((p) => p.id === id))
+      .filter((p): p is Player => p !== undefined),
     homeTactics,
     awayTactics,
     possession: 'home',
