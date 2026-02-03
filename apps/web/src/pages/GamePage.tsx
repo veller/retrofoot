@@ -18,7 +18,13 @@ import {
 } from '@retrofoot/core';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PositionBadge } from '../components/PositionBadge';
-import { useSaveData, useSaveMatchData, useTransactions } from '../hooks';
+import {
+  useSaveData,
+  useSaveMatchData,
+  useTransactions,
+  useLeaderboards,
+  type LeaderboardEntry,
+} from '../hooks';
 import { useGameStore } from '../stores/gameStore';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
@@ -51,6 +57,17 @@ const POSITION_ORDER: Record<Position, number> = {
 
 function getPositionOrder(position: Position): number {
   return POSITION_ORDER[position] ?? 4;
+}
+
+function getGoalDifferenceStyle(gd: number): string {
+  if (gd > 0) return 'text-green-400';
+  if (gd < 0) return 'text-red-400';
+  return '';
+}
+
+function formatGoalDifference(gd: number): string {
+  if (gd > 0) return `+${gd}`;
+  return String(gd);
 }
 
 export function GamePage() {
@@ -244,6 +261,7 @@ export function GamePage() {
               standings={data.standings}
               playerTeamId={playerTeam.id}
               teams={matchData?.teams}
+              saveId={saveId}
             />
           )}
           {activeTab === 'transfers' && <TransfersPanel />}
@@ -260,27 +278,19 @@ export function GamePage() {
   );
 }
 
-// Form trend icon component
+const FORM_TREND_CONFIG = {
+  up: { className: 'text-green-400', symbol: '↑', title: 'Form improving' },
+  down: { className: 'text-red-400', symbol: '↓', title: 'Form declining' },
+  stable: { className: 'text-slate-500', symbol: '→', title: 'Form stable' },
+} as const;
+
 function FormTrendIcon({ player }: { player: Player }) {
   const trend = calculateFormTrend(player.form.lastFiveRatings);
+  const config = FORM_TREND_CONFIG[trend];
 
-  if (trend === 'up') {
-    return (
-      <span className="text-green-400 text-sm" title="Form improving">
-        ↑
-      </span>
-    );
-  }
-  if (trend === 'down') {
-    return (
-      <span className="text-red-400 text-sm" title="Form declining">
-        ↓
-      </span>
-    );
-  }
   return (
-    <span className="text-slate-500 text-sm" title="Form stable">
-      →
+    <span className={`${config.className} text-sm`} title={config.title}>
+      {config.symbol}
     </span>
   );
 }
@@ -618,6 +628,20 @@ function SquadPanel({ playerTeam, tactics, setTactics }: SquadPanelProps) {
 }
 
 // Squad leaderboard component for top scorers/assists
+// Get rank badge styling based on position (1st = gold, 2nd = silver, 3rd = bronze)
+function getRankBadgeStyle(rank: number): string {
+  switch (rank) {
+    case 1:
+      return 'bg-amber-500 text-slate-900';
+    case 2:
+      return 'bg-slate-400 text-slate-900';
+    case 3:
+      return 'bg-amber-700 text-white';
+    default:
+      return 'bg-slate-600 text-slate-300';
+  }
+}
+
 function SquadLeaderboard({
   title,
   players,
@@ -628,7 +652,7 @@ function SquadLeaderboard({
   statKey: 'goals' | 'assists';
 }) {
   const sortedPlayers = useMemo(() => {
-    const getValue = (p: Player) =>
+    const getValue = (p: Player): number =>
       statKey === 'goals' ? p.form.seasonGoals : p.form.seasonAssists;
 
     return [...players]
@@ -655,6 +679,7 @@ function SquadLeaderboard({
       </h3>
       <div className="space-y-2">
         {sortedPlayers.map((player, index) => {
+          const rank = index + 1;
           const value =
             statKey === 'goals'
               ? player.form.seasonGoals
@@ -667,17 +692,9 @@ function SquadLeaderboard({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
-                  className={`w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full text-xs font-bold ${
-                    index === 0
-                      ? 'bg-amber-500 text-slate-900'
-                      : index === 1
-                        ? 'bg-slate-400 text-slate-900'
-                        : index === 2
-                          ? 'bg-amber-700 text-white'
-                          : 'bg-slate-600 text-slate-300'
-                  }`}
+                  className={`w-5 h-5 flex-shrink-0 flex items-center justify-center rounded-full text-xs font-bold ${getRankBadgeStyle(rank)}`}
                 >
-                  {index + 1}
+                  {rank}
                 </span>
                 <span className="text-white">
                   {player.nickname ?? player.name}
@@ -698,6 +715,7 @@ interface TablePanelProps {
   standings: StandingEntry[];
   playerTeamId: string;
   teams?: Team[];
+  saveId?: string;
 }
 
 function FormBadge({ result }: { result: 'W' | 'D' | 'L' }) {
@@ -716,7 +734,10 @@ function FormBadge({ result }: { result: 'W' | 'D' | 'L' }) {
   );
 }
 
-function TablePanel({ standings, playerTeamId, teams }: TablePanelProps) {
+function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps) {
+  const { data: leaderboardsData, isLoading: leaderboardsLoading } =
+    useLeaderboards(saveId);
+
   // Create a lookup map for team form data
   const teamFormMap = useMemo(() => {
     if (!teams) return new Map<string, ('W' | 'D' | 'L')[]>();
@@ -733,67 +754,164 @@ function TablePanel({ standings, playerTeamId, teams }: TablePanelProps) {
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 p-6">
-      <h2 className="text-xl font-bold text-white mb-4">League Table</h2>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-slate-400 border-b border-slate-600">
-            <th className="text-center py-2 w-12 pl-3">Pos</th>
-            <th className="text-left py-2">Club</th>
-            <th className="text-center py-2 w-10">Pld</th>
-            <th className="text-center py-2 w-10">W</th>
-            <th className="text-center py-2 w-10">D</th>
-            <th className="text-center py-2 w-10">L</th>
-            <th className="text-center py-2 w-10">GF</th>
-            <th className="text-center py-2 w-10">GA</th>
-            <th className="text-center py-2 w-10">GD</th>
-            <th className="text-center py-2 w-12">Pts</th>
-            <th className="text-center py-2 w-36">Form</th>
-          </tr>
-        </thead>
-        <tbody>
-          {standings.map((entry) => {
-            const isPlayerTeam = entry.teamId === playerTeamId;
-            const teamForm = teamFormMap.get(entry.teamId) || [];
-            const goalDifference = entry.goalsFor - entry.goalsAgainst;
+    <div className="space-y-6 p-4">
+      <div className="bg-slate-800 border border-slate-700 p-6">
+        <h2 className="text-xl font-bold text-white mb-4">League Table</h2>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-slate-400 border-b border-slate-600">
+              <th className="text-center py-2 w-12 pl-3">Pos</th>
+              <th className="text-left py-2">Club</th>
+              <th className="text-center py-2 w-10">Pld</th>
+              <th className="text-center py-2 w-10">W</th>
+              <th className="text-center py-2 w-10">D</th>
+              <th className="text-center py-2 w-10">L</th>
+              <th className="text-center py-2 w-10">GF</th>
+              <th className="text-center py-2 w-10">GA</th>
+              <th className="text-center py-2 w-10">GD</th>
+              <th className="text-center py-2 w-12">Pts</th>
+              <th className="text-center py-2 w-36">Form</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((entry) => {
+              const isPlayerTeam = entry.teamId === playerTeamId;
+              const teamForm = teamFormMap.get(entry.teamId) || [];
+              const goalDifference = entry.goalsFor - entry.goalsAgainst;
 
-            return (
-              <tr
-                key={entry.teamId}
-                className={`border-b border-slate-700 text-white ${
-                  isPlayerTeam
-                    ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
-                    : ''
-                }`}
-              >
-                <td className="text-center py-2 pl-3">{entry.position}</td>
-                <td className="py-2">{entry.teamName}</td>
-                <td className="text-center py-2">{entry.played}</td>
-                <td className="text-center py-2">{entry.won}</td>
-                <td className="text-center py-2">{entry.drawn}</td>
-                <td className="text-center py-2">{entry.lost}</td>
-                <td className="text-center py-2">{entry.goalsFor}</td>
-                <td className="text-center py-2">{entry.goalsAgainst}</td>
-                <td className={`text-center py-2 ${goalDifference > 0 ? 'text-green-400' : goalDifference < 0 ? 'text-red-400' : ''}`}>
-                  {goalDifference > 0 ? `+${goalDifference}` : goalDifference}
-                </td>
-                <td className="text-center py-2 text-pitch-400 font-bold">
-                  {entry.points}
-                </td>
-                <td className="py-2">
-                  <div className="flex gap-1 justify-center">
-                    {teamForm.length > 0 ? (
-                      teamForm.map((r, i) => <FormBadge key={i} result={r} />)
-                    ) : (
-                      <span className="text-slate-500 text-xs">-</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+              return (
+                <tr
+                  key={entry.teamId}
+                  className={`border-b border-slate-700 text-white ${
+                    isPlayerTeam
+                      ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
+                      : ''
+                  }`}
+                >
+                  <td className="text-center py-2 pl-3">{entry.position}</td>
+                  <td className="py-2">{entry.teamName}</td>
+                  <td className="text-center py-2">{entry.played}</td>
+                  <td className="text-center py-2">{entry.won}</td>
+                  <td className="text-center py-2">{entry.drawn}</td>
+                  <td className="text-center py-2">{entry.lost}</td>
+                  <td className="text-center py-2">{entry.goalsFor}</td>
+                  <td className="text-center py-2">{entry.goalsAgainst}</td>
+                  <td className={`text-center py-2 ${getGoalDifferenceStyle(goalDifference)}`}>
+                    {formatGoalDifference(goalDifference)}
+                  </td>
+                  <td className="text-center py-2 text-pitch-400 font-bold">
+                    {entry.points}
+                  </td>
+                  <td className="py-2">
+                    <div className="flex gap-1 justify-center">
+                      {teamForm.length > 0 ? (
+                        teamForm.map((r, i) => <FormBadge key={i} result={r} />)
+                      ) : (
+                        <span className="text-slate-500 text-xs">-</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* League Leaderboards */}
+      <div className="grid grid-cols-2 gap-6">
+        <LeaderboardCard
+          title="Top Scorers"
+          entries={leaderboardsData?.topScorers || []}
+          isLoading={leaderboardsLoading}
+          emptyMessage="No goals scored yet this season"
+          playerTeamId={playerTeamId}
+        />
+        <LeaderboardCard
+          title="Top Assists"
+          entries={leaderboardsData?.topAssists || []}
+          isLoading={leaderboardsLoading}
+          emptyMessage="No assists recorded yet this season"
+          playerTeamId={playerTeamId}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface LeaderboardCardProps {
+  title: string;
+  entries: LeaderboardEntry[];
+  isLoading: boolean;
+  emptyMessage: string;
+  playerTeamId: string;
+}
+
+function LeaderboardCard({
+  title,
+  entries,
+  isLoading,
+  emptyMessage,
+  playerTeamId,
+}: LeaderboardCardProps) {
+  return (
+    <div className="bg-slate-800 border border-slate-700 p-6">
+      <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
+
+      {isLoading && (
+        <p className="text-slate-400 text-sm">Loading...</p>
+      )}
+
+      {!isLoading && entries.length === 0 && (
+        <p className="text-slate-500 text-sm">{emptyMessage}</p>
+      )}
+
+      {!isLoading && entries.length > 0 && (
+        <div className="space-y-2">
+          {entries.map((entry, index) => (
+            <LeaderboardRow
+              key={entry.playerId}
+              entry={entry}
+              rank={index + 1}
+              isPlayerTeam={entry.teamId === playerTeamId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface LeaderboardRowProps {
+  entry: LeaderboardEntry;
+  rank: number;
+  isPlayerTeam: boolean;
+}
+
+function LeaderboardRow({ entry, rank, isPlayerTeam }: LeaderboardRowProps) {
+  const rowStyle = isPlayerTeam
+    ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
+    : 'bg-slate-700/50';
+
+  return (
+    <div
+      className={`flex items-center justify-between py-2 px-3 rounded ${rowStyle}`}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${getRankBadgeStyle(rank)}`}
+        >
+          {rank}
+        </span>
+        <PositionBadge position={entry.position as Position} />
+        <div className="flex flex-col">
+          <span className="text-white text-sm">
+            {entry.playerNickname ?? entry.playerName}
+          </span>
+          <span className="text-slate-400 text-xs">{entry.teamShortName}</span>
+        </div>
+      </div>
+      <span className="text-pitch-400 font-bold text-lg">{entry.count}</span>
     </div>
   );
 }
@@ -867,36 +985,23 @@ function FinancesPanel({
   const estStadiumPerRound = calculateStadiumMaintenance(playerTeam.capacity);
   const estOperationsPerRound = calculateOperatingCosts(playerTeam.reputation);
 
+  // Helper to sum transaction amounts by category
+  const sumByCategory = (
+    type: 'income' | 'expenses',
+    category: string,
+  ): number =>
+    transactions
+      .flatMap((round) => round[type])
+      .filter((t) => t.category === category)
+      .reduce((sum, t) => sum + t.amount, 0);
+
   // Calculate actual totals from transaction data
-  const actualMatchDayIncome = transactions
-    .flatMap((round) => round.income)
-    .filter((t) => t.category === 'match_day')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const actualTvRightsIncome = transactions
-    .flatMap((round) => round.income)
-    .filter((t) => t.category === 'tv_rights')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const actualSponsorshipIncome = transactions
-    .flatMap((round) => round.income)
-    .filter((t) => t.category === 'sponsorship')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const actualWagesExpense = transactions
-    .flatMap((round) => round.expenses)
-    .filter((t) => t.category === 'wages')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const actualStadiumExpense = transactions
-    .flatMap((round) => round.expenses)
-    .filter((t) => t.category === 'stadium')
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const actualOperationsExpense = transactions
-    .flatMap((round) => round.expenses)
-    .filter((t) => t.category === 'operations')
-    .reduce((sum, t) => sum + t.amount, 0);
+  const actualMatchDayIncome = sumByCategory('income', 'match_day');
+  const actualTvRightsIncome = sumByCategory('income', 'tv_rights');
+  const actualSponsorshipIncome = sumByCategory('income', 'sponsorship');
+  const actualWagesExpense = sumByCategory('expenses', 'wages');
+  const actualStadiumExpense = sumByCategory('expenses', 'stadium');
+  const actualOperationsExpense = sumByCategory('expenses', 'operations');
 
   // Use actual data if available, otherwise fall back to estimates
   const hasTransactionData = transactions.length > 0;

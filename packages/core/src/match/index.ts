@@ -12,6 +12,34 @@ import type {
   Fixture,
 } from '../types';
 import { calculateOverall } from '../types';
+import {
+  EVENT_PROBABILITY_PER_MINUTE,
+  BASE_GOAL_CONVERSION,
+  MIN_GOAL_CONVERSION,
+  MAX_GOAL_CONVERSION,
+  HOME_POSSESSION_BONUS,
+  HOME_CONVERSION_BONUS,
+  PLAYER_FORM_WEIGHT,
+  NEUTRAL_FORM,
+  TEAM_MOMENTUM_WEIGHT,
+  NEUTRAL_MOMENTUM,
+  STRIKER_DROUGHT_THRESHOLD,
+  STRIKER_DROUGHT_PENALTY,
+  STRIKER_HOT_STREAK_BONUS,
+  GK_CLEAN_SHEET_BONUS,
+  FITNESS_THRESHOLD,
+  FITNESS_PENALTY_FACTOR,
+  LATE_GAME_FITNESS_MINUTE,
+  CORNER_GOAL_RATE,
+  FREE_KICK_GOAL_RATE,
+  RED_CARD_STRENGTH_PENALTY,
+  EVENT_THRESHOLD_ATTACKING_CHANCE,
+  EVENT_THRESHOLD_YELLOW_CARD,
+  EVENT_THRESHOLD_RED_CARD,
+  EVENT_THRESHOLD_CORNER,
+  EVENT_THRESHOLD_FREE_KICK,
+  EVENT_THRESHOLD_SAVE,
+} from './constants';
 
 // Match simulation configuration
 export interface MatchConfig {
@@ -40,6 +68,8 @@ export interface MatchState {
   homeSubsUsed: number;
   awaySubsUsed: number;
   stoppageTime: number;
+  homeRedCards: number;
+  awayRedCards: number;
 }
 
 // Live match state for a single match in multi-match simulation
@@ -129,26 +159,148 @@ function pickOwnGoalPlayer(
   return lineupPlayers[idx];
 }
 
+// Calculate form modifier: ±15% based on player form (70 = neutral)
+function calculateFormModifier(form: number): number {
+  // Form ranges 1-100, neutral is 70
+  // Returns -0.15 to +0.15
+  return ((form - NEUTRAL_FORM) / 100) * PLAYER_FORM_WEIGHT * 1.5;
+}
+
+// Calculate momentum modifier: ±8% based on team momentum (50 = neutral)
+function calculateMomentumModifier(momentum: number): number {
+  // Momentum ranges 1-100, neutral is 50
+  // Returns -0.08 to +0.08
+  return ((momentum - NEUTRAL_MOMENTUM) / 100) * TEAM_MOMENTUM_WEIGHT * 2;
+}
+
+// Calculate fitness modifier: 0-30% penalty for low fitness, worse after minute 60
+function calculateFitnessModifier(fitness: number, minute: number): number {
+  if (fitness >= FITNESS_THRESHOLD) return 0;
+
+  // Base penalty for low fitness
+  let penalty = (FITNESS_THRESHOLD - fitness) * FITNESS_PENALTY_FACTOR;
+
+  // Increased penalty in late game (after minute 60)
+  if (minute > LATE_GAME_FITNESS_MINUTE) {
+    const lateGameFactor = 1 + (minute - LATE_GAME_FITNESS_MINUTE) / 60;
+    penalty *= lateGameFactor;
+  }
+
+  // Cap at 30% penalty
+  return Math.min(0.3, penalty);
+}
+
+// Calculate striker streak modifier based on recent performance
+function calculateStrikerStreakModifier(player: Player): number {
+  const ratings = player.form?.lastFiveRatings || [];
+  if (ratings.length === 0) return 0;
+
+  // Count matches without goals (assuming rating < 6.5 indicates no goal contribution)
+  const lowRatings = ratings.filter((r) => r < 6.5).length;
+
+  // Drought: 5+ low-rated matches = penalty
+  if (lowRatings >= STRIKER_DROUGHT_THRESHOLD) {
+    return -STRIKER_DROUGHT_PENALTY * (1 + (lowRatings - STRIKER_DROUGHT_THRESHOLD) * 0.5);
+  }
+
+  // Hot streak: high average rating = bonus
+  const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  if (avgRating >= 7.5 && ratings.length >= 3) {
+    return STRIKER_HOT_STREAK_BONUS;
+  }
+
+  return 0;
+}
+
+// Calculate GK streak modifier: penalty against in-form GK
+function calculateGKStreakModifier(gk: Player | undefined): number {
+  if (!gk || gk.position !== 'GK') return 0;
+
+  const ratings = gk.form?.lastFiveRatings || [];
+  if (ratings.length < 3) return 0;
+
+  // High average rating indicates clean sheets / good performances
+  const avgRating = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  if (avgRating >= 7.0) {
+    return -GK_CLEAN_SHEET_BONUS;
+  }
+
+  return 0;
+}
+
+// Calculate red card penalty: -8 strength for first, +5 per additional
+function calculateRedCardPenalty(redCards: number): number {
+  if (redCards <= 0) return 0;
+  return RED_CARD_STRENGTH_PENALTY + (redCards - 1) * 5;
+}
+
+// Options for calculateTeamStrength
+interface TeamStrengthOptions {
+  team?: Team;
+  redCards?: number;
+  minute?: number;
+}
+
 // Calculate team strength from lineup
-function calculateTeamStrength(players: Player[], tactics: Tactics): number {
+function calculateTeamStrength(
+  players: Player[],
+  tactics: Tactics,
+  options?: TeamStrengthOptions,
+): number {
   const lineupPlayers = players.filter((p) => tactics.lineup.includes(p.id));
   if (lineupPlayers.length === 0) return 50;
 
-  const totalOverall = lineupPlayers.reduce(
-    (sum, p) => sum + calculateOverall(p),
-    0,
-  );
-  const avgOverall = totalOverall / lineupPlayers.length;
+  const minute = options?.minute ?? 0;
+
+  // Calculate individual player strength with form and fitness modifiers
+  let totalStrength = 0;
+  for (const player of lineupPlayers) {
+    let playerStrength = calculateOverall(player);
+
+    // Apply form modifier (±15%)
+    const formMod = calculateFormModifier(player.form?.form ?? NEUTRAL_FORM);
+    playerStrength *= 1 + formMod;
+
+    // Apply fitness penalty (0-30%)
+    const fitnessPenalty = calculateFitnessModifier(player.fitness ?? 100, minute);
+    playerStrength *= 1 - fitnessPenalty;
+
+    totalStrength += playerStrength;
+  }
+
+  let avgStrength = totalStrength / lineupPlayers.length;
+
+  // Apply team momentum modifier (±8%)
+  if (options?.team?.momentum !== undefined) {
+    const momentumMod = calculateMomentumModifier(options.team.momentum);
+    avgStrength *= 1 + momentumMod;
+  }
+
+  // Apply red card penalty
+  if (options?.redCards && options.redCards > 0) {
+    avgStrength -= calculateRedCardPenalty(options.redCards);
+  }
 
   // Adjust for tactical posture
-  const postureBonus =
-    tactics.posture === 'attacking'
-      ? 3
-      : tactics.posture === 'defensive'
-        ? -3
-        : 0;
+  const postureModifiers: Record<string, number> = {
+    attacking: 3,
+    defensive: -3,
+    balanced: 0,
+  };
 
-  return avgOverall + postureBonus;
+  return avgStrength + (postureModifiers[tactics.posture] ?? 0);
+}
+
+// Options for calculateChanceSuccess
+interface ChanceSuccessOptions {
+  isHome?: boolean;
+  isNeutralVenue?: boolean;
+  attackingTeam?: Team;
+  defendingTeam?: Team;
+  homeRedCards?: number;
+  awayRedCards?: number;
+  minute?: number;
+  scorer?: Player;
 }
 
 // Calculate attack vs defense for a chance
@@ -156,21 +308,47 @@ function calculateChanceSuccess(
   attackingPlayers: Player[],
   defendingPlayers: Player[],
   attackingTactics: Tactics,
+  defendingTactics?: Tactics,
+  options?: ChanceSuccessOptions,
 ): number {
-  const attackStrength = calculateTeamStrength(
-    attackingPlayers,
-    attackingTactics,
-  );
-  const defenseStrength = calculateTeamStrength(defendingPlayers, {
-    ...attackingTactics,
-    posture: 'defensive',
+  const isHome = options?.isHome ?? false;
+  const isNeutralVenue = options?.isNeutralVenue ?? false;
+  const minute = options?.minute ?? 0;
+
+  // Calculate attacking team strength
+  const attackStrength = calculateTeamStrength(attackingPlayers, attackingTactics, {
+    team: options?.attackingTeam,
+    redCards: isHome ? options?.homeRedCards : options?.awayRedCards,
+    minute,
+  });
+
+  // Calculate defending team strength
+  const defTactics = defendingTactics ?? { ...attackingTactics, posture: 'defensive' as const };
+  const defenseStrength = calculateTeamStrength(defendingPlayers, defTactics, {
+    team: options?.defendingTeam,
+    redCards: isHome ? options?.awayRedCards : options?.homeRedCards,
+    minute,
   });
 
   // Base chance modified by strength difference
   const strengthDiff = attackStrength - defenseStrength;
-  const baseChance = 0.3 + (strengthDiff / 100) * 0.2;
+  let baseChance = BASE_GOAL_CONVERSION + (strengthDiff / 100) * 0.2;
 
-  return Math.max(0.05, Math.min(0.6, baseChance));
+  // Home conversion bonus (+5% if home and not neutral venue)
+  if (isHome && !isNeutralVenue) {
+    baseChance += HOME_CONVERSION_BONUS;
+  }
+
+  // Striker streak modifier
+  if (options?.scorer) {
+    baseChance += calculateStrikerStreakModifier(options.scorer);
+  }
+
+  // GK streak modifier (penalty against in-form GK)
+  const defendingGK = defendingPlayers.find((p) => p.position === 'GK');
+  baseChance += calculateGKStreakModifier(defendingGK);
+
+  return Math.max(MIN_GOAL_CONVERSION, Math.min(MAX_GOAL_CONVERSION, baseChance));
 }
 
 // Pick a random player from lineup (weighted by relevant attribute)
@@ -217,6 +395,8 @@ export function createMatchState(config: MatchConfig): MatchState {
     homeSubsUsed: 0,
     awaySubsUsed: 0,
     stoppageTime: randomInt(1, 5),
+    homeRedCards: 0,
+    awayRedCards: 0,
   };
 }
 
@@ -279,24 +459,53 @@ export function makeSubstitution(
   return { success: true, event };
 }
 
+// Pick a set piece scorer (weighted by heading + positioning for corners, shooting for free kicks)
+function pickSetPieceScorer(
+  players: Player[],
+  tactics: Tactics,
+  isCorner: boolean,
+): Player | undefined {
+  const lineupPlayers = players.filter((p) => tactics.lineup.includes(p.id));
+  const outfield = lineupPlayers.filter((p) => p.position !== 'GK');
+  if (outfield.length === 0) return lineupPlayers[0];
+
+  // For corners, weight by heading + positioning; for free kicks, by shooting
+  const weights = outfield.map((p) =>
+    isCorner
+      ? p.attributes.heading + p.attributes.positioning
+      : p.attributes.shooting + p.attributes.composure,
+  );
+  const idx = weightedRandom(weights);
+  return outfield[idx];
+}
+
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
+  // Calculate team strengths with all modifiers
+  const homeStrength = calculateTeamStrength(state.homeLineup, state.homeTactics, {
+    team: config.homeTeam,
+    redCards: state.homeRedCards,
+    minute: state.minute,
+  });
+  const awayStrength = calculateTeamStrength(state.awayLineup, state.awayTactics, {
+    team: config.awayTeam,
+    redCards: state.awayRedCards,
+    minute: state.minute,
+  });
+
   // Determine which team has possession
   const possessionRoll = random();
-  const homeStrength = calculateTeamStrength(
-    state.homeLineup,
-    state.homeTactics,
-  );
-  const awayStrength = calculateTeamStrength(
-    state.awayLineup,
-    state.awayTactics,
-  );
-  const homePossChance = 0.5 + (homeStrength - awayStrength) / 200;
+  let homePossChance = 0.5 + (homeStrength - awayStrength) / 200;
+
+  // Home possession bonus (if not neutral venue)
+  if (!config.neutralVenue) {
+    homePossChance += HOME_POSSESSION_BONUS;
+  }
 
   state.possession = possessionRoll < homePossChance ? 'home' : 'away';
 
-  // Chance of something happening this minute (~15% for any event)
-  if (random() > 0.15) return;
+  // Chance of something happening this minute
+  if (random() > EVENT_PROBABILITY_PER_MINUTE) return;
 
   const attackingTeam = state.possession;
   const attackingPlayers =
@@ -305,24 +514,39 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
     attackingTeam === 'home' ? state.awayLineup : state.homeLineup;
   const attackingTactics =
     attackingTeam === 'home' ? state.homeTactics : state.awayTactics;
+  const defendingTactics =
+    attackingTeam === 'home' ? state.awayTactics : state.homeTactics;
   const teamObj = attackingTeam === 'home' ? config.homeTeam : config.awayTeam;
+  const defendingTeamObj =
+    attackingTeam === 'home' ? config.awayTeam : config.homeTeam;
 
   // What kind of event?
   const eventRoll = random();
 
-  if (eventRoll < 0.4) {
-    // Attacking chance
+  if (eventRoll < EVENT_THRESHOLD_ATTACKING_CHANCE) {
+    // Attacking chance - pick scorer first to factor into success calculation
+    const scorer = pickScorer(attackingPlayers, attackingTactics);
+
     const successChance = calculateChanceSuccess(
       attackingPlayers,
       defendingPlayers,
       attackingTactics,
+      defendingTactics,
+      {
+        isHome: attackingTeam === 'home',
+        isNeutralVenue: config.neutralVenue,
+        attackingTeam: teamObj,
+        defendingTeam: defendingTeamObj,
+        homeRedCards: state.homeRedCards,
+        awayRedCards: state.awayRedCards,
+        minute: state.minute,
+        scorer,
+      },
     );
 
     if (random() < successChance) {
       // GOAL! Determine the type
       const goalType = determineGoalType();
-      const defendingTactics =
-        attackingTeam === 'home' ? state.awayTactics : state.homeTactics;
 
       if (goalType === 'own_goal') {
         // Own goal by defending team
@@ -347,7 +571,6 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         });
       } else {
         // Regular goal (assisted or unassisted)
-        const scorer = pickScorer(attackingPlayers, attackingTactics);
         if (attackingTeam === 'home') {
           state.homeScore++;
         } else {
@@ -395,7 +618,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         description: `${shooter?.nickname || shooter?.name} misses a chance!`,
       });
     }
-  } else if (eventRoll < 0.55) {
+  } else if (eventRoll < EVENT_THRESHOLD_YELLOW_CARD) {
     // Yellow card
     const allPlayers =
       attackingTeam === 'home' ? state.awayLineup : state.homeLineup;
@@ -409,37 +632,86 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       playerName: fouler?.nickname || fouler?.name || 'Unknown',
       description: `Yellow card for ${fouler?.nickname || fouler?.name}`,
     });
-  } else if (eventRoll < 0.58) {
+  } else if (eventRoll < EVENT_THRESHOLD_RED_CARD) {
     // Red card (rare)
+    const foulingTeam = attackingTeam === 'home' ? 'away' : 'home';
     const allPlayers =
       attackingTeam === 'home' ? state.awayLineup : state.homeLineup;
     if (allPlayers.length === 0) return;
     const fouler = allPlayers[randomInt(0, allPlayers.length - 1)];
+
+    // Increment red card counter
+    if (foulingTeam === 'home') {
+      state.homeRedCards++;
+    } else {
+      state.awayRedCards++;
+    }
+
     state.events.push({
       minute: state.minute,
       type: 'red_card',
-      team: attackingTeam === 'home' ? 'away' : 'home',
+      team: foulingTeam,
       playerId: fouler?.id,
       playerName: fouler?.nickname || fouler?.name || 'Unknown',
       description: `RED CARD! ${fouler?.nickname || fouler?.name} is sent off!`,
     });
-  } else if (eventRoll < 0.65) {
-    // Corner
+  } else if (eventRoll < EVENT_THRESHOLD_CORNER) {
+    // Corner with goal chance
     state.events.push({
       minute: state.minute,
       type: 'corner',
       team: attackingTeam,
       description: `Corner kick for ${teamObj.name}`,
     });
-  } else if (eventRoll < 0.72) {
-    // Free kick
+
+    // Set piece goal chance from corner
+    if (random() < CORNER_GOAL_RATE) {
+      const scorer = pickSetPieceScorer(attackingPlayers, attackingTactics, true);
+      if (attackingTeam === 'home') {
+        state.homeScore++;
+      } else {
+        state.awayScore++;
+      }
+
+      const scorerName = scorer?.nickname || scorer?.name || 'Unknown';
+      state.events.push({
+        minute: state.minute,
+        type: 'goal',
+        team: attackingTeam,
+        playerId: scorer?.id,
+        playerName: scorerName,
+        description: `GOAL! ${scorerName} heads in from the corner for ${teamObj.name}!`,
+      });
+    }
+  } else if (eventRoll < EVENT_THRESHOLD_FREE_KICK) {
+    // Free kick with goal chance
     state.events.push({
       minute: state.minute,
       type: 'free_kick',
       team: attackingTeam,
       description: `Free kick in a dangerous position for ${teamObj.name}`,
     });
-  } else if (eventRoll < 0.8) {
+
+    // Set piece goal chance from free kick
+    if (random() < FREE_KICK_GOAL_RATE) {
+      const scorer = pickSetPieceScorer(attackingPlayers, attackingTactics, false);
+      if (attackingTeam === 'home') {
+        state.homeScore++;
+      } else {
+        state.awayScore++;
+      }
+
+      const scorerName = scorer?.nickname || scorer?.name || 'Unknown';
+      state.events.push({
+        minute: state.minute,
+        type: 'goal',
+        team: attackingTeam,
+        playerId: scorer?.id,
+        playerName: scorerName,
+        description: `GOAL! ${scorerName} scores directly from the free kick for ${teamObj.name}!`,
+      });
+    }
+  } else if (eventRoll < EVENT_THRESHOLD_SAVE) {
     // Save by goalkeeper
     const gk = defendingPlayers.find((p) => p.position === 'GK');
     state.events.push({

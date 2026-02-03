@@ -9,3 +9,5 @@ export type {
   MatchFixture,
   RoundTransaction,
 } from './useSaveData';
+export { useLeaderboards } from './useLeaderboards';
+export type { LeaderboardEntry, LeaderboardsData } from './useLeaderboards';

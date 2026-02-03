@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/ai/team-mapping.ts","./src/ai/transform.ts","./src/output/file.ts","./src/output/typescript.ts","./src/research/ai-search.ts","./src/research/index.ts","./src/research/transfermarkt.ts"],"errors":true,"version":"5.9.3"}

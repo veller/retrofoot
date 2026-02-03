@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, gt } from 'drizzle-orm';
 import {
   saves,
   teams,
@@ -390,6 +390,62 @@ saveRoutes.get('/:id/transactions', async (c) => {
   );
 
   return c.json({ transactions: groupedTransactions });
+});
+
+/**
+ * Get leaderboards (top scorers and top assists) for a save
+ */
+saveRoutes.get('/:id/leaderboards', async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+
+  if (!session?.user?.id) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const saveId = c.req.param('id');
+  const db = drizzle(c.env.DB);
+
+  // Verify ownership
+  const saveResult = await db
+    .select({ userId: saves.userId })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0 || saveResult[0].userId !== session.user.id) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  // Helper to build leaderboard query for a specific stat
+  const buildLeaderboardQuery = (
+    statColumn: typeof players.seasonGoals | typeof players.seasonAssists,
+  ) =>
+    db
+      .select({
+        playerId: players.id,
+        playerName: players.name,
+        playerNickname: players.nickname,
+        position: players.position,
+        teamId: teams.id,
+        teamName: teams.name,
+        teamShortName: teams.shortName,
+        count: statColumn,
+      })
+      .from(players)
+      .innerJoin(teams, eq(players.teamId, teams.id))
+      .where(and(eq(players.saveId, saveId), gt(statColumn, 0)))
+      .orderBy(desc(statColumn), players.name)
+      .limit(10);
+
+  const [topScorers, topAssists] = await Promise.all([
+    buildLeaderboardQuery(players.seasonGoals),
+    buildLeaderboardQuery(players.seasonAssists),
+  ]);
+
+  return c.json({ topScorers, topAssists });
 });
 
 /**
