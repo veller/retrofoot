@@ -3,7 +3,10 @@
 // ============================================================================
 // D1-specific standings operations with batch support
 
-import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
+import type {
+  D1Database,
+  D1PreparedStatement,
+} from '@cloudflare/workers-types';
 import type { StandingsUpdate } from '../types/match.types';
 
 /**
@@ -80,7 +83,9 @@ export async function recalculateStandingPositions(
 
   // Batch update positions using D1 batch API
   const positionStatements = allStandings.map((standing, i) =>
-    d1.prepare('UPDATE standings SET position = ? WHERE id = ?').bind(i + 1, standing.id),
+    d1
+      .prepare('UPDATE standings SET position = ? WHERE id = ?')
+      .bind(i + 1, standing.id),
   );
 
   if (positionStatements.length > 0) {

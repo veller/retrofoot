@@ -1,0 +1,89 @@
+// ============================================================================
+// RETROFOOT - Transfer Market Configuration
+// ============================================================================
+// Configurable parameters for transfer market behavior
+
+/**
+ * Configuration for transfer market behavior
+ * All values can be tuned to adjust market activity levels
+ */
+export interface TransferConfig {
+  // Timing
+  /** Number of rounds before an offer expires */
+  offerExpiryRounds: number;
+
+  // AI Buying Behavior
+  /** Maximum number of offers an AI team can make per round */
+  maxOffersPerTeamPerRound: number;
+  /** Percentage of asking price to offer (0.0 - 1.0) */
+  offerPriceRatio: number;
+  /** Maximum percentage of budget to spend on one player (0.0 - 1.0) */
+  maxBudgetSpendRatio: number;
+  /** Maximum percentage of wage budget for one player (0.0 - 1.0) */
+  maxWageAllocationRatio: number;
+  /** Minimum overall relative to team average for AI buys */
+  buyQualityThreshold: number;
+
+  // AI Selling Behavior
+  /** Accept offer if >= this percentage of asking price (0.0 - 1.0) */
+  acceptThreshold: number;
+  /** Accept offer if overstaffed and >= this percentage (0.0 - 1.0) */
+  overstaffedAcceptThreshold: number;
+  /** Counter offer if >= this percentage of asking price (0.0 - 1.0) */
+  counterThreshold: number;
+
+  // Squad Composition
+  /** Target squad size for AI decisions */
+  idealSquadSize: number;
+
+  // Youth Evaluation
+  /** Weight for potential in youth evaluation (0-1), applied for players under 25 */
+  potentialWeightForYouth: number;
+}
+
+/**
+ * Default transfer configuration
+ * Produces behavior identical to the original hardcoded values
+ */
+export const DEFAULT_TRANSFER_CONFIG: TransferConfig = {
+  offerExpiryRounds: 3,
+  maxOffersPerTeamPerRound: 1,
+  offerPriceRatio: 0.9,
+  maxBudgetSpendRatio: 0.5,
+  maxWageAllocationRatio: 0.1,
+  buyQualityThreshold: -5,
+  acceptThreshold: 1.0,
+  overstaffedAcceptThreshold: 0.8,
+  counterThreshold: 0.75,
+  idealSquadSize: 28,
+  potentialWeightForYouth: 0.5,
+};
+
+/**
+ * Presets for different market activity levels
+ */
+export const TRANSFER_PRESETS = {
+  /** Low activity: conservative AI, fewer deals */
+  low: {
+    ...DEFAULT_TRANSFER_CONFIG,
+    maxOffersPerTeamPerRound: 1,
+    offerPriceRatio: 0.85,
+    counterThreshold: 0.85,
+    potentialWeightForYouth: 0.3,
+  } as TransferConfig,
+
+  /** Normal activity: balanced market behavior */
+  normal: DEFAULT_TRANSFER_CONFIG,
+
+  /** High activity: aggressive AI, more deals */
+  high: {
+    ...DEFAULT_TRANSFER_CONFIG,
+    maxOffersPerTeamPerRound: 2,
+    offerPriceRatio: 0.95,
+    overstaffedAcceptThreshold: 0.7,
+    counterThreshold: 0.65,
+    potentialWeightForYouth: 0.7,
+  } as TransferConfig,
+};
+
+export type TransferPreset = keyof typeof TRANSFER_PRESETS;

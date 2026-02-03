@@ -52,7 +52,7 @@ export const onRequest: PagesFunction = async (context) => {
     for (const cookie of cookies) {
       // Remove the Domain attribute so it defaults to the current domain
       // Also remove __Secure- prefix if present (we'll keep it secure via SameSite)
-      let rewrittenCookie = cookie
+      const rewrittenCookie = cookie
         // Remove Domain=... attribute
         .replace(/;\s*Domain=[^;]*/gi, '')
         // Keep the cookie otherwise unchanged

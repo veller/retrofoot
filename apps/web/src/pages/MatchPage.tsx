@@ -539,8 +539,15 @@ export function MatchPage() {
         return; // Don't navigate on failure
       }
 
-      // Navigate back to game page using saveId
-      navigate(`/game/${saveId}`);
+      const responseData = await response.json();
+
+      // Check if season is complete - redirect to season summary
+      if (responseData.seasonComplete) {
+        navigate(`/game/${saveId}/season-summary`);
+      } else {
+        // Navigate back to game page for next round
+        navigate(`/game/${saveId}`);
+      }
     } catch (err) {
       console.error('Error saving match results:', err);
       setIsSaving(false);

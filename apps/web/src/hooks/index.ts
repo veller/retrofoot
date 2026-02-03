@@ -28,3 +28,18 @@ export type {
   MarketData,
   OffersData,
 } from './useTransfers';
+export {
+  useSeasonSummary,
+  useAdvanceSeason,
+  useSeasonHistory,
+} from './useSeason';
+export type {
+  SeasonSummary,
+  SeasonSummaryChampion,
+  SeasonSummaryStarPlayer,
+  SeasonSummaryTopScorer,
+  SeasonSummaryTopAssister,
+  SeasonSummaryPlayerTeam,
+  SeasonSummaryRelegatedTeam,
+  SeasonHistoryEntry,
+} from './useSeason';

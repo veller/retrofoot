@@ -3,7 +3,10 @@
 // ============================================================================
 // Reusable helpers for D1 batch operations with chunking support
 
-import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
+import type {
+  D1Database,
+  D1PreparedStatement,
+} from '@cloudflare/workers-types';
 import type { drizzle } from 'drizzle-orm/d1';
 
 /**
@@ -42,7 +45,9 @@ export async function batchInsertChunked<T extends object>(
 
   for (let i = 0; i < values.length; i += chunkSize) {
     const chunk = values.slice(i, i + chunkSize);
-    await db.insert(table).values(chunk as Parameters<typeof db.insert>[0]['$inferInsert'][]);
+    await db
+      .insert(table)
+      .values(chunk as Parameters<typeof db.insert>[0]['$inferInsert'][]);
   }
 }
 

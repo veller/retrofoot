@@ -226,7 +226,6 @@ export interface TransferOffer {
   status: 'pending' | 'accepted' | 'rejected' | 'expired';
 }
 
-
 // ============================================================================
 // TRANSFER MARKET TYPES
 // ============================================================================

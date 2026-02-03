@@ -13,16 +13,20 @@ Before starting analysis, establish the scope of changes and available tooling.
 ### Process
 
 1. **Get changed files list:**
+
    ```bash
    git diff --name-only HEAD
    ```
+
    Store this list mentally - all subsequent operations should focus on these files only.
 
 2. **Detect available tooling:**
    Check `package.json` for available scripts before assuming commands exist:
+
    ```bash
    grep -E '"(lint|eslint|format|prettier)"' package.json
    ```
+
    Use project scripts (e.g., `pnpm lint`) over direct tool invocation when available.
 
 3. **Always use explicit working directory:**
@@ -170,6 +174,7 @@ Drizzle-kit's `generate` command is **interactive** when detecting ambiguous cha
 ### Safe Migration Check Process
 
 1. **Check if schema changed:**
+
    ```bash
    git diff --name-only HEAD | grep -q "schema/index.ts" && echo "Schema changed"
    ```
@@ -220,22 +225,29 @@ Avoid formatting/linting the entire codebase. Focus on committed changes to prev
 ### Process
 
 1. **Full TypeScript check (fast, full check is fine):**
+
    ```bash
    pnpm tsc --noEmit
    ```
+
    Fix all type errors. Do not use `@ts-ignore` or `any` to bypass.
 
 2. **Lint check - prefer project script:**
+
    ```bash
    pnpm lint
    ```
+
    If no `lint` script exists, fall back to:
+
    ```bash
    pnpm eslint . --ext .ts,.tsx
    ```
+
    Fix all errors. Warnings should be reviewed but may be acceptable.
 
 3. **Prettier - CHECK only changed files first:**
+
    ```bash
    pnpm prettier --check <list of changed files>
    ```
@@ -250,6 +262,7 @@ Avoid formatting/linting the entire codebase. Focus on committed changes to prev
 ### Why Scoping Matters
 
 Running `prettier --write .` on the entire codebase can:
+
 - Add 40+ files to the diff that weren't part of the change
 - Make the commit harder to review
 - Introduce unrelated formatting changes
@@ -257,6 +270,7 @@ Running `prettier --write .` on the entire codebase can:
 ### Distinguishing Issues
 
 When reporting lint/format issues:
+
 - **Issues in changed files:** MUST FIX before commit
 - **Pre-existing issues in unchanged files:** REPORT ONLY, do not fix (mention they exist but are out of scope)
 

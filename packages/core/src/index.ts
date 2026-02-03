@@ -29,3 +29,6 @@ export * from './transfer';
 
 // Re-export seed data
 export * from './data';
+
+// Re-export achievements system
+export * from './achievements';

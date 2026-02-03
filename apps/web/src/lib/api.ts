@@ -12,7 +12,7 @@ export function apiUrl(path: string): string {
 // Fetch wrapper that uses the correct API URL
 export async function apiFetch(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<Response> {
   const url = apiUrl(path);
   return fetch(url, {

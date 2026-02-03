@@ -15,6 +15,7 @@ import type {
   TransferNegotiation,
 } from '../types';
 import { calculateOverall } from '../types';
+import { DEFAULT_TRANSFER_CONFIG, type TransferConfig } from './config';
 
 // ============================================================================
 // CONSTANTS
@@ -79,8 +80,7 @@ export function calculateAskingPrice(
   }
 
   // Contract modifier: -40% if contract expires this season
-  const contractYearsRemaining =
-    player.contractEndSeason - currentSeason;
+  const contractYearsRemaining = player.contractEndSeason - currentSeason;
   if (contractYearsRemaining <= CONTRACT_EXPIRY_THRESHOLD) {
     price *= 0.6;
   }
@@ -104,8 +104,7 @@ export function calculateWageDemand(
   const overall = calculateOverall(player);
 
   // Base wage calculation: exponential based on ability
-  const baseWage =
-    Math.pow(overall / 50, 3) * BASE_WAGE_MULTIPLIER;
+  const baseWage = Math.pow(overall / 50, 3) * BASE_WAGE_MULTIPLIER;
 
   let wage = baseWage;
 
@@ -163,21 +162,25 @@ export function aiSellDecision(
   squadSize: number,
   player: Player,
   _currentSeason: number,
+  config: TransferConfig = DEFAULT_TRANSFER_CONFIG,
 ): SellDecision {
   const priceRatio = offerAmount / askingPrice;
 
   // Accept if offer meets or exceeds asking price
-  if (priceRatio >= 1.0) {
+  if (priceRatio >= config.acceptThreshold) {
     return { action: 'accept' };
   }
 
-  // Accept if overstaffed and offer is decent (80%+)
-  if (squadSize > IDEAL_SQUAD_SIZE && priceRatio >= 0.8) {
+  // Accept if overstaffed and offer is decent
+  if (
+    squadSize > config.idealSquadSize &&
+    priceRatio >= config.overstaffedAcceptThreshold
+  ) {
     return { action: 'accept' };
   }
 
-  // Counter if offer is close (75%+)
-  if (priceRatio >= 0.75) {
+  // Counter if offer is close
+  if (priceRatio >= config.counterThreshold) {
     // Counter at midpoint between offer and asking price
     const counterAmount = Math.round((offerAmount + askingPrice) / 2);
     // Also request slightly higher wage (current + 10%)
@@ -260,6 +263,7 @@ export function aiBuyDecision(
   teamAverageOverall: number,
   positionNeeds: PositionNeeds,
   teamReputation: number,
+  config: TransferConfig = DEFAULT_TRANSFER_CONFIG,
 ): {
   willBuy: boolean;
   offerAmount?: number;
@@ -269,13 +273,20 @@ export function aiBuyDecision(
 } {
   const overall = calculateOverall(player);
 
+  // Calculate effective rating with potential bonus for young players
+  const potentialBonus =
+    player.age < 25
+      ? Math.max(0, (player.potential - overall) * config.potentialWeightForYouth)
+      : 0;
+  const effectiveRating = overall + potentialBonus;
+
   // Check if position is needed
   if (!isPositionNeeded(player.position, positionNeeds)) {
     return { willBuy: false, reason: 'Position not needed' };
   }
 
-  // Check if quality fits the team
-  if (overall < teamAverageOverall + AI_BUY_OVERALL_THRESHOLD) {
+  // Check if quality fits the team (using effective rating for youth potential)
+  if (effectiveRating < teamAverageOverall + config.buyQualityThreshold) {
     return { willBuy: false, reason: 'Player quality too low' };
   }
 
@@ -283,19 +294,17 @@ export function aiBuyDecision(
   const wageDemand = calculateWageDemand(player, teamReputation);
 
   // Check if can afford the transfer fee
-  if (askingPrice > teamBudget * 0.5) {
-    // Don't spend more than 50% of budget on one player
+  if (askingPrice > teamBudget * config.maxBudgetSpendRatio) {
     return { willBuy: false, reason: 'Cannot afford transfer fee' };
   }
 
   // Check if can afford the wage
-  if (wageDemand > teamWageBudget * 0.1) {
-    // Don't spend more than 10% of wage budget on one player
+  if (wageDemand > teamWageBudget * config.maxWageAllocationRatio) {
     return { willBuy: false, reason: 'Cannot afford wages' };
   }
 
-  // Decide offer amount (start at 90% of asking price)
-  const offerAmount = Math.round(askingPrice * 0.9);
+  // Decide offer amount based on config ratio
+  const offerAmount = Math.round(askingPrice * config.offerPriceRatio);
 
   // Contract years based on age
   let contractYears: number;
@@ -393,22 +402,26 @@ let listingCounter = 0;
 
 /**
  * Generate a unique listing ID
+ * @param saveId Optional saveId to include for uniqueness across saves
  */
-export function generateListingId(): string {
+export function generateListingId(saveId?: string): string {
   const timestamp = Date.now();
   const counter = listingCounter++;
-  return `lst-${timestamp}-${counter}`;
+  const savePrefix = saveId ? `${saveId.slice(0, 8)}-` : '';
+  return `lst-${savePrefix}${timestamp}-${counter}`;
 }
 
 let offerCounter = 0;
 
 /**
  * Generate a unique offer ID
+ * @param saveId Optional saveId to include for uniqueness across saves
  */
-export function generateOfferId(): string {
+export function generateOfferId(saveId?: string): string {
   const timestamp = Date.now();
   const counter = offerCounter++;
-  return `off-${timestamp}-${counter}`;
+  const savePrefix = saveId ? `${saveId.slice(0, 8)}-` : '';
+  return `off-${savePrefix}${timestamp}-${counter}`;
 }
 
 /**
@@ -532,8 +545,7 @@ export function aiSelectPlayersToList(
   // Also list players with expiring contracts who won't renew
   for (const player of players) {
     if (!toList.includes(player)) {
-      const contractYearsRemaining =
-        player.contractEndSeason - currentSeason;
+      const contractYearsRemaining = player.contractEndSeason - currentSeason;
       if (
         contractYearsRemaining <= CONTRACT_EXPIRY_THRESHOLD &&
         !shouldAutoRenew(player)
@@ -545,7 +557,6 @@ export function aiSelectPlayersToList(
 
   return toList;
 }
-
 
 // ============================================================================
 // FREE AGENT GENERATION
@@ -567,21 +578,86 @@ export const VETERAN_FREE_AGENT_RATIO = 0.7;
 
 // Common first names for procedural generation
 const FIRST_NAMES = [
-  'João', 'Pedro', 'Lucas', 'Gabriel', 'Matheus', 'Rafael', 'Bruno', 'Felipe',
-  'Gustavo', 'Daniel', 'Thiago', 'Eduardo', 'Marcos', 'Roberto', 'Carlos',
-  'André', 'Fernando', 'Ricardo', 'Diego', 'Leandro', 'Marcelo', 'Alessandro',
-  'Rodrigo', 'Vinicius', 'Paulo', 'Henrique', 'Junior', 'Sergio', 'Antonio',
-  'Miguel', 'Leonardo', 'Fabio', 'Claudio', 'Jorge', 'Alex', 'William',
+  'João',
+  'Pedro',
+  'Lucas',
+  'Gabriel',
+  'Matheus',
+  'Rafael',
+  'Bruno',
+  'Felipe',
+  'Gustavo',
+  'Daniel',
+  'Thiago',
+  'Eduardo',
+  'Marcos',
+  'Roberto',
+  'Carlos',
+  'André',
+  'Fernando',
+  'Ricardo',
+  'Diego',
+  'Leandro',
+  'Marcelo',
+  'Alessandro',
+  'Rodrigo',
+  'Vinicius',
+  'Paulo',
+  'Henrique',
+  'Junior',
+  'Sergio',
+  'Antonio',
+  'Miguel',
+  'Leonardo',
+  'Fabio',
+  'Claudio',
+  'Jorge',
+  'Alex',
+  'William',
 ];
 
 // Common last names for procedural generation
 const LAST_NAMES = [
-  'Silva', 'Santos', 'Oliveira', 'Souza', 'Lima', 'Pereira', 'Costa',
-  'Rodrigues', 'Almeida', 'Ferreira', 'Gomes', 'Martins', 'Araújo', 'Barbosa',
-  'Ribeiro', 'Carvalho', 'Mendes', 'Nascimento', 'Moreira', 'Cardoso',
-  'Correia', 'Teixeira', 'Nunes', 'Cavalcanti', 'Monteiro', 'Campos',
-  'Vieira', 'Marques', 'Batista', 'Dias', 'Freitas', 'Andrade', 'Pinto',
-  'Castro', 'Rocha', 'Moura', 'Bezerra', 'Fonseca', 'Melo', 'Borges',
+  'Silva',
+  'Santos',
+  'Oliveira',
+  'Souza',
+  'Lima',
+  'Pereira',
+  'Costa',
+  'Rodrigues',
+  'Almeida',
+  'Ferreira',
+  'Gomes',
+  'Martins',
+  'Araújo',
+  'Barbosa',
+  'Ribeiro',
+  'Carvalho',
+  'Mendes',
+  'Nascimento',
+  'Moreira',
+  'Cardoso',
+  'Correia',
+  'Teixeira',
+  'Nunes',
+  'Cavalcanti',
+  'Monteiro',
+  'Campos',
+  'Vieira',
+  'Marques',
+  'Batista',
+  'Dias',
+  'Freitas',
+  'Andrade',
+  'Pinto',
+  'Castro',
+  'Rocha',
+  'Moura',
+  'Bezerra',
+  'Fonseca',
+  'Melo',
+  'Borges',
 ];
 
 /**
@@ -857,3 +933,6 @@ export function calculateRenewalContractEnd(
     return currentSeason + 2;
   }
 }
+
+// Re-export config types and defaults
+export * from './config';

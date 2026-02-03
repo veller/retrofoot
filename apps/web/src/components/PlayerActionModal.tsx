@@ -98,9 +98,7 @@ export function PlayerActionModal({
               <h2 className="text-white font-bold text-lg truncate">
                 {playerDisplayName}
               </h2>
-              <p className="text-slate-400 text-sm">
-                {player.age} years old
-              </p>
+              <p className="text-slate-400 text-sm">{player.age} years old</p>
             </div>
           </div>
           <button

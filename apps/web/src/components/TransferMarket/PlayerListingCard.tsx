@@ -9,7 +9,9 @@ interface PlayerListingCardProps {
   isSelected?: boolean;
 }
 
-function getStatusBadge(status: string): { label: string; className: string } | null {
+function getStatusBadge(
+  status: string,
+): { label: string; className: string } | null {
   switch (status) {
     case 'contract_expiring':
       return {
@@ -76,7 +78,9 @@ export function PlayerListingCard({
 
         {/* Stats */}
         <div className="text-right flex-shrink-0">
-          <div className={`text-lg font-bold ${getOverallColor(player.overall)}`}>
+          <div
+            className={`text-lg font-bold ${getOverallColor(player.overall)}`}
+          >
             {player.overall}
           </div>
           <div className="text-xs text-slate-500">OVR</div>

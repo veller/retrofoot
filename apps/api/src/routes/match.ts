@@ -7,7 +7,13 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { saves, fixtures, matchEvents, teams, players } from '@retrofoot/db/schema';
+import {
+  saves,
+  fixtures,
+  matchEvents,
+  teams,
+  players,
+} from '@retrofoot/db/schema';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
 import {
@@ -262,7 +268,10 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       })
       .from(fixtures)
       .where(
-        and(eq(fixtures.saveId, saveId), inArray(fixtures.id, resultFixtureIds)),
+        and(
+          eq(fixtures.saveId, saveId),
+          inArray(fixtures.id, resultFixtureIds),
+        ),
       );
 
     const fixturesMap = new Map(roundFixturesData.map((f) => [f.id, f]));
@@ -355,20 +364,27 @@ matchRoutes.post('/:saveId/complete', async (c) => {
           formUpdates.get(fixture.homeTeamId) ??
           teamsFormMap.get(fixture.homeTeamId) ??
           DEFAULT_FORM;
-        const newHomeForm = [...homeCurrentForm, homeResult].slice(-FORM_HISTORY_LENGTH);
+        const newHomeForm = [...homeCurrentForm, homeResult].slice(
+          -FORM_HISTORY_LENGTH,
+        );
         formUpdates.set(fixture.homeTeamId, newHomeForm);
 
         const awayCurrentForm =
           formUpdates.get(fixture.awayTeamId) ??
           teamsFormMap.get(fixture.awayTeamId) ??
           DEFAULT_FORM;
-        const newAwayForm = [...awayCurrentForm, awayResult].slice(-FORM_HISTORY_LENGTH);
+        const newAwayForm = [...awayCurrentForm, awayResult].slice(
+          -FORM_HISTORY_LENGTH,
+        );
         formUpdates.set(fixture.awayTeamId, newAwayForm);
 
         const goalEvents = result.events.filter((e) => e.type === 'goal');
         for (const goal of goalEvents) {
           if (goal.playerId) {
-            playerGoals.set(goal.playerId, (playerGoals.get(goal.playerId) || 0) + 1);
+            playerGoals.set(
+              goal.playerId,
+              (playerGoals.get(goal.playerId) || 0) + 1,
+            );
           }
           if (goal.assistPlayerId) {
             playerAssists.set(
@@ -393,10 +409,11 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       ).bind(result.homeScore, result.awayScore, result.fixtureId),
     );
 
-    const goalStatements = Array.from(playerGoals.entries()).map(([playerId, goals]) =>
-      c.env.DB.prepare(
-        'UPDATE players SET season_goals = season_goals + ? WHERE id = ?',
-      ).bind(goals, playerId),
+    const goalStatements = Array.from(playerGoals.entries()).map(
+      ([playerId, goals]) =>
+        c.env.DB.prepare(
+          'UPDATE players SET season_goals = season_goals + ? WHERE id = ?',
+        ).bind(goals, playerId),
     );
 
     const assistStatements = Array.from(playerAssists.entries()).map(
@@ -406,11 +423,11 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         ).bind(assists, playerId),
     );
 
-    const formStatements = Array.from(formUpdates.entries()).map(([teamId, form]) =>
-      c.env.DB.prepare('UPDATE teams SET last_five_results = ? WHERE id = ?').bind(
-        JSON.stringify(form),
-        teamId,
-      ),
+    const formStatements = Array.from(formUpdates.entries()).map(
+      ([teamId, form]) =>
+        c.env.DB.prepare(
+          'UPDATE teams SET last_five_results = ? WHERE id = ?',
+        ).bind(JSON.stringify(form), teamId),
     );
 
     const insertMatchEventsChunked = () =>
@@ -424,11 +441,15 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         ? c.env.DB.batch(fixtureStatements)
         : Promise.resolve(),
       insertMatchEventsChunked(),
-      goalStatements.length > 0 ? c.env.DB.batch(goalStatements) : Promise.resolve(),
+      goalStatements.length > 0
+        ? c.env.DB.batch(goalStatements)
+        : Promise.resolve(),
       assistStatements.length > 0
         ? c.env.DB.batch(assistStatements)
         : Promise.resolve(),
-      formStatements.length > 0 ? c.env.DB.batch(formStatements) : Promise.resolve(),
+      formStatements.length > 0
+        ? c.env.DB.batch(formStatements)
+        : Promise.resolve(),
     ]);
 
     await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason);
@@ -471,17 +492,24 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       console.error('AI transfer processing failed:', err);
     });
 
+    // Check if this was the final round of the season (38 rounds for 20 teams)
+    const TOTAL_ROUNDS = 38;
+    const seasonComplete = currentRound >= TOTAL_ROUNDS;
+
     return c.json({
       success: true,
       newRound,
       matchesProcessed: body.results.length,
+      seasonComplete,
     });
   } catch (error) {
     console.error('Failed to complete round:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
 
     const isDevelopment = c.env.ENVIRONMENT === 'development';
-    const errorStack = isDevelopment && error instanceof Error ? error.stack : undefined;
+    const errorStack =
+      isDevelopment && error instanceof Error ? error.stack : undefined;
 
     return c.json(
       {

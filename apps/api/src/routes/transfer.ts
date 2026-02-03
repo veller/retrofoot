@@ -98,7 +98,10 @@ transferRoutes.get('/listings/:saveId/:teamId', async (c) => {
 
   // Verify user can only access their own team's listings
   if (teamId !== ownership.playerTeamId) {
-    return c.json({ error: 'Unauthorized: Can only view your own team listings' }, 403);
+    return c.json(
+      { error: 'Unauthorized: Can only view your own team listings' },
+      403,
+    );
   }
 
   const db = drizzle(c.env.DB);
@@ -151,7 +154,8 @@ transferRoutes.post('/list/:saveId', async (c) => {
     return c.json({ success: true, ...result });
   } catch (error) {
     console.error('Failed to list player:', error);
-    const message = error instanceof Error ? error.message : 'Failed to list player';
+    const message =
+      error instanceof Error ? error.message : 'Failed to list player';
     return c.json({ error: message }, 400);
   }
 });
@@ -195,7 +199,10 @@ transferRoutes.get('/offers/:saveId/:teamId', async (c) => {
 
   // Verify user can only access their own team's offers
   if (teamId !== ownership.playerTeamId) {
-    return c.json({ error: 'Unauthorized: Can only view your own team offers' }, 403);
+    return c.json(
+      { error: 'Unauthorized: Can only view your own team offers' },
+      403,
+    );
   }
 
   const db = drizzle(c.env.DB);
@@ -229,7 +236,12 @@ transferRoutes.post('/offer/:saveId', async (c) => {
     contractYears: number;
   }>();
 
-  if (!body.playerId || body.offerAmount === undefined || body.offeredWage === undefined || !body.contractYears) {
+  if (
+    !body.playerId ||
+    body.offerAmount === undefined ||
+    body.offeredWage === undefined ||
+    !body.contractYears
+  ) {
     return c.json({ error: 'Missing required fields' }, 400);
   }
 
@@ -262,7 +274,8 @@ transferRoutes.post('/offer/:saveId', async (c) => {
     return c.json({ success: true, ...result });
   } catch (error) {
     console.error('Failed to make offer:', error);
-    const message = error instanceof Error ? error.message : 'Failed to make offer';
+    const message =
+      error instanceof Error ? error.message : 'Failed to make offer';
     return c.json({ error: message }, 400);
   }
 });
@@ -286,12 +299,21 @@ transferRoutes.post('/offer/:saveId/:offerId/respond', async (c) => {
     counterWage?: number;
   }>();
 
-  if (!body.response || !['accept', 'reject', 'counter'].includes(body.response)) {
+  if (
+    !body.response ||
+    !['accept', 'reject', 'counter'].includes(body.response)
+  ) {
     return c.json({ error: 'Invalid response' }, 400);
   }
 
-  if (body.response === 'counter' && (body.counterAmount === undefined || body.counterWage === undefined)) {
-    return c.json({ error: 'Counter offer requires counterAmount and counterWage' }, 400);
+  if (
+    body.response === 'counter' &&
+    (body.counterAmount === undefined || body.counterWage === undefined)
+  ) {
+    return c.json(
+      { error: 'Counter offer requires counterAmount and counterWage' },
+      400,
+    );
   }
 
   if (body.response === 'counter') {
@@ -318,7 +340,8 @@ transferRoutes.post('/offer/:saveId/:offerId/respond', async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.error('Failed to respond to offer:', error);
-    const message = error instanceof Error ? error.message : 'Failed to respond';
+    const message =
+      error instanceof Error ? error.message : 'Failed to respond';
     return c.json({ error: message }, 400);
   }
 });
@@ -343,7 +366,8 @@ transferRoutes.post('/offer/:saveId/:offerId/accept-counter', async (c) => {
     return c.json({ success: true });
   } catch (error) {
     console.error('Failed to accept counter offer:', error);
-    const message = error instanceof Error ? error.message : 'Failed to accept counter';
+    const message =
+      error instanceof Error ? error.message : 'Failed to accept counter';
     return c.json({ error: message }, 400);
   }
 });
@@ -368,7 +392,8 @@ transferRoutes.post('/complete/:saveId/:offerId', async (c) => {
     return c.json(result);
   } catch (error) {
     console.error('Failed to complete transfer:', error);
-    const message = error instanceof Error ? error.message : 'Failed to complete transfer';
+    const message =
+      error instanceof Error ? error.message : 'Failed to complete transfer';
     return c.json({ error: message }, 400);
   }
 });

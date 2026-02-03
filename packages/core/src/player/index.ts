@@ -411,7 +411,7 @@ function distributeDecline(attributes: PlayerAttributes, points: number): void {
   }
 }
 
-// Check if player should retire
+// Check if player should retire (simple version for backwards compatibility)
 export function shouldRetire(player: Player): boolean {
   if (player.age < 33) return false;
   if (player.age >= 40) return true;
@@ -419,6 +419,211 @@ export function shouldRetire(player: Player): boolean {
   // Probability increases with age
   const retirementChance = (player.age - 32) * 0.15;
   return random() < retirementChance;
+}
+
+/**
+ * Calculate enhanced retirement chance based on multiple factors
+ * Returns a probability between 0 and 1
+ */
+export function calculateRetirementChance(
+  player: Player,
+  seasonMinutes: number = 0,
+): number {
+  // Under 33: no retirement
+  if (player.age < 33) return 0;
+
+  // Age 40+: guaranteed retirement
+  if (player.age >= 40) return 1;
+
+  // Base chance increases with age (5% at 33 → 90% at 39)
+  // Scale: 33=5%, 34=15%, 35=30%, 36=45%, 37=60%, 38=75%, 39=90%
+  const ageChance = 0.05 + (player.age - 33) * 0.14;
+
+  let additionalChance = 0;
+
+  // Low playing time modifier (+20% chance if <500 minutes)
+  if (seasonMinutes < 500) {
+    additionalChance += 0.2;
+  }
+
+  // Poor form modifier (+15% chance if avg rating <5.5)
+  if (player.form.seasonAvgRating > 0 && player.form.seasonAvgRating < 5.5) {
+    additionalChance += 0.15;
+  }
+
+  // Significant decline modifier (+10% if overall < potential - 15)
+  const currentOverall = calculateOverall(player);
+  if (currentOverall < player.potential - 15) {
+    additionalChance += 0.1;
+  }
+
+  // Cap total chance at 95% (always a small chance they continue)
+  return Math.min(0.95, ageChance + additionalChance);
+}
+
+/**
+ * Enhanced retirement check using multi-factor algorithm
+ */
+export function shouldRetireEnhanced(
+  player: Player,
+  seasonMinutes: number = 0,
+): boolean {
+  const chance = calculateRetirementChance(player, seasonMinutes);
+  return random() < chance;
+}
+
+/**
+ * Generate a youth player (age 16-19) to replace retiring players
+ * Lower overall but higher potential
+ */
+export function generateYouthPlayer(options: {
+  position?: Position;
+  nationality?: string;
+  teamReputation?: number; // 1-100, affects quality
+}): Player {
+  const {
+    position = randomFromArray([
+      'GK',
+      'DEF',
+      'DEF',
+      'DEF',
+      'DEF',
+      'MID',
+      'MID',
+      'MID',
+      'MID',
+      'ATT',
+      'ATT',
+      'ATT',
+    ] as Position[]),
+    nationality = 'Brazil',
+    teamReputation = 50,
+  } = options;
+
+  // Youth players are age 16-19
+  const age = randomInt(16, 19);
+
+  // Overall based on team reputation (better teams find better youth)
+  // Base: 45-55, with reputation bonus up to +15
+  const repBonus = Math.floor((teamReputation / 100) * 15);
+  const baseOverall = randomInt(45, 55);
+  const targetOverall = Math.min(70, baseOverall + repBonus);
+
+  const { name, nickname } = generatePlayerName();
+  const preferredFoot = getPreferredFoot();
+
+  // Higher potential for youth (10-25 above current)
+  const potentialBonus = randomInt(10, 25);
+  const potential = Math.min(99, targetOverall + potentialBonus);
+
+  // Generate unique ID using timestamp + multiple random components
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}-${Math.random().toString(36).substring(2, 9)}`;
+
+  const player: Player = {
+    id: `youth-${uniqueId}`,
+    name,
+    nickname,
+    age,
+    nationality,
+    position,
+    preferredFoot,
+    attributes: generateAttributes(position, targetOverall),
+    potential,
+    morale: randomInt(70, 90), // Youth tend to be enthusiastic
+    fitness: randomInt(90, 100), // Youth are fit
+    injured: false,
+    injuryWeeks: 0,
+    contractEndSeason: 2026 + randomInt(2, 4), // Longer contracts for youth
+    wage: calculateWage(targetOverall) * 0.5, // Lower wages for youth
+    marketValue: calculateMarketValue(targetOverall, age),
+    status: 'active',
+    form: createDefaultForm(),
+  };
+
+  return player;
+}
+
+/**
+ * Process retirements and generate replacement youth players
+ * Returns updated player list and info about retirements/additions
+ */
+export function processRetirements(
+  players: Player[],
+  _teamId: string,
+  teamReputation: number = 50,
+): {
+  updatedPlayers: Player[];
+  retiredPlayers: Player[];
+  newYouthPlayers: Player[];
+} {
+  const retiredPlayers: Player[] = [];
+  const remainingPlayers: Player[] = [];
+
+  // Check each player for retirement
+  for (const player of players) {
+    if (shouldRetireEnhanced(player, player.form.seasonMinutes)) {
+      retiredPlayers.push({ ...player, status: 'retiring' as const });
+    } else {
+      remainingPlayers.push(player);
+    }
+  }
+
+  // Generate youth players to replace retirees and maintain squad size
+  const newYouthPlayers: Player[] = [];
+  const targetSquadSize = 25;
+  const currentSize = remainingPlayers.length;
+  const deficit = Math.max(0, targetSquadSize - currentSize);
+
+  // Also add one youth for each retiree (minimum)
+  const youthToGenerate = Math.max(retiredPlayers.length, deficit);
+
+  // Count positions to balance replacements
+  const positionCounts: Record<Position, number> = {
+    GK: 0,
+    DEF: 0,
+    MID: 0,
+    ATT: 0,
+  };
+
+  for (const p of remainingPlayers) {
+    positionCounts[p.position]++;
+  }
+
+  // Target distribution: 3 GK, 8 DEF, 8 MID, 6 ATT
+  const targetCounts: Record<Position, number> = {
+    GK: 3,
+    DEF: 8,
+    MID: 8,
+    ATT: 6,
+  };
+
+  for (let i = 0; i < youthToGenerate; i++) {
+    // Find position with biggest deficit
+    let position: Position = 'MID';
+    let biggestDeficit = -999;
+
+    for (const pos of ['GK', 'DEF', 'MID', 'ATT'] as Position[]) {
+      const deficit = targetCounts[pos] - positionCounts[pos];
+      if (deficit > biggestDeficit) {
+        biggestDeficit = deficit;
+        position = pos;
+      }
+    }
+
+    const youth = generateYouthPlayer({
+      position,
+      teamReputation,
+    });
+
+    newYouthPlayers.push(youth);
+    positionCounts[position]++;
+  }
+
+  return {
+    updatedPlayers: [...remainingPlayers, ...newYouthPlayers],
+    retiredPlayers,
+    newYouthPlayers,
+  };
 }
 
 // Update player form after a match

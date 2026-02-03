@@ -71,8 +71,7 @@ export function OfferCard({
     direction === 'incoming' && offer.status === 'pending';
   const showAcceptCounter =
     direction === 'outgoing' && offer.status === 'counter';
-  const showComplete =
-    offer.status === 'accepted' && direction === 'outgoing';
+  const showComplete = offer.status === 'accepted' && direction === 'outgoing';
 
   return (
     <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
@@ -89,11 +88,18 @@ export function OfferCard({
             </p>
           </div>
         </div>
-        <span
-          className={`px-2 py-1 text-xs font-medium rounded border ${statusBadge.className}`}
-        >
-          {statusBadge.label}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span
+            className={`px-2 py-1 text-xs font-medium rounded border ${statusBadge.className}`}
+          >
+            {statusBadge.label}
+          </span>
+          {direction === 'incoming' && offer.status === 'pending' && (
+            <span className="text-xs bg-amber-600 text-white px-2 py-0.5 rounded font-medium">
+              Must Respond
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Offer Details */}
@@ -119,7 +125,9 @@ export function OfferCard({
       {/* Counter Offer Details */}
       {offer.status === 'counter' && offer.counterAmount !== null && (
         <div className="mb-3 p-3 bg-blue-900/20 border border-blue-700/50 rounded">
-          <p className="text-blue-400 text-sm font-medium mb-2">Counter Offer:</p>
+          <p className="text-blue-400 text-sm font-medium mb-2">
+            Counter Offer:
+          </p>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-slate-400">Fee: </span>
@@ -140,7 +148,9 @@ export function OfferCard({
       {/* Expiration Warning */}
       {isExpiringSoon && (
         <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-yellow-400 text-sm">
-          Expires {roundsRemaining === 0 ? 'this round' : `in ${roundsRemaining} round`}!
+          Expires{' '}
+          {roundsRemaining === 0 ? 'this round' : `in ${roundsRemaining} round`}
+          !
         </div>
       )}
 
@@ -191,8 +201,12 @@ export function OfferCard({
       {/* Round Info */}
       <div className="mt-3 pt-3 border-t border-slate-600/50 flex justify-between text-xs text-slate-500">
         <span>Created: Round {offer.createdRound}</span>
-        {offer.status === 'pending' && <span>Expires: Round {offer.expiresRound}</span>}
-        {offer.respondedRound && <span>Responded: Round {offer.respondedRound}</span>}
+        {offer.status === 'pending' && (
+          <span>Expires: Round {offer.expiresRound}</span>
+        )}
+        {offer.respondedRound && (
+          <span>Responded: Round {offer.respondedRound}</span>
+        )}
       </div>
     </div>
   );

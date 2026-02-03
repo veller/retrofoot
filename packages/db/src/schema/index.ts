@@ -2,7 +2,13 @@
 // RETROFOOT - Database Schema (Drizzle + SQLite/D1)
 // ============================================================================
 
-import { sqliteTable, text, integer, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 // ============================================================================
 // Users & Authentication
@@ -77,6 +83,8 @@ export const saves = sqliteTable('saves', {
   managerReputation: integer('manager_reputation').default(50),
   currentSeason: text('current_season').notNull(), // e.g., "2024/25"
   currentRound: integer('current_round').default(1),
+  gameOver: integer('game_over', { mode: 'boolean' }).default(false),
+  gameOverReason: text('game_over_reason'), // 'relegated' | null
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
@@ -232,27 +240,33 @@ export const transfers = sqliteTable('transfers', {
   date: text('date').notNull(),
 });
 
-
 // ============================================================================
 // Transfer Listings (players for sale / free agents)
 // ============================================================================
 
-export const transferListings = sqliteTable('transfer_listings', {
-  id: text('id').primaryKey(),
-  saveId: text('save_id')
-    .notNull()
-    .references(() => saves.id, { onDelete: 'cascade' }),
-  playerId: text('player_id')
-    .notNull()
-    .references(() => players.id, { onDelete: 'cascade' }),
-  teamId: text('team_id').references(() => teams.id, { onDelete: 'cascade' }), // null = free agent
-  askingPrice: integer('asking_price').notNull(),
-  status: text('status').notNull(), // 'available' | 'contract_expiring' | 'free_agent'
-  listedRound: integer('listed_round').notNull(),
-}, (table) => ({
-  // Unique constraint: a player can only be listed once per save
-  savePlayerUnique: uniqueIndex('transfer_listings_save_player_unique').on(table.saveId, table.playerId),
-}));
+export const transferListings = sqliteTable(
+  'transfer_listings',
+  {
+    id: text('id').primaryKey(),
+    saveId: text('save_id')
+      .notNull()
+      .references(() => saves.id, { onDelete: 'cascade' }),
+    playerId: text('player_id')
+      .notNull()
+      .references(() => players.id, { onDelete: 'cascade' }),
+    teamId: text('team_id').references(() => teams.id, { onDelete: 'cascade' }), // null = free agent
+    askingPrice: integer('asking_price').notNull(),
+    status: text('status').notNull(), // 'available' | 'contract_expiring' | 'free_agent'
+    listedRound: integer('listed_round').notNull(),
+  },
+  (table) => ({
+    // Unique constraint: a player can only be listed once per save
+    savePlayerUnique: uniqueIndex('transfer_listings_save_player_unique').on(
+      table.saveId,
+      table.playerId,
+    ),
+  }),
+);
 
 // ============================================================================
 // Transfer Offers (active negotiations)
@@ -322,6 +336,52 @@ export const transactions = sqliteTable('transactions', {
 });
 
 // ============================================================================
+// Season History (tracks completed seasons)
+// ============================================================================
+
+export const seasonHistory = sqliteTable('season_history', {
+  id: text('id').primaryKey(),
+  saveId: text('save_id')
+    .notNull()
+    .references(() => saves.id, { onDelete: 'cascade' }),
+  seasonYear: text('season_year').notNull(), // e.g., "2024/25"
+  championTeamId: text('champion_team_id').notNull(),
+  championTeamName: text('champion_team_name').notNull(),
+  starPlayerId: text('star_player_id').notNull(),
+  starPlayerName: text('star_player_name').notNull(),
+  topScorerId: text('top_scorer_id').notNull(),
+  topScorerName: text('top_scorer_name').notNull(),
+  topScorerGoals: integer('top_scorer_goals').notNull(),
+  topAssisterId: text('top_assister_id').notNull(),
+  topAssisterName: text('top_assister_name').notNull(),
+  topAssisterAssists: integer('top_assister_assists').notNull(),
+  playerTeamId: text('player_team_id').notNull(),
+  playerTeamPosition: integer('player_team_position').notNull(),
+  playerTeamPoints: integer('player_team_points').notNull(),
+  playerTeamRelegated: integer('player_team_relegated', {
+    mode: 'boolean',
+  }).default(false),
+  relegatedTeamIds: text('relegated_team_ids', { mode: 'json' }).notNull(), // Array of team IDs
+  completedAt: integer('completed_at', { mode: 'timestamp' }).notNull(),
+});
+
+// ============================================================================
+// Achievements (trophies, records, milestones)
+// ============================================================================
+
+export const achievements = sqliteTable('achievements', {
+  id: text('id').primaryKey(),
+  saveId: text('save_id')
+    .notNull()
+    .references(() => saves.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(), // 'trophy' | 'record' | 'milestone'
+  key: text('key').notNull(), // e.g., 'league_champion', 'top_scorer', '100_matches'
+  value: text('value'), // Optional value (e.g., goal count for record)
+  seasonYear: text('season_year'), // Season when achieved (for trophies)
+  unlockedAt: integer('unlocked_at', { mode: 'timestamp' }).notNull(),
+});
+
+// ============================================================================
 // Type exports for use in application
 // ============================================================================
 
@@ -364,9 +424,14 @@ export type NewTactics = typeof tactics.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 
-
 export type TransferListing = typeof transferListings.$inferSelect;
 export type NewTransferListing = typeof transferListings.$inferInsert;
 
 export type TransferOffer = typeof transferOffers.$inferSelect;
 export type NewTransferOffer = typeof transferOffers.$inferInsert;
+
+export type SeasonHistory = typeof seasonHistory.$inferSelect;
+export type NewSeasonHistory = typeof seasonHistory.$inferInsert;
+
+export type Achievement = typeof achievements.$inferSelect;
+export type NewAchievement = typeof achievements.$inferInsert;

@@ -26,13 +26,16 @@ import {
   useTransactions,
   useLeaderboards,
   useTeamListings,
+  useTeamOffers,
+  useSeasonHistory,
   listPlayerForSale,
   removePlayerListing,
   type LeaderboardEntry,
+  type SeasonHistoryEntry,
 } from '../hooks';
 import { useGameStore } from '../stores/gameStore';
 
-type GameTab = 'squad' | 'table' | 'transfers' | 'finances';
+type GameTab = 'squad' | 'table' | 'transfers' | 'finances' | 'history';
 type MobileSquadView = 'squad' | 'pitch' | 'info';
 
 const BENCH_LIMIT = 7;
@@ -89,7 +92,6 @@ export function GamePage() {
 
   // Game store for match functionality
   const gameStoreTeams = useGameStore((s) => s.teams);
-  const gameStoreTactics = useGameStore((s) => s.tactics);
   const initializeGame = useGameStore((s) => s.initializeGame);
   const setStoreTactics = useGameStore((s) => s.setTactics);
   const _hasHydrated = useGameStore((s) => s._hasHydrated);
@@ -103,6 +105,13 @@ export function GamePage() {
 
   // Initialize tactics when team data loads
   const playerTeam = data?.playerTeam ?? null;
+
+  // Fetch offers for badge notification
+  const { incoming: incomingOffers } = useTeamOffers(saveId, playerTeam?.id);
+  const pendingIncomingOffers = useMemo(
+    () => incomingOffers?.filter((o) => o.status === 'pending').length || 0,
+    [incomingOffers],
+  );
 
   // Fetch match data from database for upcoming fixture
   const { data: matchData } = useSaveMatchData(saveId);
@@ -151,12 +160,13 @@ export function GamePage() {
     }
   }, [playerTeam, tactics]);
 
-  // Sync tactics to game store when they change
+  // Sync tactics to game store when local tactics change
+  // We only sync when tactics is non-null (after initialization)
   useEffect(() => {
-    if (tactics && gameStoreTactics !== tactics) {
+    if (tactics) {
       setStoreTactics(tactics);
     }
-  }, [tactics, gameStoreTactics, setStoreTactics]);
+  }, [tactics, setStoreTactics]);
 
   if (isLoading) {
     return (
@@ -233,6 +243,14 @@ export function GamePage() {
               </span>
             </button>
           )}
+          {!upcomingMatch && data.currentRound >= 38 && (
+            <button
+              onClick={() => navigate(`/game/${saveId}/season-summary`)}
+              className="ml-4 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition-colors"
+            >
+              View Season Summary
+            </button>
+          )}
         </div>
 
         {/* Mobile header items */}
@@ -250,8 +268,18 @@ export function GamePage() {
             className="p-2 text-slate-400 hover:text-white"
             aria-label="Open menu"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
             </svg>
           </button>
         </div>
@@ -274,8 +302,18 @@ export function GamePage() {
                 className="p-2 text-slate-400 hover:text-white"
                 aria-label="Close menu"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -285,8 +323,12 @@ export function GamePage() {
                 <p className="text-white font-medium">{playerTeam.name}</p>
               </div>
               <div className="bg-slate-700/50 p-3 rounded-lg">
-                <span className="text-slate-500 text-xs uppercase">Transfer Budget</span>
-                <p className="text-pitch-400 font-medium">{formatCurrency(playerTeam.budget)}</p>
+                <span className="text-slate-500 text-xs uppercase">
+                  Transfer Budget
+                </span>
+                <p className="text-pitch-400 font-medium">
+                  {formatCurrency(playerTeam.budget)}
+                </p>
               </div>
               <div className="bg-slate-700/50 p-3 rounded-lg">
                 <span className="text-slate-500 text-xs uppercase">Season</span>
@@ -298,7 +340,9 @@ export function GamePage() {
               </div>
               {upcomingMatch && (
                 <div className="bg-slate-700/50 p-3 rounded-lg">
-                  <span className="text-slate-500 text-xs uppercase">Next Match</span>
+                  <span className="text-slate-500 text-xs uppercase">
+                    Next Match
+                  </span>
                   <p className="text-white">
                     vs {upcomingMatch.opponent?.shortName || '???'}
                     {upcomingMatch.isHome ? ' (H)' : ' (A)'}
@@ -313,17 +357,24 @@ export function GamePage() {
       {/* Navigation Tabs */}
       <nav className="bg-slate-800 border-b border-slate-700 px-4">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide">
-          {(['squad', 'table', 'transfers', 'finances'] as const).map((tab) => (
+          {(
+            ['squad', 'table', 'transfers', 'finances', 'history'] as const
+          ).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 md:px-6 py-3 text-sm font-medium uppercase transition-colors flex-shrink-0 ${
+              className={`px-4 md:px-6 py-3 text-sm font-medium uppercase transition-colors flex-shrink-0 flex items-center gap-2 ${
                 activeTab === tab
                   ? 'text-pitch-400 border-b-2 border-pitch-400'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
               {tab}
+              {tab === 'transfers' && pendingIncomingOffers > 0 && (
+                <span className="px-1.5 py-0.5 text-xs bg-amber-600 text-white rounded-full font-bold">
+                  {pendingIncomingOffers}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -362,6 +413,9 @@ export function GamePage() {
               saveId={saveId}
             />
           )}
+          {activeTab === 'history' && saveId && (
+            <HistoryPanel saveId={saveId} playerTeamId={playerTeam.id} />
+          )}
         </div>
       </main>
     </div>
@@ -369,9 +423,21 @@ export function GamePage() {
 }
 
 const FORM_TREND_CONFIG = {
-  up: { className: 'bg-green-500/20 text-green-400 border-green-500/50', label: 'HOT', title: 'Form improving' },
-  down: { className: 'bg-red-500/20 text-red-400 border-red-500/50', label: 'COLD', title: 'Form declining' },
-  stable: { className: 'bg-slate-500/20 text-slate-400 border-slate-500/50', label: 'OK', title: 'Form stable' },
+  up: {
+    className: 'bg-green-500/20 text-green-400 border-green-500/50',
+    label: 'HOT',
+    title: 'Form improving',
+  },
+  down: {
+    className: 'bg-red-500/20 text-red-400 border-red-500/50',
+    label: 'COLD',
+    title: 'Form declining',
+  },
+  stable: {
+    className: 'bg-slate-500/20 text-slate-400 border-slate-500/50',
+    label: 'OK',
+    title: 'Form stable',
+  },
 } as const;
 
 function FormTrendIcon({ player }: { player: Player }) {
@@ -407,15 +473,26 @@ interface SquadPanelProps {
   saveId: string;
 }
 
-function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps) {
+function SquadPanel({
+  playerTeam,
+  tactics,
+  setTactics,
+  saveId,
+}: SquadPanelProps) {
   const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null);
   const [mobileView, setMobileView] = useState<MobileSquadView>('squad');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch team's current listings to know which players are already listed
-  const { listings, refetch: refetchListings } = useTeamListings(saveId, playerTeam.id);
-  const listedPlayerIds = useMemo(() => new Set(listings.map((l) => l.playerId)), [listings]);
+  const { listings, refetch: refetchListings } = useTeamListings(
+    saveId,
+    playerTeam.id,
+  );
+  const listedPlayerIds = useMemo(
+    () => new Set(listings.map((l) => l.playerId)),
+    [listings],
+  );
 
   const lineup = tactics.lineup;
   const substitutes = tactics.substitutes;
@@ -576,7 +653,11 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
     if (!selectedPlayerId) return;
     setIsSubmitting(true);
     try {
-      const result = await listPlayerForSale(saveId, selectedPlayerId, askingPrice);
+      const result = await listPlayerForSale(
+        saveId,
+        selectedPlayerId,
+        askingPrice,
+      );
       if (!result.success) {
         throw new Error(result.error || 'Failed to list player');
       }
@@ -643,8 +724,12 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
       </div>
 
       {/* Left: Squad list */}
-      <div className={`${mobileView === 'squad' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[36%] min-w-0 lg:shrink-0 bg-slate-800 border-r border-slate-700 p-4 lg:p-6 overflow-auto`}>
-        <h2 className="text-lg lg:text-xl font-bold text-white mb-3 lg:mb-4">Squad</h2>
+      <div
+        className={`${mobileView === 'squad' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[36%] min-w-0 lg:shrink-0 bg-slate-800 border-r border-slate-700 p-4 lg:p-6 overflow-auto`}
+      >
+        <h2 className="text-lg lg:text-xl font-bold text-white mb-3 lg:mb-4">
+          Squad
+        </h2>
         <p className="text-slate-400 text-xs lg:text-sm mb-4 lg:mb-6">
           Your squad. Manage your players, set formations, and prepare for
           matches.
@@ -670,10 +755,14 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <PositionBadge position={player.position} />
-                  <span className={`text-white ${getNameSizeClass(playerDisplayName)} truncate`}>
+                  <span
+                    className={`text-white ${getNameSizeClass(playerDisplayName)} truncate`}
+                  >
                     {playerDisplayName}
                   </span>
-                  <span className="text-slate-400 text-xs flex-shrink-0">{player.age}y</span>
+                  <span className="text-slate-400 text-xs flex-shrink-0">
+                    {player.age}y
+                  </span>
                   {isListed && (
                     <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
                       LISTED
@@ -711,10 +800,14 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
       </div>
 
       {/* Middle: Pitch + bench */}
-      <div className={`${mobileView === 'pitch' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[38%] min-w-0 lg:shrink-0`}>
+      <div
+        className={`${mobileView === 'pitch' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[38%] min-w-0 lg:shrink-0`}
+      >
         <div className="bg-slate-800 p-4 lg:p-6 flex-1 min-h-0 overflow-auto">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h2 className="text-lg lg:text-xl font-bold text-white">Formation</h2>
+            <h2 className="text-lg lg:text-xl font-bold text-white">
+              Formation
+            </h2>
             <div className="flex items-center gap-2 lg:gap-4 flex-wrap">
               <select
                 value={formation}
@@ -728,7 +821,9 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
                 ))}
               </select>
               <div className="flex items-center gap-1 lg:gap-2">
-                <span className="text-slate-400 text-xs lg:text-sm hidden sm:inline">Posture</span>
+                <span className="text-slate-400 text-xs lg:text-sm hidden sm:inline">
+                  Posture
+                </span>
                 {POSTURE_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
@@ -766,7 +861,9 @@ function SquadPanel({ playerTeam, tactics, setTactics, saveId }: SquadPanelProps
       </div>
 
       {/* Right: Team info + Leaderboards */}
-      <div className={`${mobileView === 'info' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[26%] lg:min-w-[200px] lg:shrink-0 p-4 gap-4 overflow-auto`}>
+      <div
+        className={`${mobileView === 'info' ? 'flex flex-col flex-1 min-h-0' : 'hidden'} lg:flex lg:flex-col w-full lg:w-[26%] lg:min-w-[200px] lg:shrink-0 p-4 gap-4 overflow-auto`}
+      >
         <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
             Team Info
@@ -827,7 +924,9 @@ function getRankBadgeStyle(rank: number): string {
 }
 
 function getPlayerStat(player: Player, statKey: 'goals' | 'assists'): number {
-  return statKey === 'goals' ? player.form.seasonGoals : player.form.seasonAssists;
+  return statKey === 'goals'
+    ? player.form.seasonGoals
+    : player.form.seasonAssists;
 }
 
 function SquadLeaderboard({
@@ -871,7 +970,9 @@ function SquadLeaderboard({
                   >
                     {rank}
                   </span>
-                  <span className={`text-white truncate ${getNameSizeClass(playerDisplayName)}`}>
+                  <span
+                    className={`text-white truncate ${getNameSizeClass(playerDisplayName)}`}
+                  >
                     {playerDisplayName}
                   </span>
                 </div>
@@ -910,7 +1011,12 @@ function FormBadge({ result }: { result: 'W' | 'D' | 'L' }) {
   );
 }
 
-function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps) {
+function TablePanel({
+  standings,
+  playerTeamId,
+  teams,
+  saveId,
+}: TablePanelProps) {
   const { data: leaderboardsData, isLoading: leaderboardsLoading } =
     useLeaderboards(saveId);
 
@@ -932,7 +1038,9 @@ function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps)
   return (
     <div className="space-y-4 md:space-y-6 p-3 md:p-4">
       <div className="bg-slate-800 border border-slate-700 p-3 md:p-6">
-        <h2 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">League Table</h2>
+        <h2 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">
+          League Table
+        </h2>
 
         <div className="overflow-x-auto scrollbar-hide">
           <table className="w-full text-xs md:text-sm">
@@ -941,14 +1049,26 @@ function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps)
                 <th className="text-center py-2 w-8 md:w-10 pl-1 md:pl-3">#</th>
                 <th className="text-left py-2">Club</th>
                 <th className="text-center py-2 w-7 md:w-10">P</th>
-                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">W</th>
-                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">D</th>
-                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">L</th>
-                <th className="text-center py-2 w-7 md:w-10 hidden lg:table-cell">GF</th>
-                <th className="text-center py-2 w-7 md:w-10 hidden lg:table-cell">GA</th>
+                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">
+                  W
+                </th>
+                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">
+                  D
+                </th>
+                <th className="text-center py-2 w-7 md:w-10 hidden sm:table-cell">
+                  L
+                </th>
+                <th className="text-center py-2 w-7 md:w-10 hidden lg:table-cell">
+                  GF
+                </th>
+                <th className="text-center py-2 w-7 md:w-10 hidden lg:table-cell">
+                  GA
+                </th>
                 <th className="text-center py-2 w-8 md:w-10">GD</th>
                 <th className="text-center py-2 w-8 md:w-12 font-bold">Pts</th>
-                <th className="text-center py-2 w-28 hidden md:table-cell">Form</th>
+                <th className="text-center py-2 w-28 hidden md:table-cell">
+                  Form
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -966,19 +1086,35 @@ function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps)
                         : ''
                     }`}
                   >
-                    <td className="text-center py-2 pl-1 md:pl-3 text-slate-400">{entry.position}</td>
+                    <td className="text-center py-2 pl-1 md:pl-3 text-slate-400">
+                      {entry.position}
+                    </td>
                     <td className="py-2">
                       <span className="block truncate max-w-[90px] sm:max-w-[140px] md:max-w-none">
                         {entry.teamName}
                       </span>
                     </td>
-                    <td className="text-center py-2 text-slate-300">{entry.played}</td>
-                    <td className="text-center py-2 hidden sm:table-cell">{entry.won}</td>
-                    <td className="text-center py-2 hidden sm:table-cell">{entry.drawn}</td>
-                    <td className="text-center py-2 hidden sm:table-cell">{entry.lost}</td>
-                    <td className="text-center py-2 hidden lg:table-cell">{entry.goalsFor}</td>
-                    <td className="text-center py-2 hidden lg:table-cell">{entry.goalsAgainst}</td>
-                    <td className={`text-center py-2 ${getGoalDifferenceStyle(goalDifference)}`}>
+                    <td className="text-center py-2 text-slate-300">
+                      {entry.played}
+                    </td>
+                    <td className="text-center py-2 hidden sm:table-cell">
+                      {entry.won}
+                    </td>
+                    <td className="text-center py-2 hidden sm:table-cell">
+                      {entry.drawn}
+                    </td>
+                    <td className="text-center py-2 hidden sm:table-cell">
+                      {entry.lost}
+                    </td>
+                    <td className="text-center py-2 hidden lg:table-cell">
+                      {entry.goalsFor}
+                    </td>
+                    <td className="text-center py-2 hidden lg:table-cell">
+                      {entry.goalsAgainst}
+                    </td>
+                    <td
+                      className={`text-center py-2 ${getGoalDifferenceStyle(goalDifference)}`}
+                    >
                       {formatGoalDifference(goalDifference)}
                     </td>
                     <td className="text-center py-2 text-pitch-400 font-bold">
@@ -987,7 +1123,9 @@ function TablePanel({ standings, playerTeamId, teams, saveId }: TablePanelProps)
                     <td className="py-2 hidden md:table-cell">
                       <div className="flex gap-1 justify-center">
                         {teamForm.length > 0 ? (
-                          teamForm.map((r, i) => <FormBadge key={i} result={r} />)
+                          teamForm.map((r, i) => (
+                            <FormBadge key={i} result={r} />
+                          ))
                         ) : (
                           <span className="text-slate-500 text-xs">-</span>
                         )}
@@ -1060,7 +1198,9 @@ function LeaderboardCard({
 
   return (
     <div className="bg-slate-800 border border-slate-700 p-4 md:p-6">
-      <h3 className="text-base md:text-lg font-bold text-white mb-3 md:mb-4">{title}</h3>
+      <h3 className="text-base md:text-lg font-bold text-white mb-3 md:mb-4">
+        {title}
+      </h3>
       {renderContent()}
     </div>
   );
@@ -1090,13 +1230,19 @@ function LeaderboardRow({ entry, rank, isPlayerTeam }: LeaderboardRowProps) {
         </span>
         <PositionBadge position={entry.position as Position} />
         <div className="flex flex-col min-w-0">
-          <span className={`text-white truncate ${getNameSizeClass(playerDisplayName)}`}>
+          <span
+            className={`text-white truncate ${getNameSizeClass(playerDisplayName)}`}
+          >
             {playerDisplayName}
           </span>
-          <span className="text-slate-400 text-[10px] md:text-xs">{entry.teamShortName}</span>
+          <span className="text-slate-400 text-[10px] md:text-xs">
+            {entry.teamShortName}
+          </span>
         </div>
       </div>
-      <span className="text-pitch-400 font-bold text-base md:text-lg flex-shrink-0">{entry.count}</span>
+      <span className="text-pitch-400 font-bold text-base md:text-lg flex-shrink-0">
+        {entry.count}
+      </span>
     </div>
   );
 }
@@ -1190,8 +1336,12 @@ function FinancesPanel({
   // Use actual transaction data if available, otherwise fall back to estimates
   const hasTransactionData = transactions.length > 0;
 
-  const matchDayIncome = hasTransactionData ? sumByCategory('income', 'match_day') : 0;
-  const tvRightsIncome = hasTransactionData ? sumByCategory('income', 'tv_rights') : 0;
+  const matchDayIncome = hasTransactionData
+    ? sumByCategory('income', 'match_day')
+    : 0;
+  const tvRightsIncome = hasTransactionData
+    ? sumByCategory('income', 'tv_rights')
+    : 0;
   const sponsorshipIncome = hasTransactionData
     ? sumByCategory('income', 'sponsorship')
     : estSponsorshipPerRound * roundsPlayed;
@@ -1530,6 +1680,199 @@ function FinancesPanel({
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// History Panel - Season History (Lazy Loaded)
+// ============================================================================
+
+interface HistoryPanelProps {
+  saveId: string;
+  playerTeamId: string;
+}
+
+function HistoryPanel({ saveId, playerTeamId }: HistoryPanelProps) {
+  const { data: history, isLoading, error } = useSeasonHistory(saveId);
+
+  if (isLoading) {
+    return (
+      <div className="p-4 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pitch-400 mx-auto mb-2" />
+          <p className="text-slate-400 text-sm">Loading history...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4">
+        <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4 text-center">
+          <p className="text-red-400">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className="p-4">
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-8 text-center">
+          <h3 className="text-lg font-bold text-white mb-2">No History Yet</h3>
+          <p className="text-slate-400">
+            Complete your first season to see your history here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+        <h2 className="text-xl font-bold text-white mb-6">Season History</h2>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-slate-700/50 p-4 rounded text-center">
+            <p className="text-slate-400 text-xs uppercase tracking-wider">
+              Seasons
+            </p>
+            <p className="text-2xl font-bold text-white">{history.length}</p>
+          </div>
+          <div className="bg-slate-700/50 p-4 rounded text-center">
+            <p className="text-slate-400 text-xs uppercase tracking-wider">
+              Titles
+            </p>
+            <p className="text-2xl font-bold text-amber-400">
+              {history.filter((h) => h.playerTeam.position === 1).length}
+            </p>
+          </div>
+          <div className="bg-slate-700/50 p-4 rounded text-center">
+            <p className="text-slate-400 text-xs uppercase tracking-wider">
+              Best Finish
+            </p>
+            <p className="text-2xl font-bold text-pitch-400">
+              {Math.min(...history.map((h) => h.playerTeam.position))}
+              <span className="text-sm text-slate-400">
+                {Math.min(...history.map((h) => h.playerTeam.position)) === 1
+                  ? 'st'
+                  : Math.min(...history.map((h) => h.playerTeam.position)) === 2
+                    ? 'nd'
+                    : Math.min(...history.map((h) => h.playerTeam.position)) ===
+                        3
+                      ? 'rd'
+                      : 'th'}
+              </span>
+            </p>
+          </div>
+          <div className="bg-slate-700/50 p-4 rounded text-center">
+            <p className="text-slate-400 text-xs uppercase tracking-wider">
+              Avg Position
+            </p>
+            <p className="text-2xl font-bold text-white">
+              {(
+                history.reduce((sum, h) => sum + h.playerTeam.position, 0) /
+                history.length
+              ).toFixed(1)}
+            </p>
+          </div>
+        </div>
+
+        {/* Season List */}
+        <div className="space-y-3">
+          {history.map((season) => (
+            <SeasonHistoryCard
+              key={season.seasonYear}
+              season={season}
+              playerTeamId={playerTeamId}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SeasonHistoryCard({
+  season,
+}: {
+  season: SeasonHistoryEntry;
+  playerTeamId: string;
+}) {
+  const isChampion = season.playerTeam.position === 1;
+  const isTopFour = season.playerTeam.position <= 4;
+
+  return (
+    <div
+      className={`border rounded-lg p-4 ${
+        isChampion
+          ? 'bg-amber-900/20 border-amber-500/50'
+          : isTopFour
+            ? 'bg-pitch-900/20 border-pitch-500/50'
+            : 'bg-slate-700/50 border-slate-600'
+      }`}
+    >
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        {/* Season & Position */}
+        <div className="flex items-center gap-4">
+          <div className="text-center">
+            <p className="text-slate-400 text-xs uppercase">Season</p>
+            <p className="text-lg font-bold text-white">{season.seasonYear}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-slate-400 text-xs uppercase">Position</p>
+            <p
+              className={`text-2xl font-bold ${
+                isChampion
+                  ? 'text-amber-400'
+                  : isTopFour
+                    ? 'text-pitch-400'
+                    : 'text-white'
+              }`}
+            >
+              {season.playerTeam.position}
+              <span className="text-sm text-slate-400">
+                {season.playerTeam.position === 1
+                  ? 'st'
+                  : season.playerTeam.position === 2
+                    ? 'nd'
+                    : season.playerTeam.position === 3
+                      ? 'rd'
+                      : 'th'}
+              </span>
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-slate-400 text-xs uppercase">Points</p>
+            <p className="text-lg font-bold text-white">
+              {season.playerTeam.points}
+            </p>
+          </div>
+          {isChampion && <span className="text-2xl">🏆</span>}
+        </div>
+
+        {/* Awards */}
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400">🏆</span>
+            <span className="text-slate-400">Champion:</span>
+            <span className="text-white">{season.champion.teamName}</span>
+          </div>
+          {season.topScorer.goals > 0 && (
+            <div className="flex items-center gap-2">
+              <span>⚽</span>
+              <span className="text-slate-400">Top Scorer:</span>
+              <span className="text-white">
+                {season.topScorer.playerName} ({season.topScorer.goals})
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

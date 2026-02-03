@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
 
@@ -36,19 +37,29 @@ export function EventIcon({ type, variant = 'default' }: EventIconProps) {
         </span>
       );
     case 'own_goal':
-      return <span className={variant === 'colored' ? 'text-red-400' : ''}>⚽</span>;
+      return (
+        <span className={variant === 'colored' ? 'text-red-400' : ''}>⚽</span>
+      );
     case 'penalty_scored':
       return (
-        <span className={variant === 'colored' ? 'text-green-400' : ''}>⚽</span>
+        <span className={variant === 'colored' ? 'text-green-400' : ''}>
+          ⚽
+        </span>
       );
     case 'penalty_missed':
-      return <span className={variant === 'colored' ? 'text-red-400' : ''}>❌</span>;
+      return (
+        <span className={variant === 'colored' ? 'text-red-400' : ''}>❌</span>
+      );
     case 'yellow_card':
       return (
-        <span className={variant === 'colored' ? 'text-yellow-400' : ''}>🟨</span>
+        <span className={variant === 'colored' ? 'text-yellow-400' : ''}>
+          🟨
+        </span>
       );
     case 'red_card':
-      return <span className={variant === 'colored' ? 'text-red-600' : ''}>🟥</span>;
+      return (
+        <span className={variant === 'colored' ? 'text-red-600' : ''}>🟥</span>
+      );
     case 'substitution':
       return <span>🔄</span>;
     case 'injury':
@@ -146,7 +157,10 @@ function getPhaseLabel(phase: string, minute: number): string {
 
 export function MatchEventsModal({ match, onClose }: MatchEventsModalProps) {
   const { homeTeam, awayTeam, state, attendance } = match;
-  const sortedEvents = [...state.events].sort((a, b) => b.minute - a.minute);
+  const sortedEvents = useMemo(
+    () => [...state.events].sort((a, b) => b.minute - a.minute),
+    [state.events],
+  );
 
   return (
     <div

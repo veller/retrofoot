@@ -50,7 +50,9 @@ export const MatchResultInputSchema = z.object({
   attendance: z.number().int().min(0),
   events: z.array(MatchEventSchema),
   lineupPlayerIds: z.array(z.string()).optional(),
-  substitutionMinutes: z.record(z.string(), z.number().int().min(0).max(120)).optional(),
+  substitutionMinutes: z
+    .record(z.string(), z.number().int().min(0).max(120))
+    .optional(),
 });
 
 /**

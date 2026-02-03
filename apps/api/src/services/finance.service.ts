@@ -123,7 +123,8 @@ export async function processRoundFinances(
 
   for (const team of allTeams) {
     const teamPlayers = playersByTeam.get(team.id) ?? [];
-    const leaguePosition = positionByTeam.get(team.id) ?? DEFAULT_LEAGUE_POSITION;
+    const leaguePosition =
+      positionByTeam.get(team.id) ?? DEFAULT_LEAGUE_POSITION;
     const isHomeGame = homeTeamOpponents.has(team.id);
 
     const sponsorship = calculateRoundSponsorship(team.reputation);
@@ -138,7 +139,10 @@ export async function processRoundFinances(
       const awayRep = teamReputation.get(awayTeamId) ?? DEFAULT_REPUTATION;
 
       attendance = calculateAttendance(
-        { reputation: team.reputation, momentum: team.momentum ?? DEFAULT_MOMENTUM },
+        {
+          reputation: team.reputation,
+          momentum: team.momentum ?? DEFAULT_MOMENTUM,
+        },
         { reputation: awayRep },
         team.capacity,
       );

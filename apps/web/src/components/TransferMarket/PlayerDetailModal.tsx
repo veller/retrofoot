@@ -53,10 +53,7 @@ export function PlayerDetailModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -65,7 +62,9 @@ export function PlayerDetailModal({
           <div className="flex items-center gap-3">
             <PositionBadge position={player.position} />
             <div>
-              <h2 className="text-lg font-bold text-white">{player.playerName}</h2>
+              <h2 className="text-lg font-bold text-white">
+                {player.playerName}
+              </h2>
               <p className="text-sm text-slate-400">
                 {player.teamName || 'Free Agent'} | {player.age} years old
               </p>
@@ -75,8 +74,18 @@ export function PlayerDetailModal({
             onClick={onClose}
             className="p-2 text-slate-400 hover:text-white transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -85,7 +94,9 @@ export function PlayerDetailModal({
         <div className="p-4 border-b border-slate-700">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className={`text-2xl font-bold ${getOverallColor(player.overall)}`}>
+              <div
+                className={`text-2xl font-bold ${getOverallColor(player.overall)}`}
+              >
                 {player.overall}
               </div>
               <div className="text-xs text-slate-500 uppercase">Overall</div>
@@ -100,7 +111,9 @@ export function PlayerDetailModal({
               <div className="text-2xl font-bold text-white">
                 {player.contractEndSeason}
               </div>
-              <div className="text-xs text-slate-500 uppercase">Contract End</div>
+              <div className="text-xs text-slate-500 uppercase">
+                Contract End
+              </div>
             </div>
           </div>
         </div>
@@ -109,13 +122,19 @@ export function PlayerDetailModal({
         <div className="p-4 border-b border-slate-700 bg-slate-700/30">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-xs text-slate-500 uppercase mb-1">Asking Price</div>
-              <div className={`text-xl font-bold ${isFreeAgent ? 'text-green-400' : 'text-pitch-400'}`}>
+              <div className="text-xs text-slate-500 uppercase mb-1">
+                Asking Price
+              </div>
+              <div
+                className={`text-xl font-bold ${isFreeAgent ? 'text-green-400' : 'text-pitch-400'}`}
+              >
                 {isFreeAgent ? 'FREE' : formatCurrency(player.askingPrice)}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500 uppercase mb-1">Current Wage</div>
+              <div className="text-xs text-slate-500 uppercase mb-1">
+                Current Wage
+              </div>
               <div className="text-xl font-bold text-amber-400">
                 {formatCurrency(player.currentWage)}/wk
               </div>
@@ -140,7 +159,9 @@ export function PlayerDetailModal({
                 <input
                   type="number"
                   value={offerAmount}
-                  onChange={(e) => setOfferAmount(parseInt(e.target.value) || 0)}
+                  onChange={(e) =>
+                    setOfferAmount(parseInt(e.target.value) || 0)
+                  }
                   className="flex-1 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-pitch-500 focus:outline-none"
                 />
               </div>
@@ -169,7 +190,8 @@ export function PlayerDetailModal({
             </div>
             {!canAffordWage && (
               <p className="text-yellow-400 text-xs mt-1">
-                High wage for single player (max recommended: {formatCurrency(teamWageBudget * 0.1)})
+                High wage for single player (max recommended:{' '}
+                {formatCurrency(teamWageBudget * 0.1)})
               </p>
             )}
           </div>
@@ -215,7 +237,9 @@ export function PlayerDetailModal({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Contract:</span>
-              <span className="text-white">{contractYears} {contractYears === 1 ? 'year' : 'years'}</span>
+              <span className="text-white">
+                {contractYears} {contractYears === 1 ? 'year' : 'years'}
+              </span>
             </div>
             <div className="pt-2 mt-2 border-t border-slate-600 flex justify-between font-medium">
               <span className="text-slate-300">Total Cost:</span>
@@ -235,7 +259,11 @@ export function PlayerDetailModal({
                 : 'bg-slate-700 text-slate-500 cursor-not-allowed'
             }`}
           >
-            {isSubmitting ? 'Submitting...' : isFreeAgent ? 'Offer Contract' : 'Make Offer'}
+            {isSubmitting
+              ? 'Submitting...'
+              : isFreeAgent
+                ? 'Offer Contract'
+                : 'Make Offer'}
           </button>
         </div>
       </div>

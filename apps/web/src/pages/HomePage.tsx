@@ -58,6 +58,27 @@ export function HomePage() {
           <div className="bg-slate-700 text-slate-400 font-bold py-4 px-8 text-center border-2 border-slate-600">
             Loading...
           </div>
+        ) : hasSave && currentSave?.gameOver ? (
+          <>
+            {/* User has a game over save - show only New Game */}
+            <div className="bg-red-900/50 border-2 border-red-700 p-4 mb-4 text-center">
+              <p className="text-red-400 font-bold mb-1">GAME OVER</p>
+              <p className="text-slate-400 text-sm">
+                {currentSave.gameOverReason === 'relegated'
+                  ? 'Your team was relegated from the league.'
+                  : 'Your career has ended.'}
+              </p>
+            </div>
+            <div className="text-center text-slate-500 text-sm mb-2">
+              {currentSave?.name} • {currentSave?.managerName}
+            </div>
+            <button
+              onClick={handleNewGameClick}
+              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 border-2 border-pitch-400 transition-colors w-full"
+            >
+              NEW GAME
+            </button>
+          </>
         ) : hasSave ? (
           <>
             {/* User has a save - show Continue button */}

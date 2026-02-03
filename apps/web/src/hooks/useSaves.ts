@@ -8,6 +8,8 @@ export interface SaveSummary {
   managerName: string;
   currentSeason: string;
   currentRound: number;
+  gameOver: boolean | null;
+  gameOverReason: string | null;
   createdAt: string;
   updatedAt: string;
 }

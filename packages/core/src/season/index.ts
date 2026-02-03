@@ -11,7 +11,7 @@ import type {
   MatchResult,
   Player,
 } from '../types';
-import { createDefaultForm } from '../types';
+import { createDefaultForm, calculateOverall } from '../types';
 import { simulateMatch } from '../match';
 import { createDefaultTactics } from '../team';
 import { shouldRetire } from '../player';
@@ -404,3 +404,198 @@ export function getNextSeasonYear(currentYear: string): string {
 
   return `${nextStart}/${nextEnd}`;
 }
+
+// ============================================================================
+// COMPLETE SEASON END PROCESSING
+// ============================================================================
+
+/**
+ * Calculate the prize money and TV rights bonus based on final league position
+ */
+export function calculateSeasonEndBudget(
+  currentBudget: number,
+  finalPosition: number,
+  teamReputation: number,
+): {
+  prizeMoney: number;
+  tvRights: number;
+  totalBonus: number;
+  newBudget: number;
+} {
+  // Prize money tiers (champion gets most)
+  const prizeMoneyTiers: Record<number, number> = {
+    1: 50_000_000, // Champion
+    2: 35_000_000,
+    3: 25_000_000,
+    4: 20_000_000, // Top 4
+    5: 15_000_000,
+    6: 12_000_000,
+    7: 10_000_000,
+    8: 8_000_000, // Top 8
+    9: 6_000_000,
+    10: 5_000_000,
+    // Bottom 10 get less
+  };
+
+  // Default prize money for positions 11-20
+  const prizeMoney =
+    prizeMoneyTiers[finalPosition] ||
+    Math.max(2_000_000, 5_000_000 - (finalPosition - 10) * 500_000);
+
+  // TV rights based on reputation (better teams get more exposure)
+  const tvRights = Math.floor(teamReputation * 100_000);
+
+  const totalBonus = prizeMoney + tvRights;
+  const newBudget = currentBudget + totalBonus;
+
+  return {
+    prizeMoney,
+    tvRights,
+    totalBonus,
+    newBudget,
+  };
+}
+
+/**
+ * Calculate reputation change based on final league position
+ */
+export function calculateReputationChange(
+  currentReputation: number,
+  finalPosition: number,
+): number {
+  let change = 0;
+
+  if (finalPosition === 1) {
+    change = 5; // Champion
+  } else if (finalPosition <= 4) {
+    change = 3; // Top 4
+  } else if (finalPosition <= 8) {
+    change = 1; // Top 8
+  } else if (finalPosition >= 17) {
+    change = -3; // Bottom 4 (relegated zone)
+  }
+
+  // Apply change and clamp to 1-100
+  const newReputation = Math.max(1, Math.min(100, currentReputation + change));
+  return newReputation;
+}
+
+/**
+ * Get the relegated team IDs (positions 17-20)
+ */
+export function getRelegatedTeams(standings: StandingEntry[]): string[] {
+  return standings.filter((s) => s.position >= 17).map((s) => s.teamId);
+}
+
+/**
+ * Check if a team was relegated
+ */
+export function isTeamRelegated(
+  teamId: string,
+  standings: StandingEntry[],
+): boolean {
+  const standing = standings.find((s) => s.teamId === teamId);
+  return standing ? standing.position >= 17 : false;
+}
+
+/**
+ * Reset team for new season (momentum, form, financial trackers)
+ */
+export function resetTeamForNewSeason(team: Team): Team {
+  return {
+    ...team,
+    momentum: 50, // Reset to neutral
+    lastFiveResults: [], // Clear results
+    seasonRevenue: 0,
+    seasonExpenses: 0,
+  };
+}
+
+/**
+ * Reset player stats for new season (preserves form level)
+ */
+export function resetPlayerForNewSeason(player: Player): Player {
+  return {
+    ...player,
+    form: {
+      ...createDefaultForm(),
+      form: player.form.form, // Keep current form level
+    },
+    fitness: 100, // Full fitness at season start
+    injured: false,
+    injuryWeeks: 0,
+  };
+}
+
+/**
+ * Get current contract end year number from season string
+ */
+export function getSeasonEndYear(seasonYear: string): number {
+  // Parse "2024/25" to get end year (2025)
+  const parts = seasonYear.split('/');
+  if (parts.length !== 2) {
+    return parseInt(seasonYear, 10) || 2025;
+  }
+
+  const startYear = parseInt(parts[0], 10);
+  return startYear + 1;
+}
+
+/**
+ * Process contract expirations and auto-renewals
+ */
+export function processContracts(
+  players: Player[],
+  currentSeasonYear: string,
+): {
+  renewedPlayers: Player[];
+  releasedPlayers: Player[];
+  updatedPlayers: Player[];
+} {
+  const currentEndYear = getSeasonEndYear(currentSeasonYear);
+  const renewedPlayers: Player[] = [];
+  const releasedPlayers: Player[] = [];
+  const updatedPlayers: Player[] = [];
+
+  for (const player of players) {
+    // Check if contract expires at end of this season
+    if (player.contractEndSeason <= currentEndYear) {
+      // Auto-renew if player is good enough and young enough
+      const overall = calculateOverall(player);
+      if (overall >= 65 && player.age < 33) {
+        // Renew for 2-3 years
+        const renewalYears = player.age < 28 ? 3 : 2;
+        const renewed: Player = {
+          ...player,
+          contractEndSeason: currentEndYear + renewalYears,
+        };
+        renewedPlayers.push(renewed);
+        updatedPlayers.push(renewed);
+      } else {
+        // Release player (contract expired)
+        releasedPlayers.push(player);
+      }
+    } else {
+      updatedPlayers.push(player);
+    }
+  }
+
+  return { renewedPlayers, releasedPlayers, updatedPlayers };
+}
+
+// Re-export star player functions
+export {
+  calculateStarPlayerScore,
+  selectStarPlayer,
+  selectTopScorer,
+  selectTopAssister,
+  getSeasonAwards,
+} from './star-player';
+
+// Re-export enhanced player functions
+export {
+  calculateRetirementChance,
+  shouldRetireEnhanced,
+  generateYouthPlayer,
+  processRetirements,
+} from '../player';

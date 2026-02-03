@@ -3,7 +3,10 @@
 // ============================================================================
 // D1-specific transfer operations
 
-import type { D1Database, D1PreparedStatement } from '@cloudflare/workers-types';
+import type {
+  D1Database,
+  D1PreparedStatement,
+} from '@cloudflare/workers-types';
 import type { drizzle } from 'drizzle-orm/d1';
 import { eq, and, or, isNull, lte } from 'drizzle-orm';
 import {
@@ -115,9 +118,7 @@ export async function getMarketPlayers(
 
   // Filter to only players in listings
   const playerMap = new Map(
-    playerResults
-      .filter((p) => playerIds.includes(p.id))
-      .map((p) => [p.id, p]),
+    playerResults.filter((p) => playerIds.includes(p.id)).map((p) => [p.id, p]),
   );
 
   // Get team names
@@ -145,10 +146,12 @@ export async function getMarketPlayers(
 
     // Calculate overall from attributes
     const attrs = player.attributes as Record<string, number>;
-    const overall = calculateOverall(createPlayerForCalc({
-      attributes: attrs,
-      position: player.position,
-    }));
+    const overall = calculateOverall(
+      createPlayerForCalc({
+        attributes: attrs,
+        position: player.position,
+      }),
+    );
 
     marketPlayers.push({
       id: listing.id,
@@ -205,10 +208,12 @@ export async function getFreeAgents(
 
   return freeAgentPlayers.map((player) => {
     const attrs = player.attributes as Record<string, number>;
-    const overall = calculateOverall(createPlayerForCalc({
-      attributes: attrs,
-      position: player.position,
-    }));
+    const overall = calculateOverall(
+      createPlayerForCalc({
+        attributes: attrs,
+        position: player.position,
+      }),
+    );
 
     return {
       id: `free-${player.id}`,
@@ -274,9 +279,7 @@ export async function getTeamListings(
     .where(eq(players.saveId, saveId));
 
   const playerMap = new Map(
-    playerResults
-      .filter((p) => playerIds.includes(p.id))
-      .map((p) => [p.id, p]),
+    playerResults.filter((p) => playerIds.includes(p.id)).map((p) => [p.id, p]),
   );
 
   // Get team name
@@ -291,10 +294,12 @@ export async function getTeamListings(
   return listings.map((listing) => {
     const player = playerMap.get(listing.playerId)!;
     const attrs = player.attributes as Record<string, number>;
-    const overall = calculateOverall(createPlayerForCalc({
-      attributes: attrs,
-      position: player.position,
-    }));
+    const overall = calculateOverall(
+      createPlayerForCalc({
+        attributes: attrs,
+        position: player.position,
+      }),
+    );
 
     return {
       id: listing.id,
@@ -359,7 +364,10 @@ export async function listPlayerForSale(
 
   // Get current season/round
   const saveResult = await db
-    .select({ currentSeason: saves.currentSeason, currentRound: saves.currentRound })
+    .select({
+      currentSeason: saves.currentSeason,
+      currentRound: saves.currentRound,
+    })
     .from(saves)
     .where(eq(saves.id, saveId))
     .limit(1);
@@ -401,9 +409,10 @@ export async function listPlayerForSale(
 
   // Determine status
   const contractYearsRemaining = player.contractEndSeason - currentSeason;
-  const status = contractYearsRemaining <= 1 ? 'contract_expiring' : 'available';
+  const status =
+    contractYearsRemaining <= 1 ? 'contract_expiring' : 'available';
 
-  const listingId = generateListingId();
+  const listingId = generateListingId(saveId);
 
   try {
     await db.insert(transferListings).values({
@@ -417,7 +426,10 @@ export async function listPlayerForSale(
     });
   } catch (error) {
     // Handle unique constraint violation (race condition)
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+    if (
+      error instanceof Error &&
+      error.message.includes('UNIQUE constraint failed')
+    ) {
       throw new Error('Player is already listed');
     }
     throw error;
@@ -484,9 +496,7 @@ export async function getTeamOffers(
     .where(eq(players.saveId, saveId));
 
   const playerMap = new Map(
-    playerResults
-      .filter((p) => playerIds.includes(p.id))
-      .map((p) => [p.id, p]),
+    playerResults.filter((p) => playerIds.includes(p.id)).map((p) => [p.id, p]),
   );
 
   // Get team names
@@ -497,7 +507,7 @@ export async function getTeamOffers(
 
   const teamMap = new Map(teamResults.map((t) => [t.id, t.name]));
 
-  const mapOffer = (offer: typeof offers[0]): ActiveOffer => {
+  const mapOffer = (offer: (typeof offers)[0]): ActiveOffer => {
     const player = playerMap.get(offer.playerId);
     return {
       id: offer.id,
@@ -505,7 +515,9 @@ export async function getTeamOffers(
       playerName: player?.name || 'Unknown',
       playerPosition: player?.position || 'Unknown',
       fromTeamId: offer.fromTeamId,
-      fromTeamName: offer.fromTeamId ? teamMap.get(offer.fromTeamId) || null : null,
+      fromTeamName: offer.fromTeamId
+        ? teamMap.get(offer.fromTeamId) || null
+        : null,
       toTeamId: offer.toTeamId,
       toTeamName: teamMap.get(offer.toTeamId) || 'Unknown',
       offerAmount: offer.offerAmount,
@@ -522,12 +534,10 @@ export async function getTeamOffers(
 
   // Separate incoming (offers for players we own) and outgoing (offers we made)
   const incoming = offers
-    .filter((o) => o.fromTeamId === teamId && o.status === 'pending')
+    .filter((o) => o.toTeamId === teamId && o.status === 'pending')
     .map(mapOffer);
 
-  const outgoing = offers
-    .filter((o) => o.toTeamId === teamId)
-    .map(mapOffer);
+  const outgoing = offers.filter((o) => o.fromTeamId === teamId).map(mapOffer);
 
   return { incoming, outgoing };
 }
@@ -544,10 +554,16 @@ export async function makeOffer(
   offerAmount: number,
   offeredWage: number,
   contractYears: number,
-): Promise<{ offerId: string; aiResponse?: { action: string; counterAmount?: number; counterWage?: number } }> {
+): Promise<{
+  offerId: string;
+  aiResponse?: { action: string; counterAmount?: number; counterWage?: number };
+}> {
   // Get current round
   const saveResult = await db
-    .select({ currentRound: saves.currentRound, playerTeamId: saves.playerTeamId })
+    .select({
+      currentRound: saves.currentRound,
+      playerTeamId: saves.playerTeamId,
+    })
     .from(saves)
     .where(eq(saves.id, saveId))
     .limit(1);
@@ -573,7 +589,7 @@ export async function makeOffer(
     throw new Error('You already have a pending offer for this player');
   }
 
-  const offerId = generateOfferId();
+  const offerId = generateOfferId(saveId);
 
   await db.insert(transferOffers).values({
     id: offerId,
@@ -606,7 +622,7 @@ export async function makeOffer(
     if (playerResult.length > 0) {
       const player = playerResult[0];
       const attrs = player.attributes as Record<string, number>;
-      
+
       // Get buying team's reputation
       const teamResult = await db
         .select({ reputation: teams.reputation })
@@ -615,14 +631,15 @@ export async function makeOffer(
         .limit(1);
 
       const teamRep = teamResult[0]?.reputation || 50;
-      const minWage = calculateWageDemand(
-        createPlayerForCalc({
-          attributes: attrs,
-          position: player.position,
-          age: player.age,
-        }),
-        teamRep,
-      ) * 0.85; // 15% discount minimum
+      const minWage =
+        calculateWageDemand(
+          createPlayerForCalc({
+            attributes: attrs,
+            position: player.position,
+            age: player.age,
+          }),
+          teamRep,
+        ) * 0.85; // 15% discount minimum
 
       if (offeredWage >= minWage) {
         await db
@@ -645,7 +662,11 @@ export async function makeOffer(
 
         return {
           offerId,
-          aiResponse: { action: 'counter', counterAmount: 0, counterWage: Math.round(minWage) },
+          aiResponse: {
+            action: 'counter',
+            counterAmount: 0,
+            counterWage: Math.round(minWage),
+          },
         };
       }
     }
@@ -698,7 +719,10 @@ export async function makeOffer(
           .where(eq(saves.id, saveId))
           .limit(1);
 
-        const currentSeason = parseInt(saveData[0]?.currentSeason || '2026', 10);
+        const currentSeason = parseInt(
+          saveData[0]?.currentSeason || '2026',
+          10,
+        );
 
         const decision = aiSellDecision(
           askingPrice,
@@ -909,66 +933,110 @@ export async function completeTransfer(
 
   // 1. Update player
   statements.push(
-    d1.prepare(
-      'UPDATE players SET team_id = ?, wage = ?, contract_end_season = ?, morale = 80 WHERE id = ?'
-    ).bind(offer.toTeamId, offer.offeredWage, newContractEnd, offer.playerId)
+    d1
+      .prepare(
+        'UPDATE players SET team_id = ?, wage = ?, contract_end_season = ?, morale = 80 WHERE id = ?',
+      )
+      .bind(offer.toTeamId, offer.offeredWage, newContractEnd, offer.playerId),
   );
 
   // 2. Update team finances
   if (offer.fromTeamId && offer.offerAmount > 0) {
     // Selling team gets money
     statements.push(
-      d1.prepare(
-        'UPDATE teams SET budget = budget + ?, balance = balance + ? WHERE id = ?'
-      ).bind(offer.offerAmount, offer.offerAmount, offer.fromTeamId)
+      d1
+        .prepare(
+          'UPDATE teams SET budget = budget + ?, balance = balance + ? WHERE id = ?',
+        )
+        .bind(offer.offerAmount, offer.offerAmount, offer.fromTeamId),
     );
 
     // Create income transaction for selling team
     const sellTransactionId = generateTransactionId();
     statements.push(
-      d1.prepare(
-        'INSERT INTO transactions (id, save_id, team_id, type, category, amount, description, round, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(sellTransactionId, saveId, offer.fromTeamId, 'income', 'player_sale', offer.offerAmount, 'Player sale', currentRound, nowTimestamp)
+      d1
+        .prepare(
+          'INSERT INTO transactions (id, save_id, team_id, type, category, amount, description, round, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          sellTransactionId,
+          saveId,
+          offer.fromTeamId,
+          'income',
+          'player_sale',
+          offer.offerAmount,
+          'Player sale',
+          currentRound,
+          nowTimestamp,
+        ),
     );
   }
 
   if (offer.offerAmount > 0) {
     // Buying team loses money
     statements.push(
-      d1.prepare(
-        'UPDATE teams SET budget = budget - ?, balance = balance - ? WHERE id = ?'
-      ).bind(offer.offerAmount, offer.offerAmount, offer.toTeamId)
+      d1
+        .prepare(
+          'UPDATE teams SET budget = budget - ?, balance = balance - ? WHERE id = ?',
+        )
+        .bind(offer.offerAmount, offer.offerAmount, offer.toTeamId),
     );
 
     // Create expense transaction for buying team
     const buyTransactionId = generateTransactionId();
     statements.push(
-      d1.prepare(
-        'INSERT INTO transactions (id, save_id, team_id, type, category, amount, description, round, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(buyTransactionId, saveId, offer.toTeamId, 'expense', 'player_buy', offer.offerAmount, 'Player purchase', currentRound, nowTimestamp)
+      d1
+        .prepare(
+          'INSERT INTO transactions (id, save_id, team_id, type, category, amount, description, round, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .bind(
+          buyTransactionId,
+          saveId,
+          offer.toTeamId,
+          'expense',
+          'player_buy',
+          offer.offerAmount,
+          'Player purchase',
+          currentRound,
+          nowTimestamp,
+        ),
     );
   }
 
   // 3. Create transfer record
   statements.push(
-    d1.prepare(
-      'INSERT INTO transfers (id, save_id, player_id, from_team_id, to_team_id, fee, wage, season, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(transferId, saveId, offer.playerId, offer.fromTeamId, offer.toTeamId, offer.offerAmount, offer.offeredWage, currentSeason, now.toISOString())
+    d1
+      .prepare(
+        'INSERT INTO transfers (id, save_id, player_id, from_team_id, to_team_id, fee, wage, season, date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(
+        transferId,
+        saveId,
+        offer.playerId,
+        offer.fromTeamId,
+        offer.toTeamId,
+        offer.offerAmount,
+        offer.offeredWage,
+        currentSeason,
+        now.toISOString(),
+      ),
   );
 
   // 4. Mark offer as completed
   statements.push(
-    d1.prepare(
-      'UPDATE transfer_offers SET status = ? WHERE id = ?'
-    ).bind('completed', offerId)
+    d1
+      .prepare('UPDATE transfer_offers SET status = ? WHERE id = ?')
+      .bind('completed', offerId),
   );
 
   // 5. Remove listing if exists
   if (offer.fromTeamId) {
     statements.push(
-      d1.prepare(
-        'DELETE FROM transfer_listings WHERE save_id = ? AND player_id = ?'
-      ).bind(saveId, offer.playerId)
+      d1
+        .prepare(
+          'DELETE FROM transfer_listings WHERE save_id = ? AND player_id = ?',
+        )
+        .bind(saveId, offer.playerId),
     );
   }
 

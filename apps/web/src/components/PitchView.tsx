@@ -14,7 +14,10 @@ export type PitchSlot =
   | { type: 'lineup'; index: number }
   | { type: 'bench'; index: number };
 
-function getPlayerBorderStyle(isSelected: boolean, isHighlighted: boolean | 0 | undefined): string {
+function getPlayerBorderStyle(
+  isSelected: boolean,
+  isHighlighted: boolean | 0 | undefined,
+): string {
   if (isSelected) {
     return 'border-yellow-400 ring-2 ring-yellow-400 ring-offset-1 md:ring-offset-2 ring-offset-slate-900';
   }
@@ -24,7 +27,10 @@ function getPlayerBorderStyle(isSelected: boolean, isHighlighted: boolean | 0 | 
   return 'border-pitch-400';
 }
 
-function getBenchSlotStyle(isSelected: boolean, isHighlighted: boolean | 0 | undefined): string {
+function getBenchSlotStyle(
+  isSelected: boolean,
+  isHighlighted: boolean | 0 | undefined,
+): string {
   if (isSelected) {
     return 'bg-yellow-900/40 border-2 border-yellow-400';
   }
@@ -175,7 +181,8 @@ export function PitchView({
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
 
-            const showTacticalArrow = posture === 'defensive' || posture === 'attacking';
+            const showTacticalArrow =
+              posture === 'defensive' || posture === 'attacking';
             const isDefensive = posture === 'defensive';
 
             return (

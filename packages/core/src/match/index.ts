@@ -200,7 +200,10 @@ function calculateStrikerStreakModifier(player: Player): number {
 
   // Drought: 5+ low-rated matches = penalty
   if (lowRatings >= STRIKER_DROUGHT_THRESHOLD) {
-    return -STRIKER_DROUGHT_PENALTY * (1 + (lowRatings - STRIKER_DROUGHT_THRESHOLD) * 0.5);
+    return (
+      -STRIKER_DROUGHT_PENALTY *
+      (1 + (lowRatings - STRIKER_DROUGHT_THRESHOLD) * 0.5)
+    );
   }
 
   // Hot streak: high average rating = bonus
@@ -262,7 +265,10 @@ function calculateTeamStrength(
     playerStrength *= 1 + formMod;
 
     // Apply fitness penalty (0-30%)
-    const fitnessPenalty = calculateFitnessModifier(player.fitness ?? 100, minute);
+    const fitnessPenalty = calculateFitnessModifier(
+      player.fitness ?? 100,
+      minute,
+    );
     playerStrength *= 1 - fitnessPenalty;
 
     totalStrength += playerStrength;
@@ -316,14 +322,21 @@ function calculateChanceSuccess(
   const minute = options?.minute ?? 0;
 
   // Calculate attacking team strength
-  const attackStrength = calculateTeamStrength(attackingPlayers, attackingTactics, {
-    team: options?.attackingTeam,
-    redCards: isHome ? options?.homeRedCards : options?.awayRedCards,
-    minute,
-  });
+  const attackStrength = calculateTeamStrength(
+    attackingPlayers,
+    attackingTactics,
+    {
+      team: options?.attackingTeam,
+      redCards: isHome ? options?.homeRedCards : options?.awayRedCards,
+      minute,
+    },
+  );
 
   // Calculate defending team strength
-  const defTactics = defendingTactics ?? { ...attackingTactics, posture: 'defensive' as const };
+  const defTactics = defendingTactics ?? {
+    ...attackingTactics,
+    posture: 'defensive' as const,
+  };
   const defenseStrength = calculateTeamStrength(defendingPlayers, defTactics, {
     team: options?.defendingTeam,
     redCards: isHome ? options?.awayRedCards : options?.homeRedCards,
@@ -348,7 +361,10 @@ function calculateChanceSuccess(
   const defendingGK = defendingPlayers.find((p) => p.position === 'GK');
   baseChance += calculateGKStreakModifier(defendingGK);
 
-  return Math.max(MIN_GOAL_CONVERSION, Math.min(MAX_GOAL_CONVERSION, baseChance));
+  return Math.max(
+    MIN_GOAL_CONVERSION,
+    Math.min(MAX_GOAL_CONVERSION, baseChance),
+  );
 }
 
 // Pick a random player from lineup (weighted by relevant attribute)
@@ -482,16 +498,24 @@ function pickSetPieceScorer(
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
   // Calculate team strengths with all modifiers
-  const homeStrength = calculateTeamStrength(state.homeLineup, state.homeTactics, {
-    team: config.homeTeam,
-    redCards: state.homeRedCards,
-    minute: state.minute,
-  });
-  const awayStrength = calculateTeamStrength(state.awayLineup, state.awayTactics, {
-    team: config.awayTeam,
-    redCards: state.awayRedCards,
-    minute: state.minute,
-  });
+  const homeStrength = calculateTeamStrength(
+    state.homeLineup,
+    state.homeTactics,
+    {
+      team: config.homeTeam,
+      redCards: state.homeRedCards,
+      minute: state.minute,
+    },
+  );
+  const awayStrength = calculateTeamStrength(
+    state.awayLineup,
+    state.awayTactics,
+    {
+      team: config.awayTeam,
+      redCards: state.awayRedCards,
+      minute: state.minute,
+    },
+  );
 
   // Determine which team has possession
   const possessionRoll = random();
@@ -666,7 +690,11 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
 
     // Set piece goal chance from corner
     if (random() < CORNER_GOAL_RATE) {
-      const scorer = pickSetPieceScorer(attackingPlayers, attackingTactics, true);
+      const scorer = pickSetPieceScorer(
+        attackingPlayers,
+        attackingTactics,
+        true,
+      );
       if (attackingTeam === 'home') {
         state.homeScore++;
       } else {
@@ -694,7 +722,11 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
 
     // Set piece goal chance from free kick
     if (random() < FREE_KICK_GOAL_RATE) {
-      const scorer = pickSetPieceScorer(attackingPlayers, attackingTactics, false);
+      const scorer = pickSetPieceScorer(
+        attackingPlayers,
+        attackingTactics,
+        false,
+      );
       if (attackingTeam === 'home') {
         state.homeScore++;
       } else {

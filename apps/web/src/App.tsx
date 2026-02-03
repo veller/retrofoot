@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HomePage } from './pages/HomePage';
 import { GamePage } from './pages/GamePage';
 import { MatchPage } from './pages/MatchPage';
+import { SeasonSummaryPage } from './pages/SeasonSummaryPage';
 import { NewGamePage } from './pages/NewGamePage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
@@ -22,6 +23,10 @@ export function App() {
           <Route path="/game/new" element={<NewGamePage />} />
           <Route path="/game/:saveId" element={<GamePage />} />
           <Route path="/game/:saveId/match" element={<MatchPage />} />
+          <Route
+            path="/game/:saveId/season-summary"
+            element={<SeasonSummaryPage />}
+          />
         </Route>
 
         {/* 404 */}

@@ -46,7 +46,9 @@ export function useLeaderboards(saveId?: string): UseLeaderboardsResult {
           401: 'Unauthorized',
           403: 'Access denied',
         };
-        throw new Error(errorMessages[response.status] ?? 'Failed to fetch leaderboards');
+        throw new Error(
+          errorMessages[response.status] ?? 'Failed to fetch leaderboards',
+        );
       }
 
       const result = await response.json();

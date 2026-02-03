@@ -46,6 +46,8 @@ saveRoutes.get('/', async (c) => {
       managerName: saves.managerName,
       currentSeason: saves.currentSeason,
       currentRound: saves.currentRound,
+      gameOver: saves.gameOver,
+      gameOverReason: saves.gameOverReason,
       createdAt: saves.createdAt,
       updatedAt: saves.updatedAt,
     })

@@ -20,10 +20,8 @@ migrations_dir = "../../packages/db/migrations"
 [vars]
 ENVIRONMENT = "production"
 
-# Development-only overrides
-[env.dev.vars]
-ENVIRONMENT = "development"
-
-# Development secrets (use .dev.vars file for secrets in local dev)
+# Development secrets and overrides (use .dev.vars file for local dev)
+# The .dev.vars file overrides [vars] during `wrangler dev`
 # Create a .dev.vars file with:
 # BETTER_AUTH_SECRET=your-secret-at-least-32-characters-long
+# ENVIRONMENT=development

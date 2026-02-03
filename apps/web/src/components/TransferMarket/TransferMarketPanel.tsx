@@ -15,7 +15,11 @@ import {
 import { PlayerListingCard } from './PlayerListingCard';
 import { PlayerDetailModal } from './PlayerDetailModal';
 import { OfferCard } from './OfferCard';
-import { TransferFilters, DEFAULT_FILTERS, type FilterState } from './TransferFilters';
+import {
+  TransferFilters,
+  DEFAULT_FILTERS,
+  type FilterState,
+} from './TransferFilters';
 import { PositionBadge } from '../PositionBadge';
 import { calculateOverall } from '@retrofoot/core';
 
@@ -34,14 +38,30 @@ export function TransferMarketPanel({
 }: TransferMarketPanelProps) {
   const [activeTab, setActiveTab] = useState<TransferTab>('available');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [selectedPlayer, setSelectedPlayer] = useState<MarketPlayer | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<MarketPlayer | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [actionMessage, setActionMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   // Data hooks
-  const { data: marketData, isLoading: marketLoading, refetch: refetchMarket } = useTransferMarket(saveId);
-  const { listings: myListings, refetch: refetchListings } = useTeamListings(saveId, playerTeam.id);
-  const { incoming, outgoing, refetch: refetchOffers } = useTeamOffers(saveId, playerTeam.id);
+  const {
+    data: marketData,
+    isLoading: marketLoading,
+    refetch: refetchMarket,
+  } = useTransferMarket(saveId);
+  const { listings: myListings, refetch: refetchListings } = useTeamListings(
+    saveId,
+    playerTeam.id,
+  );
+  const {
+    incoming,
+    outgoing,
+    refetch: refetchOffers,
+  } = useTeamOffers(saveId, playerTeam.id);
 
   // Auto-dismiss action messages after 5 seconds
   useEffect(() => {
@@ -55,9 +75,12 @@ export function TransferMarketPanel({
   const filterPlayers = useCallback(
     (players: MarketPlayer[]): MarketPlayer[] => {
       return players.filter((p) => {
-        if (filters.position !== 'ALL' && p.position !== filters.position) return false;
-        if (p.overall < filters.minOverall || p.overall > filters.maxOverall) return false;
-        if (filters.maxPrice > 0 && p.askingPrice > filters.maxPrice) return false;
+        if (filters.position !== 'ALL' && p.position !== filters.position)
+          return false;
+        if (p.overall < filters.minOverall || p.overall > filters.maxOverall)
+          return false;
+        if (filters.maxPrice > 0 && p.askingPrice > filters.maxPrice)
+          return false;
         if (p.age > filters.maxAge) return false;
         return true;
       });
@@ -113,12 +136,17 @@ export function TransferMarketPanel({
       refetchOffers();
       refetchMarket();
     } else {
-      setActionMessage({ type: 'error', text: result.error || 'Failed to make offer' });
+      setActionMessage({
+        type: 'error',
+        text: result.error || 'Failed to make offer',
+      });
     }
   };
 
   // Generic handler for offer actions
-  const handleOfferAction = async <T extends { success: boolean; error?: string }>(
+  const handleOfferAction = async <
+    T extends { success: boolean; error?: string },
+  >(
     action: () => Promise<T>,
     successMessage: string,
     errorMessage: string,
@@ -137,7 +165,10 @@ export function TransferMarketPanel({
     }
   };
 
-  const handleRespondToOffer = (offerId: string, response: 'accept' | 'reject') =>
+  const handleRespondToOffer = (
+    offerId: string,
+    response: 'accept' | 'reject',
+  ) =>
     handleOfferAction(
       () => respondToOffer(saveId, offerId, response),
       response === 'accept' ? 'Offer accepted!' : 'Offer rejected.',
@@ -169,7 +200,10 @@ export function TransferMarketPanel({
       refetchListings();
       refetchMarket();
     } else {
-      setActionMessage({ type: 'error', text: result.error || 'Failed to list player' });
+      setActionMessage({
+        type: 'error',
+        text: result.error || 'Failed to list player',
+      });
     }
   };
 
@@ -179,11 +213,17 @@ export function TransferMarketPanel({
     setIsSubmitting(false);
 
     if (result.success) {
-      setActionMessage({ type: 'success', text: 'Player removed from transfer list.' });
+      setActionMessage({
+        type: 'success',
+        text: 'Player removed from transfer list.',
+      });
       refetchListings();
       refetchMarket();
     } else {
-      setActionMessage({ type: 'error', text: result.error || 'Failed to remove listing' });
+      setActionMessage({
+        type: 'error',
+        text: result.error || 'Failed to remove listing',
+      });
     }
   };
 
@@ -222,7 +262,9 @@ export function TransferMarketPanel({
             {marketLoading ? (
               <p className="text-slate-400">Loading free agents...</p>
             ) : filteredFreeAgents.length === 0 ? (
-              <p className="text-slate-500">No free agents match your filters.</p>
+              <p className="text-slate-500">
+                No free agents match your filters.
+              </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredFreeAgents.map((player) => (
@@ -271,7 +313,9 @@ export function TransferMarketPanel({
                 My Offers ({outgoing.length})
               </h3>
               {outgoing.length === 0 ? (
-                <p className="text-slate-500 text-sm">You haven't made any offers.</p>
+                <p className="text-slate-500 text-sm">
+                  You haven't made any offers.
+                </p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {outgoing.map((offer) => (
@@ -300,7 +344,9 @@ export function TransferMarketPanel({
                 Players Listed for Sale ({myListings.length})
               </h3>
               {myListings.length === 0 ? (
-                <p className="text-slate-500 text-sm">No players listed for sale.</p>
+                <p className="text-slate-500 text-sm">
+                  No players listed for sale.
+                </p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {myListings.map((listing) => (
@@ -311,9 +357,13 @@ export function TransferMarketPanel({
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <PositionBadge position={listing.position} />
-                          <span className="text-white font-medium">{listing.playerName}</span>
+                          <span className="text-white font-medium">
+                            {listing.playerName}
+                          </span>
                         </div>
-                        <span className="text-pitch-400 font-bold">{listing.overall}</span>
+                        <span className="text-pitch-400 font-bold">
+                          {listing.overall}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-400">
@@ -335,10 +385,14 @@ export function TransferMarketPanel({
 
             {/* Squad Players to List */}
             <div>
-              <h3 className="text-lg font-bold text-white mb-3">List a Player</h3>
+              <h3 className="text-lg font-bold text-white mb-3">
+                List a Player
+              </h3>
               <div className="grid gap-2">
                 {playerTeam.players
-                  .filter((p) => !myListings.some((l) => l.playerId.endsWith(p.id)))
+                  .filter(
+                    (p) => !myListings.some((l) => l.playerId === p.id),
+                  )
                   .sort((a, b) => calculateOverall(b) - calculateOverall(a))
                   .map((player) => (
                     <div
@@ -347,8 +401,12 @@ export function TransferMarketPanel({
                     >
                       <div className="flex items-center gap-2">
                         <PositionBadge position={player.position} />
-                        <span className="text-white">{player.nickname || player.name}</span>
-                        <span className="text-slate-400 text-sm">{player.age}y</span>
+                        <span className="text-white">
+                          {player.nickname || player.name}
+                        </span>
+                        <span className="text-slate-400 text-sm">
+                          {player.age}y
+                        </span>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-pitch-400 font-medium">
@@ -371,8 +429,27 @@ export function TransferMarketPanel({
     }
   };
 
+  // Count pending incoming offers
+  const pendingIncoming = incoming.filter((o) => o.status === 'pending');
+
   return (
     <div className="p-4 space-y-4">
+      {/* Alert Banner for Pending Offers */}
+      {pendingIncoming.length > 0 && (
+        <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm flex items-center gap-2">
+          <span className="font-medium">
+            {pendingIncoming.length} incoming offer
+            {pendingIncoming.length > 1 ? 's' : ''} awaiting response
+          </span>
+          <button
+            onClick={() => setActiveTab('offers')}
+            className="ml-auto text-amber-400 hover:text-amber-300 underline"
+          >
+            View Offers
+          </button>
+        </div>
+      )}
+
       {/* Header with budget info */}
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -416,8 +493,16 @@ export function TransferMarketPanel({
       <div className="flex gap-1 border-b border-slate-700 overflow-x-auto">
         {[
           { id: 'available', label: 'Available', count: filteredListed.length },
-          { id: 'free_agents', label: 'Free Agents', count: filteredFreeAgents.length },
-          { id: 'offers', label: 'Offers', count: incoming.length + outgoing.length },
+          {
+            id: 'free_agents',
+            label: 'Free Agents',
+            count: filteredFreeAgents.length,
+          },
+          {
+            id: 'offers',
+            label: 'Offers',
+            count: incoming.length + outgoing.length,
+          },
           { id: 'my_listed', label: 'My Listed', count: myListings.length },
         ].map((tab) => (
           <button

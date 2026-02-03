@@ -216,7 +216,7 @@ export function MatchLiveView({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   const selectedMatch = selectedMatchId
-    ? matches.find((m) => m.fixtureId === selectedMatchId) ?? null
+    ? (matches.find((m) => m.fixtureId === selectedMatchId) ?? null)
     : null;
 
   const phaseLabel = getPhaseLabel(phase);

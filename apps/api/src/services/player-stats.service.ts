@@ -79,7 +79,8 @@ export async function processPlayerStatsAndGrowth(
     const fixture = playerFixtures.find((f) => f.id === result.fixtureId);
     return (
       fixture &&
-      (fixture.homeTeamId === playerTeamId || fixture.awayTeamId === playerTeamId)
+      (fixture.homeTeamId === playerTeamId ||
+        fixture.awayTeamId === playerTeamId)
     );
   });
 
@@ -98,7 +99,10 @@ export async function processPlayerStatsAndGrowth(
 
   for (const event of playerMatch.events) {
     if (event.type === 'goal' && event.playerId) {
-      playerGoals.set(event.playerId, (playerGoals.get(event.playerId) || 0) + 1);
+      playerGoals.set(
+        event.playerId,
+        (playerGoals.get(event.playerId) || 0) + 1,
+      );
       if (event.assistPlayerId) {
         playerAssists.set(
           event.assistPlayerId,
@@ -122,10 +126,16 @@ export async function processPlayerStatsAndGrowth(
     if (lineupIds.size > 0) {
       if (lineupIds.has(dbPlayer.id)) {
         // Starter - check if subbed off (clamp to valid range for extra time)
-        minutesPlayed = Math.min(EXTRA_TIME_MAX, Math.max(0, subMinutes[dbPlayer.id] ?? MATCH_DURATION));
+        minutesPlayed = Math.min(
+          EXTRA_TIME_MAX,
+          Math.max(0, subMinutes[dbPlayer.id] ?? MATCH_DURATION),
+        );
       } else if (subMinutes[dbPlayer.id] !== undefined) {
         // Sub who came on (clamp to prevent negative from extra time scenarios)
-        minutesPlayed = Math.max(0, Math.min(MATCH_DURATION, MATCH_DURATION - subMinutes[dbPlayer.id]));
+        minutesPlayed = Math.max(
+          0,
+          Math.min(MATCH_DURATION, MATCH_DURATION - subMinutes[dbPlayer.id]),
+        );
       }
     } else {
       // Fallback: assume first 11 players by ID in events played full match
@@ -187,9 +197,10 @@ export async function processPlayerStatsAndGrowth(
     const grownPlayer = applyMatchGrowth(player, minutesPlayed, matchRating);
 
     // Update form ratings
-    const newLastFiveRatings = [...player.form.lastFiveRatings, matchRating].slice(
-      -FORM_HISTORY_LENGTH,
-    );
+    const newLastFiveRatings = [
+      ...player.form.lastFiveRatings,
+      matchRating,
+    ].slice(-FORM_HISTORY_LENGTH);
     const avgRecent =
       newLastFiveRatings.reduce((a, b) => a + b, 0) / newLastFiveRatings.length;
     const newForm = Math.max(
@@ -200,9 +211,13 @@ export async function processPlayerStatsAndGrowth(
     // Calculate new season average rating
     // Estimate total matches played using season minutes
     const newSeasonMinutes = player.form.seasonMinutes + minutesPlayed;
-    const previousMatches = player.form.seasonMinutes > 0
-      ? Math.max(1, Math.round(player.form.seasonMinutes / AVG_MINUTES_PER_APPEARANCE))
-      : 0;
+    const previousMatches =
+      player.form.seasonMinutes > 0
+        ? Math.max(
+            1,
+            Math.round(player.form.seasonMinutes / AVG_MINUTES_PER_APPEARANCE),
+          )
+        : 0;
     const totalMatches = previousMatches + 1;
     const prevTotal = player.form.seasonAvgRating * previousMatches;
     const newAvg = (prevTotal + matchRating) / totalMatches;

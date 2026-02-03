@@ -11,7 +11,8 @@
     "./player": "./src/player/index.ts",
     "./team": "./src/team/index.ts",
     "./season": "./src/season/index.ts",
-    "./types": "./src/types/index.ts"
+    "./types": "./src/types/index.ts",
+    "./achievements": "./src/achievements/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

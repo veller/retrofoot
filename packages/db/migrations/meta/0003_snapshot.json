@@ -102,9 +102,7 @@
       "indexes": {
         "idx_accounts_user_id": {
           "name": "idx_accounts_user_id",
-          "columns": [
-            "user_id"
-          ],
+          "columns": ["user_id"],
           "isUnique": false
         }
       },
@@ -113,12 +111,8 @@
           "name": "accounts_user_id_users_id_fk",
           "tableFrom": "accounts",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -205,17 +199,12 @@
       "indexes": {
         "idx_fixtures_save_round": {
           "name": "idx_fixtures_save_round",
-          "columns": [
-            "save_id",
-            "round"
-          ],
+          "columns": ["save_id", "round"],
           "isUnique": false
         },
         "idx_fixtures_save_id": {
           "name": "idx_fixtures_save_id",
-          "columns": [
-            "save_id"
-          ],
+          "columns": ["save_id"],
           "isUnique": false
         }
       },
@@ -224,12 +213,8 @@
           "name": "fixtures_save_id_saves_id_fk",
           "tableFrom": "fixtures",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -237,12 +222,8 @@
           "name": "fixtures_home_team_id_teams_id_fk",
           "tableFrom": "fixtures",
           "tableTo": "teams",
-          "columnsFrom": [
-            "home_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["home_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -250,12 +231,8 @@
           "name": "fixtures_away_team_id_teams_id_fk",
           "tableFrom": "fixtures",
           "tableTo": "teams",
-          "columnsFrom": [
-            "away_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["away_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -327,9 +304,7 @@
       "indexes": {
         "idx_match_events_fixture_id": {
           "name": "idx_match_events_fixture_id",
-          "columns": [
-            "fixture_id"
-          ],
+          "columns": ["fixture_id"],
           "isUnique": false
         }
       },
@@ -338,12 +313,8 @@
           "name": "match_events_fixture_id_fixtures_id_fk",
           "tableFrom": "match_events",
           "tableTo": "fixtures",
-          "columnsFrom": [
-            "fixture_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["fixture_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -545,16 +516,12 @@
       "indexes": {
         "idx_players_save_id": {
           "name": "idx_players_save_id",
-          "columns": [
-            "save_id"
-          ],
+          "columns": ["save_id"],
           "isUnique": false
         },
         "idx_players_team_id": {
           "name": "idx_players_team_id",
-          "columns": [
-            "team_id"
-          ],
+          "columns": ["team_id"],
           "isUnique": false
         }
       },
@@ -563,12 +530,8 @@
           "name": "players_save_id_saves_id_fk",
           "tableFrom": "players",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -576,12 +539,8 @@
           "name": "players_team_id_teams_id_fk",
           "tableFrom": "players",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -669,9 +628,7 @@
       "indexes": {
         "idx_saves_user_id": {
           "name": "idx_saves_user_id",
-          "columns": [
-            "user_id"
-          ],
+          "columns": ["user_id"],
           "isUnique": false
         }
       },
@@ -680,12 +637,8 @@
           "name": "saves_user_id_users_id_fk",
           "tableFrom": "saves",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -757,9 +710,7 @@
       "indexes": {
         "sessions_token_unique": {
           "name": "sessions_token_unique",
-          "columns": [
-            "token"
-          ],
+          "columns": ["token"],
           "isUnique": true
         }
       },
@@ -768,12 +719,8 @@
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -880,10 +827,7 @@
       "indexes": {
         "idx_standings_save_season": {
           "name": "idx_standings_save_season",
-          "columns": [
-            "save_id",
-            "season"
-          ],
+          "columns": ["save_id", "season"],
           "isUnique": false
         }
       },
@@ -892,12 +836,8 @@
           "name": "standings_save_id_saves_id_fk",
           "tableFrom": "standings",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -905,12 +845,8 @@
           "name": "standings_team_id_teams_id_fk",
           "tableFrom": "standings",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -978,12 +914,8 @@
           "name": "tactics_save_id_saves_id_fk",
           "tableFrom": "tactics",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -991,12 +923,8 @@
           "name": "tactics_team_id_teams_id_fk",
           "tableFrom": "tactics",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1144,9 +1072,7 @@
       "indexes": {
         "idx_teams_save_id": {
           "name": "idx_teams_save_id",
-          "columns": [
-            "save_id"
-          ],
+          "columns": ["save_id"],
           "isUnique": false
         }
       },
@@ -1155,12 +1081,8 @@
           "name": "teams_save_id_saves_id_fk",
           "tableFrom": "teams",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1239,10 +1161,7 @@
       "indexes": {
         "idx_transactions_save_team": {
           "name": "idx_transactions_save_team",
-          "columns": [
-            "save_id",
-            "team_id"
-          ],
+          "columns": ["save_id", "team_id"],
           "isUnique": false
         }
       },
@@ -1251,12 +1170,8 @@
           "name": "transactions_save_id_saves_id_fk",
           "tableFrom": "transactions",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1264,12 +1179,8 @@
           "name": "transactions_team_id_teams_id_fk",
           "tableFrom": "transactions",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1351,12 +1262,8 @@
           "name": "transfers_save_id_saves_id_fk",
           "tableFrom": "transfers",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1364,12 +1271,8 @@
           "name": "transfers_player_id_players_id_fk",
           "tableFrom": "transfers",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1377,12 +1280,8 @@
           "name": "transfers_from_team_id_teams_id_fk",
           "tableFrom": "transfers",
           "tableTo": "teams",
-          "columnsFrom": [
-            "from_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["from_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1390,12 +1289,8 @@
           "name": "transfers_to_team_id_teams_id_fk",
           "tableFrom": "transfers",
           "tableTo": "teams",
-          "columnsFrom": [
-            "to_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["to_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1461,9 +1356,7 @@
       "indexes": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         }
       },
@@ -1580,31 +1473,22 @@
       "indexes": {
         "idx_transfer_listings_save_id": {
           "name": "idx_transfer_listings_save_id",
-          "columns": [
-            "save_id"
-          ],
+          "columns": ["save_id"],
           "isUnique": false
         },
         "idx_transfer_listings_player_id": {
           "name": "idx_transfer_listings_player_id",
-          "columns": [
-            "player_id"
-          ],
+          "columns": ["player_id"],
           "isUnique": false
         },
         "idx_transfer_listings_team_id": {
           "name": "idx_transfer_listings_team_id",
-          "columns": [
-            "team_id"
-          ],
+          "columns": ["team_id"],
           "isUnique": false
         },
         "idx_transfer_listings_status": {
           "name": "idx_transfer_listings_status",
-          "columns": [
-            "save_id",
-            "status"
-          ],
+          "columns": ["save_id", "status"],
           "isUnique": false
         }
       },
@@ -1613,12 +1497,8 @@
           "name": "transfer_listings_save_id_saves_id_fk",
           "tableFrom": "transfer_listings",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1626,12 +1506,8 @@
           "name": "transfer_listings_player_id_players_id_fk",
           "tableFrom": "transfer_listings",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1639,12 +1515,8 @@
           "name": "transfer_listings_team_id_teams_id_fk",
           "tableFrom": "transfer_listings",
           "tableTo": "teams",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1758,38 +1630,27 @@
       "indexes": {
         "idx_transfer_offers_save_id": {
           "name": "idx_transfer_offers_save_id",
-          "columns": [
-            "save_id"
-          ],
+          "columns": ["save_id"],
           "isUnique": false
         },
         "idx_transfer_offers_player_id": {
           "name": "idx_transfer_offers_player_id",
-          "columns": [
-            "player_id"
-          ],
+          "columns": ["player_id"],
           "isUnique": false
         },
         "idx_transfer_offers_to_team_id": {
           "name": "idx_transfer_offers_to_team_id",
-          "columns": [
-            "to_team_id"
-          ],
+          "columns": ["to_team_id"],
           "isUnique": false
         },
         "idx_transfer_offers_from_team_id": {
           "name": "idx_transfer_offers_from_team_id",
-          "columns": [
-            "from_team_id"
-          ],
+          "columns": ["from_team_id"],
           "isUnique": false
         },
         "idx_transfer_offers_status": {
           "name": "idx_transfer_offers_status",
-          "columns": [
-            "save_id",
-            "status"
-          ],
+          "columns": ["save_id", "status"],
           "isUnique": false
         }
       },
@@ -1798,12 +1659,8 @@
           "name": "transfer_offers_save_id_saves_id_fk",
           "tableFrom": "transfer_offers",
           "tableTo": "saves",
-          "columnsFrom": [
-            "save_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["save_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1811,12 +1668,8 @@
           "name": "transfer_offers_player_id_players_id_fk",
           "tableFrom": "transfer_offers",
           "tableTo": "players",
-          "columnsFrom": [
-            "player_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["player_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1824,12 +1677,8 @@
           "name": "transfer_offers_from_team_id_teams_id_fk",
           "tableFrom": "transfer_offers",
           "tableTo": "teams",
-          "columnsFrom": [
-            "from_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["from_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1837,12 +1686,8 @@
           "name": "transfer_offers_to_team_id_teams_id_fk",
           "tableFrom": "transfer_offers",
           "tableTo": "teams",
-          "columnsFrom": [
-            "to_team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["to_team_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
