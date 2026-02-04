@@ -481,8 +481,8 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       })
       .where(eq(saves.id, saveId));
 
-    // Process AI transfer activity (non-blocking)
-    processAITransfers(
+    // Process AI transfer activity (kept alive with waitUntil)
+    const transferPromise = processAITransfers(
       db,
       saveId,
       save.playerTeamId,
@@ -491,6 +491,8 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     ).catch((err) => {
       console.error('AI transfer processing failed:', err);
     });
+
+    c.executionCtx.waitUntil(transferPromise);
 
     // Check if this was the final round of the season (38 rounds for 20 teams)
     const TOTAL_ROUNDS = 38;

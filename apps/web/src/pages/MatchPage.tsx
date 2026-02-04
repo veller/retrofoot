@@ -506,7 +506,6 @@ export function MatchPage() {
     setIsSaving(true);
 
     try {
-      // Send results to API - only include persistent events
       const response = await apiFetch(`/api/match/${saveId}/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -533,10 +532,8 @@ export function MatchPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to save match results:', errorData);
         setIsSaving(false);
-        return; // Don't navigate on failure
+        return;
       }
 
       const responseData = await response.json();

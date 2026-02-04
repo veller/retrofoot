@@ -1,7 +1,6 @@
 // ============================================================================
 // RETROFOOT - AI Transfer Service
 // ============================================================================
-// Handles AI team transfer decisions during round advancement
 
 import type { drizzle } from 'drizzle-orm/d1';
 import { eq, and, isNull, ne, inArray, sql } from 'drizzle-orm';
@@ -26,16 +25,9 @@ import {
   type PlayerAttributes,
   type TransferConfig,
 } from '@retrofoot/core';
-
 import { processExpiredOffers } from './transfer.service';
+import { batchInsertChunked } from '../lib/db/batch';
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Fisher-Yates shuffle for fair randomization
- */
 function shuffleArray<T>(array: T[]): T[] {
   const result = [...array];
   for (let i = result.length - 1; i > 0; i--) {
@@ -45,13 +37,6 @@ function shuffleArray<T>(array: T[]): T[] {
   return result;
 }
 
-// ============================================================================
-// AI LISTING DECISIONS
-// ============================================================================
-
-/**
- * Have AI teams list players for sale
- */
 export async function processAIListings(
   db: ReturnType<typeof drizzle>,
   saveId: string,
@@ -59,7 +44,6 @@ export async function processAIListings(
   currentSeason: number,
   currentRound: number,
 ): Promise<number> {
-  // Get all AI teams (not the player's team)
   const aiTeams = await db
     .select({ id: teams.id })
     .from(teams)
@@ -69,7 +53,6 @@ export async function processAIListings(
 
   const aiTeamIds = aiTeams.map((t) => t.id);
 
-  // Get all players from AI teams
   const aiPlayers = await db
     .select({
       id: players.id,
@@ -88,7 +71,6 @@ export async function processAIListings(
     .from(players)
     .where(and(eq(players.saveId, saveId), inArray(players.teamId, aiTeamIds)));
 
-  // Get existing listings to avoid duplicates
   const existingListings = await db
     .select({ playerId: transferListings.playerId })
     .from(transferListings)
@@ -96,19 +78,17 @@ export async function processAIListings(
 
   const listedPlayerIds = new Set(existingListings.map((l) => l.playerId));
 
-  // Group players by team
   const playersByTeam = new Map<string, typeof aiPlayers>();
   for (const player of aiPlayers) {
     if (!player.teamId) continue;
-    const teamPlayers = playersByTeam.get(player.teamId);
-    if (teamPlayers) {
-      teamPlayers.push(player);
+    const existing = playersByTeam.get(player.teamId);
+    if (existing) {
+      existing.push(player);
     } else {
       playersByTeam.set(player.teamId, [player]);
     }
   }
 
-  // For each AI team, select players to list
   const newListings: Array<{
     id: string;
     saveId: string;
@@ -120,53 +100,41 @@ export async function processAIListings(
   }> = [];
 
   for (const [teamId, teamPlayers] of playersByTeam) {
-    // Convert to format expected by aiSelectPlayersToList
-    const formattedPlayers = teamPlayers.map((p) => {
-      const attrs = p.attributes as Record<string, number>;
-      return {
-        id: p.id,
-        name: p.name,
-        age: p.age,
-        position: p.position as Position,
-        attributes: attrs as unknown as PlayerAttributes,
-        potential: p.potential,
-        contractEndSeason: p.contractEndSeason,
-        wage: p.wage,
-        marketValue: p.marketValue,
-        status: (p.status || 'active') as
-          | 'active'
-          | 'retiring'
-          | 'retired'
-          | 'deceased'
-          | 'suspended',
-        form: {
-          form: (p.form as number) || 70,
-          lastFiveRatings: [] as number[],
-          seasonGoals: 0,
-          seasonAssists: 0,
-          seasonMinutes: 0,
-          seasonAvgRating: 0,
-        },
-        morale: 70,
-        fitness: 100,
-        injured: false,
-        injuryWeeks: 0,
-        nickname: undefined,
-        nationality: 'Brazil',
-        preferredFoot: 'right' as const,
-      };
-    });
+    const formattedPlayers = teamPlayers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      age: p.age,
+      position: p.position as Position,
+      attributes: p.attributes as unknown as PlayerAttributes,
+      potential: p.potential,
+      contractEndSeason: p.contractEndSeason,
+      wage: p.wage,
+      marketValue: p.marketValue,
+      status: (p.status || 'active') as 'active' | 'retiring' | 'retired' | 'deceased' | 'suspended',
+      form: {
+        form: (p.form as number) || 70,
+        lastFiveRatings: [] as number[],
+        seasonGoals: 0,
+        seasonAssists: 0,
+        seasonMinutes: 0,
+        seasonAvgRating: 0,
+      },
+      morale: 70,
+      fitness: 100,
+      injured: false,
+      injuryWeeks: 0,
+      nickname: undefined,
+      nationality: 'Brazil',
+      preferredFoot: 'right' as const,
+    }));
 
     const toList = aiSelectPlayersToList(formattedPlayers, currentSeason);
 
     for (const player of toList) {
-      // Skip if already listed
       if (listedPlayerIds.has(player.id)) continue;
 
       const askingPrice = calculateAskingPrice(player, currentSeason);
       const contractYearsRemaining = player.contractEndSeason - currentSeason;
-      const status =
-        contractYearsRemaining <= 1 ? 'contract_expiring' : 'available';
 
       newListings.push({
         id: generateListingId(saveId),
@@ -174,36 +142,26 @@ export async function processAIListings(
         playerId: player.id,
         teamId,
         askingPrice,
-        status,
+        status: contractYearsRemaining <= 1 ? 'contract_expiring' : 'available',
         listedRound: currentRound,
       });
     }
   }
 
-  // Insert new listings
   if (newListings.length > 0) {
-    await db.insert(transferListings).values(newListings);
+    await batchInsertChunked(db, transferListings, newListings);
   }
 
   return newListings.length;
 }
 
-// ============================================================================
-// AI BUY DECISIONS
-// ============================================================================
-
-/**
- * Have AI teams make offers for players they need
- */
 export async function processAIOffers(
   db: ReturnType<typeof drizzle>,
   saveId: string,
   playerTeamId: string,
-  _currentSeason: number,
   currentRound: number,
   config: TransferConfig = DEFAULT_TRANSFER_CONFIG,
 ): Promise<number> {
-  // Get all AI teams with their financial data
   const aiTeams = await db
     .select({
       id: teams.id,
@@ -219,7 +177,6 @@ export async function processAIOffers(
   const aiTeamIds = aiTeams.map((t) => t.id);
   const aiTeamMap = new Map(aiTeams.map((t) => [t.id, t]));
 
-  // Get all players from AI teams to calculate squad composition
   const aiPlayers = await db
     .select({
       id: players.id,
@@ -230,44 +187,46 @@ export async function processAIOffers(
     .from(players)
     .where(and(eq(players.saveId, saveId), inArray(players.teamId, aiTeamIds)));
 
-  // Calculate position counts and average overall for each team
   const teamStats = new Map<
     string,
     {
       positionCounts: Record<Position, number>;
       avgOverall: number;
+      positionAvgOverall: Record<Position, number>;
     }
   >();
 
   for (const teamId of aiTeamIds) {
     const teamPlayers = aiPlayers.filter((p) => p.teamId === teamId);
-    const positionCounts: Record<Position, number> = {
-      GK: 0,
-      DEF: 0,
-      MID: 0,
-      ATT: 0,
-    };
+    const positionCounts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, ATT: 0 };
+    const positionTotalOverall: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, ATT: 0 };
     let totalOverall = 0;
 
     for (const player of teamPlayers) {
-      positionCounts[player.position as Position]++;
-      const attrs = player.attributes as Record<string, number>;
-      totalOverall += calculateOverall(
+      const pos = player.position as Position;
+      positionCounts[pos]++;
+      const playerOverall = calculateOverall(
         createPlayerForCalc({
-          attributes: attrs,
+          attributes: player.attributes as Record<string, number>,
           position: player.position,
         }),
       );
+      totalOverall += playerOverall;
+      positionTotalOverall[pos] += playerOverall;
     }
 
     teamStats.set(teamId, {
       positionCounts,
-      avgOverall:
-        teamPlayers.length > 0 ? totalOverall / teamPlayers.length : 50,
+      avgOverall: teamPlayers.length > 0 ? totalOverall / teamPlayers.length : 50,
+      positionAvgOverall: {
+        GK: positionCounts.GK > 0 ? positionTotalOverall.GK / positionCounts.GK : 50,
+        DEF: positionCounts.DEF > 0 ? positionTotalOverall.DEF / positionCounts.DEF : 50,
+        MID: positionCounts.MID > 0 ? positionTotalOverall.MID / positionCounts.MID : 50,
+        ATT: positionCounts.ATT > 0 ? positionTotalOverall.ATT / positionCounts.ATT : 50,
+      },
     });
   }
 
-  // Get available listings (not from AI teams making decisions)
   const listings = await db
     .select({
       id: transferListings.id,
@@ -276,9 +235,8 @@ export async function processAIOffers(
       askingPrice: transferListings.askingPrice,
     })
     .from(transferListings)
-    .where(eq(transferListings.saveId, saveId));
+    .where(and(eq(transferListings.saveId, saveId), ne(transferListings.status, 'free_agent')));
 
-  // Get player details for listings
   const listedPlayerIds = listings.map((l) => l.playerId);
   if (listedPlayerIds.length === 0) return 0;
 
@@ -298,28 +256,14 @@ export async function processAIOffers(
 
   const playerMap = new Map(listedPlayers.map((p) => [p.id, p]));
 
-  // Get existing pending offers to avoid duplicates
   const existingOffers = await db
-    .select({
-      playerId: transferOffers.playerId,
-      toTeamId: transferOffers.toTeamId,
-    })
+    .select({ playerId: transferOffers.playerId, toTeamId: transferOffers.toTeamId })
     .from(transferOffers)
-    .where(
-      and(
-        eq(transferOffers.saveId, saveId),
-        eq(transferOffers.status, 'pending'),
-      ),
-    );
+    .where(and(eq(transferOffers.saveId, saveId), eq(transferOffers.status, 'pending')));
 
-  const existingOfferSet = new Set(
-    existingOffers.map((o) => `${o.playerId}-${o.toTeamId}`),
-  );
-
-  // Track offers made this round per team
+  const existingOfferSet = new Set(existingOffers.map((o) => `${o.playerId}-${o.toTeamId}`));
   const offersThisRound = new Map<string, number>();
 
-  // Each AI team considers making offers up to the configured limit
   const newOffers: Array<{
     id: string;
     saveId: string;
@@ -341,35 +285,25 @@ export async function processAIOffers(
     const needs = calculatePositionNeeds(stats.positionCounts);
     offersThisRound.set(teamId, 0);
 
-    // Find suitable players to bid on
     for (const listing of listings) {
-      // Check if team has reached offer limit for this round
       const currentOffers = offersThisRound.get(teamId) || 0;
       if (currentOffers >= config.maxOffersPerTeamPerRound) break;
-
-      // Don't bid on own players
       if (listing.teamId === teamId) continue;
-
-      // Check if already has pending offer
       if (existingOfferSet.has(`${listing.playerId}-${teamId}`)) continue;
 
       const player = playerMap.get(listing.playerId);
       if (!player) continue;
 
-      const attrs = player.attributes as Record<string, number>;
-
-      const playerForCalc = createPlayerForCalc({
-        attributes: attrs,
-        position: player.position,
-        age: player.age,
-        potential: player.potential,
-        wage: player.wage,
-        marketValue: player.marketValue,
-        contractEndSeason: player.contractEndSeason,
-      });
-
       const decision = aiBuyDecision(
-        playerForCalc,
+        createPlayerForCalc({
+          attributes: player.attributes as Record<string, number>,
+          position: player.position,
+          age: player.age,
+          potential: player.potential,
+          wage: player.wage,
+          marketValue: player.marketValue,
+          contractEndSeason: player.contractEndSeason,
+        }),
         listing.askingPrice,
         team.budget,
         team.wageBudget,
@@ -377,6 +311,7 @@ export async function processAIOffers(
         needs,
         team.reputation,
         config,
+        stats.positionAvgOverall[player.position as Position],
       );
 
       if (decision.willBuy && decision.offerAmount && decision.offeredWage) {
@@ -393,36 +328,24 @@ export async function processAIOffers(
           createdRound: currentRound,
           expiresRound: currentRound + config.offerExpiryRounds,
         });
-
-        // Track offers for this team
         offersThisRound.set(teamId, currentOffers + 1);
       }
     }
   }
 
-  // Insert new offers
   if (newOffers.length > 0) {
-    await db.insert(transferOffers).values(newOffers);
+    await batchInsertChunked(db, transferOffers, newOffers);
   }
 
   return newOffers.length;
 }
 
-// ============================================================================
-// FREE AGENT SIGNING
-// ============================================================================
-
-/**
- * Have AI teams sign free agents they need
- */
 export async function processAIFreeAgentSignings(
   db: ReturnType<typeof drizzle>,
   saveId: string,
   playerTeamId: string,
   currentSeason: number,
-  _currentRound: number,
 ): Promise<number> {
-  // Get free agents
   const freeAgents = await db
     .select({
       id: players.id,
@@ -439,7 +362,6 @@ export async function processAIFreeAgentSignings(
 
   if (freeAgents.length === 0) return 0;
 
-  // Get AI teams
   const aiTeams = await db
     .select({
       id: teams.id,
@@ -454,7 +376,6 @@ export async function processAIFreeAgentSignings(
 
   const aiTeamIds = aiTeams.map((t) => t.id);
 
-  // Get squad composition for each AI team
   const aiPlayers = await db
     .select({
       teamId: players.teamId,
@@ -464,30 +385,18 @@ export async function processAIFreeAgentSignings(
     .from(players)
     .where(and(eq(players.saveId, saveId), inArray(players.teamId, aiTeamIds)));
 
-  const teamStats = new Map<
-    string,
-    {
-      positionCounts: Record<Position, number>;
-      avgOverall: number;
-    }
-  >();
+  const teamStats = new Map<string, { positionCounts: Record<Position, number>; avgOverall: number }>();
 
   for (const teamId of aiTeamIds) {
     const teamPlayers = aiPlayers.filter((p) => p.teamId === teamId);
-    const positionCounts: Record<Position, number> = {
-      GK: 0,
-      DEF: 0,
-      MID: 0,
-      ATT: 0,
-    };
+    const positionCounts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, ATT: 0 };
     let totalOverall = 0;
 
     for (const player of teamPlayers) {
       positionCounts[player.position as Position]++;
-      const attrs = player.attributes as Record<string, number>;
       totalOverall += calculateOverall(
         createPlayerForCalc({
-          attributes: attrs,
+          attributes: player.attributes as Record<string, number>,
           position: player.position,
         }),
       );
@@ -495,17 +404,12 @@ export async function processAIFreeAgentSignings(
 
     teamStats.set(teamId, {
       positionCounts,
-      avgOverall:
-        teamPlayers.length > 0 ? totalOverall / teamPlayers.length : 50,
+      avgOverall: teamPlayers.length > 0 ? totalOverall / teamPlayers.length : 50,
     });
   }
 
   let signings = 0;
-
-  // Shuffle teams to randomize who gets first pick (Fisher-Yates for fair distribution)
   const shuffledTeams = shuffleArray(aiTeams);
-
-  // Each team can sign one free agent per round
   const signedPlayers = new Set<string>();
 
   for (const team of shuffledTeams) {
@@ -517,20 +421,16 @@ export async function processAIFreeAgentSignings(
     for (const fa of freeAgents) {
       if (signedPlayers.has(fa.id)) continue;
 
-      const attrs = fa.attributes as Record<string, number>;
-
-      const faPlayerForCalc = createPlayerForCalc({
-        attributes: attrs,
-        position: fa.position,
-        age: fa.age,
-        potential: fa.potential,
-        wage: fa.wage,
-        marketValue: fa.marketValue,
-        contractEndSeason: fa.contractEndSeason,
-      });
-
       const decision = aiFreeAgentDecision(
-        faPlayerForCalc,
+        createPlayerForCalc({
+          attributes: fa.attributes as Record<string, number>,
+          position: fa.position,
+          age: fa.age,
+          potential: fa.potential,
+          wage: fa.wage,
+          marketValue: fa.marketValue,
+          contractEndSeason: fa.contractEndSeason,
+        }),
         team.budget,
         team.wageBudget,
         stats.avgOverall,
@@ -539,34 +439,21 @@ export async function processAIFreeAgentSignings(
       );
 
       if (decision.willSign && decision.offeredWage) {
-        // Sign the player
         const newContractEnd = currentSeason + (decision.contractYears || 2);
 
         await db
           .update(players)
-          .set({
-            teamId: team.id,
-            wage: decision.offeredWage,
-            contractEndSeason: newContractEnd,
-            morale: 70,
-          })
+          .set({ teamId: team.id, wage: decision.offeredWage, contractEndSeason: newContractEnd, morale: 70 })
           .where(eq(players.id, fa.id));
 
-        // Update team wage budget tracking
         await db
           .update(teams)
-          .set({
-            roundWages: sql`${teams.roundWages} + ${decision.offeredWage}`,
-          })
+          .set({ roundWages: sql`${teams.roundWages} + ${decision.offeredWage}` })
           .where(eq(teams.id, team.id));
 
         signedPlayers.add(fa.id);
         signings++;
-
-        // Update position counts
         stats.positionCounts[fa.position as Position]++;
-
-        // Only one signing per team per round
         break;
       }
     }
@@ -575,13 +462,6 @@ export async function processAIFreeAgentSignings(
   return signings;
 }
 
-// ============================================================================
-// MAIN PROCESSING FUNCTION
-// ============================================================================
-
-/**
- * Process all AI transfer activity for a round
- */
 export async function processAITransfers(
   db: ReturnType<typeof drizzle>,
   saveId: string,
@@ -597,35 +477,10 @@ export async function processAITransfers(
 }> {
   const currentSeasonNum = parseInt(currentSeason, 10);
 
-  // Process in order
   const expiredOffers = await processExpiredOffers(db, saveId, currentRound);
-  const newListings = await processAIListings(
-    db,
-    saveId,
-    playerTeamId,
-    currentSeasonNum,
-    currentRound,
-  );
-  const newOffers = await processAIOffers(
-    db,
-    saveId,
-    playerTeamId,
-    currentSeasonNum,
-    currentRound,
-    config,
-  );
-  const freeAgentSignings = await processAIFreeAgentSignings(
-    db,
-    saveId,
-    playerTeamId,
-    currentSeasonNum,
-    currentRound,
-  );
+  const newListings = await processAIListings(db, saveId, playerTeamId, currentSeasonNum, currentRound);
+  const newOffers = await processAIOffers(db, saveId, playerTeamId, currentRound, config);
+  const freeAgentSignings = await processAIFreeAgentSignings(db, saveId, playerTeamId, currentSeasonNum);
 
-  return {
-    expiredOffers,
-    newListings,
-    newOffers,
-    freeAgentSignings,
-  };
+  return { expiredOffers, newListings, newOffers, freeAgentSignings };
 }

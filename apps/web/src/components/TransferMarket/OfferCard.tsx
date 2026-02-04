@@ -65,7 +65,8 @@ export function OfferCard({
 }: OfferCardProps) {
   const statusBadge = getStatusBadge(offer.status);
   const roundsRemaining = offer.expiresRound - currentRound;
-  const isExpiringSoon = roundsRemaining <= 1 && offer.status === 'pending';
+  const isExpiringSoon = roundsRemaining <= 2 && offer.status === 'pending';
+  const isExpiringUrgent = roundsRemaining <= 1 && offer.status === 'pending';
 
   const showAcceptReject =
     direction === 'incoming' && offer.status === 'pending';
@@ -147,9 +148,20 @@ export function OfferCard({
 
       {/* Expiration Warning */}
       {isExpiringSoon && (
-        <div className="mb-3 p-2 bg-yellow-900/20 border border-yellow-700/50 rounded text-yellow-400 text-sm">
+        <div
+          className={`mb-3 p-2 rounded text-sm ${
+            isExpiringUrgent
+              ? 'bg-red-900/20 border border-red-700/50 text-red-400'
+              : 'bg-yellow-900/20 border border-yellow-700/50 text-yellow-400'
+          }`}
+        >
+          {isExpiringUrgent ? '⚠️ ' : ''}
           Expires{' '}
-          {roundsRemaining === 0 ? 'this round' : `in ${roundsRemaining} round`}
+          {roundsRemaining === 0
+            ? 'this round'
+            : roundsRemaining === 1
+              ? 'next round'
+              : `in ${roundsRemaining} rounds`}
           !
         </div>
       )}

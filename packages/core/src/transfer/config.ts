@@ -23,6 +23,12 @@ export interface TransferConfig {
   maxWageAllocationRatio: number;
   /** Minimum overall relative to team average for AI buys */
   buyQualityThreshold: number;
+  /** Base probability (0.0 - 1.0) that AI will make an offer when eligible */
+  baseOfferProbability: number;
+  /** Whether AI can buy players to upgrade existing positions (not just fill gaps) */
+  allowPositionUpgrades: boolean;
+  /** Minimum overall difference above position average to trigger an upgrade purchase */
+  upgradeQualityThreshold: number;
 
   // AI Selling Behavior
   /** Accept offer if >= this percentage of asking price (0.0 - 1.0) */
@@ -43,15 +49,18 @@ export interface TransferConfig {
 
 /**
  * Default transfer configuration
- * Produces behavior identical to the original hardcoded values
+ * Tuned for active but realistic market behavior
  */
 export const DEFAULT_TRANSFER_CONFIG: TransferConfig = {
   offerExpiryRounds: 3,
-  maxOffersPerTeamPerRound: 1,
+  maxOffersPerTeamPerRound: 3,
   offerPriceRatio: 0.9,
-  maxBudgetSpendRatio: 0.5,
-  maxWageAllocationRatio: 0.1,
-  buyQualityThreshold: -5,
+  maxBudgetSpendRatio: 0.85,
+  maxWageAllocationRatio: 0.2,
+  buyQualityThreshold: -15,
+  baseOfferProbability: 0.7,
+  allowPositionUpgrades: true,
+  upgradeQualityThreshold: 6,
   acceptThreshold: 1.0,
   overstaffedAcceptThreshold: 0.8,
   counterThreshold: 0.75,
@@ -68,6 +77,11 @@ export const TRANSFER_PRESETS = {
     ...DEFAULT_TRANSFER_CONFIG,
     maxOffersPerTeamPerRound: 1,
     offerPriceRatio: 0.85,
+    maxBudgetSpendRatio: 0.5,
+    maxWageAllocationRatio: 0.1,
+    buyQualityThreshold: -5,
+    baseOfferProbability: 0.4,
+    allowPositionUpgrades: false,
     counterThreshold: 0.85,
     potentialWeightForYouth: 0.3,
   } as TransferConfig,
@@ -78,8 +92,13 @@ export const TRANSFER_PRESETS = {
   /** High activity: aggressive AI, more deals */
   high: {
     ...DEFAULT_TRANSFER_CONFIG,
-    maxOffersPerTeamPerRound: 2,
+    maxOffersPerTeamPerRound: 3,
     offerPriceRatio: 0.95,
+    maxBudgetSpendRatio: 0.8,
+    maxWageAllocationRatio: 0.2,
+    buyQualityThreshold: -15,
+    baseOfferProbability: 0.75,
+    upgradeQualityThreshold: 5,
     overstaffedAcceptThreshold: 0.7,
     counterThreshold: 0.65,
     potentialWeightForYouth: 0.7,

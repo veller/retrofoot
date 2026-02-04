@@ -248,12 +248,26 @@ export function isPositionNeeded(
 }
 
 /**
+ * Get the number of missing players at a position
+ */
+export function getMissingAtPosition(
+  position: Position,
+  needs: PositionNeeds,
+): number {
+  const positionData = needs[position];
+  return Math.max(0, positionData.ideal - positionData.current);
+}
+
+/**
  * AI decision on whether to buy a player
  *
  * willBuy if:
- * - position needed (< ideal count)
+ * - position needed (< ideal count) OR upgrade opportunity (player significantly better)
  * - can afford (fee + wage budget)
- * - quality fits (overall >= team avg - 5)
+ * - quality fits (overall >= team avg - threshold)
+ * - random probability check passes (adds market variability)
+ *
+ * @param positionAverageOverall - Optional average overall of current players at this position (for upgrade logic)
  */
 export function aiBuyDecision(
   player: Player,
@@ -264,6 +278,7 @@ export function aiBuyDecision(
   positionNeeds: PositionNeeds,
   teamReputation: number,
   config: TransferConfig = DEFAULT_TRANSFER_CONFIG,
+  positionAverageOverall?: number,
 ): {
   willBuy: boolean;
   offerAmount?: number;
@@ -280,9 +295,15 @@ export function aiBuyDecision(
       : 0;
   const effectiveRating = overall + potentialBonus;
 
-  // Check if position is needed
-  if (!isPositionNeeded(player.position, positionNeeds)) {
-    return { willBuy: false, reason: 'Position not needed' };
+  // Check if position is needed OR if this is an upgrade opportunity
+  const positionNeeded = isPositionNeeded(player.position, positionNeeds);
+  const isUpgradeOpportunity =
+    config.allowPositionUpgrades &&
+    positionAverageOverall !== undefined &&
+    effectiveRating >= positionAverageOverall + config.upgradeQualityThreshold;
+
+  if (!positionNeeded && !isUpgradeOpportunity) {
+    return { willBuy: false, reason: 'Position not needed and not an upgrade' };
   }
 
   // Check if quality fits the team (using effective rating for youth potential)
@@ -303,8 +324,39 @@ export function aiBuyDecision(
     return { willBuy: false, reason: 'Cannot afford wages' };
   }
 
-  // Decide offer amount based on config ratio
-  const offerAmount = Math.round(askingPrice * config.offerPriceRatio);
+  // Calculate probability-based decision
+  let probability = config.baseOfferProbability;
+
+  // +10% per missing player at position (urgent need)
+  const missingCount = getMissingAtPosition(player.position, positionNeeds);
+  probability += missingCount * 0.1;
+
+  // +15% for bargains (asking < 80% of market value)
+  if (askingPrice < player.marketValue * 0.8) {
+    probability += 0.15;
+  }
+
+  // -15% for expensive players (asking > 40% of budget)
+  if (askingPrice > teamBudget * 0.4) {
+    probability -= 0.15;
+  }
+
+  // +10% for upgrade opportunities
+  if (isUpgradeOpportunity) {
+    probability += 0.1;
+  }
+
+  // Cap probability between 0.1 and 0.95
+  probability = Math.max(0.1, Math.min(0.95, probability));
+
+  // Random check - skip offer if probability check fails
+  if (Math.random() > probability) {
+    return { willBuy: false, reason: 'Random market decision' };
+  }
+
+  // Add variance to offer amount (85%-95% of asking price instead of fixed ratio)
+  const priceVariance = 0.85 + Math.random() * 0.1; // 0.85 to 0.95
+  const offerAmount = Math.round(askingPrice * priceVariance);
 
   // Contract years based on age
   let contractYears: number;
