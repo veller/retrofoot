@@ -13,11 +13,7 @@ function getStatusBadge(
   status: string,
 ): { label: string; className: string } | null {
   switch (status) {
-    case 'contract_expiring':
-      return {
-        label: 'Contract Expiring',
-        className: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50',
-      };
+    // Removed 'contract_expiring' badge - user found it confusing
     case 'free_agent':
       return {
         label: 'Free Agent',

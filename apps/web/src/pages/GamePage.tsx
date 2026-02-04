@@ -82,7 +82,7 @@ function formatGoalDifference(gd: number): string {
 export function GamePage() {
   const { saveId } = useParams<{ saveId: string }>();
   const navigate = useNavigate();
-  const { data, isLoading, error } = useSaveData(saveId);
+  const { data, isLoading, error, refetch: refetchSaveData } = useSaveData(saveId);
 
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -404,6 +404,7 @@ export function GamePage() {
               saveId={saveId}
               playerTeam={playerTeam}
               currentRound={data.currentRound}
+              onTransferComplete={refetchSaveData}
             />
           )}
           {activeTab === 'finances' && (
@@ -1251,16 +1252,19 @@ function TransfersPanel({
   saveId,
   playerTeam,
   currentRound,
+  onTransferComplete,
 }: {
   saveId: string;
   playerTeam: Team;
   currentRound: number;
+  onTransferComplete?: () => void;
 }) {
   return (
     <TransferMarketPanel
       saveId={saveId}
       playerTeam={playerTeam}
       currentRound={currentRound}
+      onTransferComplete={onTransferComplete}
     />
   );
 }
@@ -1280,6 +1284,8 @@ function formatCategory(category: string): string {
     stadium: 'Stadium Maintenance',
     operations: 'Operating Costs',
     transfer: 'Transfer',
+    player_buy: 'Player Purchase',
+    player_sale: 'Player Sale',
   };
   return labels[category] || category;
 }

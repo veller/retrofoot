@@ -289,7 +289,7 @@ export const transferOffers = sqliteTable('transfer_offers', {
   offerAmount: integer('offer_amount').notNull(),
   offeredWage: integer('offered_wage').notNull(),
   contractYears: integer('contract_years').notNull(),
-  status: text('status').notNull(), // pending, accepted, rejected, counter, expired, completed
+  status: text('status').notNull(), // pending, accepted, rejected, counter, expired, completed, cancelled
   counterAmount: integer('counter_amount'), // Counter-offer fee
   counterWage: integer('counter_wage'), // Counter-offer wage
   createdRound: integer('created_round').notNull(),

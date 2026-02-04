@@ -21,12 +21,16 @@ export {
   respondToOffer,
   acceptCounterOffer,
   completeTransfer,
+  negotiateTransfer,
+  negotiateIncomingOffer,
 } from './useTransfers';
 export type {
   MarketPlayer,
   ActiveOffer,
   MarketData,
   OffersData,
+  NegotiationOffer,
+  NegotiationResult,
 } from './useTransfers';
 export {
   useSeasonSummary,

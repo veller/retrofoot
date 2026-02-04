@@ -8,7 +8,7 @@ import type {
   D1PreparedStatement,
 } from '@cloudflare/workers-types';
 import type { drizzle } from 'drizzle-orm/d1';
-import { eq, and, or, isNull, lte } from 'drizzle-orm';
+import { eq, and, or, isNull, lt, inArray } from 'drizzle-orm';
 import {
   teams,
   players,
@@ -21,11 +21,14 @@ import {
   calculateAskingPrice,
   calculateWageDemand,
   aiSellDecision,
+  freeAgentDecision,
   generateTransactionId,
   generateListingId,
   generateOfferId,
   createPlayerForCalc,
   OFFER_EXPIRY_ROUNDS,
+  getContractWageMultiplier,
+  DEFAULT_FREE_AGENT_CONFIG,
 } from '@retrofoot/core';
 
 // ============================================================================
@@ -99,7 +102,7 @@ export async function getMarketPlayers(
     return [];
   }
 
-  // Get player details for all listings
+  // Get player details for all listings - use inArray to only fetch needed players
   const playerIds = listings.map((l) => l.playerId);
   const playerResults = await db
     .select({
@@ -114,12 +117,9 @@ export async function getMarketPlayers(
       teamId: players.teamId,
     })
     .from(players)
-    .where(eq(players.saveId, saveId));
+    .where(and(eq(players.saveId, saveId), inArray(players.id, playerIds)));
 
-  // Filter to only players in listings
-  const playerMap = new Map(
-    playerResults.filter((p) => playerIds.includes(p.id)).map((p) => [p.id, p]),
-  );
+  const playerMap = new Map(playerResults.map((p) => [p.id, p]));
 
   // Get team names
   const teamResults = await db
@@ -262,7 +262,7 @@ export async function getTeamListings(
     return [];
   }
 
-  // Get player details
+  // Get player details - use inArray to only fetch needed players
   const playerIds = listings.map((l) => l.playerId);
   const playerResults = await db
     .select({
@@ -276,11 +276,9 @@ export async function getTeamListings(
       contractEndSeason: players.contractEndSeason,
     })
     .from(players)
-    .where(eq(players.saveId, saveId));
+    .where(and(eq(players.saveId, saveId), inArray(players.id, playerIds)));
 
-  const playerMap = new Map(
-    playerResults.filter((p) => playerIds.includes(p.id)).map((p) => [p.id, p]),
-  );
+  const playerMap = new Map(playerResults.map((p) => [p.id, p]));
 
   // Get team name
   const teamResult = await db
@@ -532,12 +530,15 @@ export async function getTeamOffers(
     };
   };
 
-  // Separate incoming (offers for players we own) and outgoing (offers we made)
+  // Separate incoming (bids on our players, we are seller) and outgoing (bids we made, we are buyer)
+  // fromTeamId = seller (owns player), toTeamId = buyer (wants to acquire)
   const incoming = offers
-    .filter((o) => o.toTeamId === teamId && o.status === 'pending')
+    .filter((o) => o.fromTeamId === teamId) // Bids on MY players (I'm the seller)
     .map(mapOffer);
 
-  const outgoing = offers.filter((o) => o.fromTeamId === teamId).map(mapOffer);
+  const outgoing = offers
+    .filter((o) => o.toTeamId === teamId) // Bids I made (I'm the buyer)
+    .map(mapOffer);
 
   return { incoming, outgoing };
 }
@@ -787,25 +788,46 @@ export async function makeOffer(
  */
 export async function respondToOffer(
   db: ReturnType<typeof drizzle>,
+  d1: D1Database,
   saveId: string,
   offerId: string,
   response: 'accept' | 'reject' | 'counter',
   counterAmount?: number,
   counterWage?: number,
-): Promise<void> {
+): Promise<{ autoCompleted?: boolean }> {
   const saveResult = await db
-    .select({ currentRound: saves.currentRound })
+    .select({ currentRound: saves.currentRound, playerTeamId: saves.playerTeamId })
     .from(saves)
     .where(eq(saves.id, saveId))
     .limit(1);
 
   const currentRound = saveResult[0]?.currentRound || 1;
+  const playerTeamId = saveResult[0]?.playerTeamId;
 
   if (response === 'accept') {
+    // Mark offer as accepted
     await db
       .update(transferOffers)
       .set({ status: 'accepted', respondedRound: currentRound })
       .where(eq(transferOffers.id, offerId));
+
+    // Check if buyer is AI-controlled (not the player's team)
+    // When we accept an incoming offer, toTeamId is the buyer
+    const offerResult = await db
+      .select({ toTeamId: transferOffers.toTeamId })
+      .from(transferOffers)
+      .where(eq(transferOffers.id, offerId))
+      .limit(1);
+
+    const buyerTeamId = offerResult[0]?.toTeamId;
+
+    // If buyer is AI (not player's team), auto-complete the transfer
+    if (buyerTeamId && buyerTeamId !== playerTeamId) {
+      await completeTransfer(db, d1, saveId, offerId);
+      return { autoCompleted: true };
+    }
+
+    return { autoCompleted: false };
   } else if (response === 'reject') {
     await db
       .update(transferOffers)
@@ -825,6 +847,8 @@ export async function respondToOffer(
       })
       .where(eq(transferOffers.id, offerId));
   }
+
+  return {};
 }
 
 /**
@@ -1022,14 +1046,23 @@ export async function completeTransfer(
       ),
   );
 
-  // 4. Mark offer as completed
+  // 4. Mark offer as completed (with status check to prevent race condition)
   statements.push(
     d1
-      .prepare('UPDATE transfer_offers SET status = ? WHERE id = ?')
-      .bind('completed', offerId),
+      .prepare('UPDATE transfer_offers SET status = ? WHERE id = ? AND status = ?')
+      .bind('completed', offerId, 'accepted'),
   );
 
-  // 5. Remove listing if exists
+  // 5. Cancel other pending/counter offers for the same player (player is no longer available)
+  statements.push(
+    d1
+      .prepare(
+        'UPDATE transfer_offers SET status = ? WHERE save_id = ? AND player_id = ? AND id != ? AND status IN (?, ?)',
+      )
+      .bind('cancelled', saveId, offer.playerId, offerId, 'pending', 'counter'),
+  );
+
+  // 6. Remove listing if exists
   if (offer.fromTeamId) {
     statements.push(
       d1
@@ -1058,16 +1091,692 @@ export async function processExpiredOffers(
   saveId: string,
   currentRound: number,
 ): Promise<number> {
+  // Use lt() (less than) instead of lte() - offer expires AFTER the expiry round, not ON it
   await db
     .update(transferOffers)
     .set({ status: 'expired' })
     .where(
       and(
         eq(transferOffers.saveId, saveId),
-        eq(transferOffers.status, 'pending'),
-        lte(transferOffers.expiresRound, currentRound),
+        or(
+          eq(transferOffers.status, 'pending'),
+          eq(transferOffers.status, 'counter'),
+        ),
+        lt(transferOffers.expiresRound, currentRound),
       ),
     );
 
   return 0; // Drizzle doesn't return affected rows easily
+}
+
+
+// ============================================================================
+// LIVE NEGOTIATION
+// ============================================================================
+
+export interface NegotiationOffer {
+  fee: number;
+  wage: number;
+  years: number;
+}
+
+export interface NegotiationResult {
+  negotiationId: string;
+  round: number;
+  maxRounds: number;
+  aiResponse: {
+    action: 'accept' | 'reject' | 'counter';
+    counterFee?: number;
+    counterWage?: number;
+    reason?: string;
+  };
+  canCounter: boolean;
+  completed?: {
+    transferId: string;
+    finalFee: number;
+    finalWage: number;
+  };
+}
+
+// In-memory storage for active negotiations (cleared on server restart)
+// In production, consider using KV or D1 for persistence
+interface ActiveNegotiation {
+  playerId: string;
+  fromTeamId: string | null;
+  toTeamId: string;
+  round: number;
+  lastOffer: NegotiationOffer;
+  lastAiOffer?: { fee: number; wage: number };
+  hardeningFactor: number; // Increases with each round to prevent exploitation
+  createdAt: number; // Timestamp for TTL cleanup
+}
+
+const activeNegotiations = new Map<string, ActiveNegotiation>();
+
+const MAX_NEGOTIATION_ROUNDS = 2;
+const MIN_COUNTER_INCREASE = 0.05; // 5% minimum increase required
+const NEGOTIATION_TTL_MS = 30 * 60 * 1000; // 30 minutes TTL for stale negotiations
+let lastCleanupTime = 0;
+
+/**
+ * Cleanup stale negotiations that are older than TTL
+ * Called lazily on access to avoid Cloudflare Workers global scope restrictions
+ */
+function cleanupStaleNegotiationsIfNeeded(): void {
+  const now = Date.now();
+  // Only run cleanup every 5 minutes
+  if (now - lastCleanupTime < 5 * 60 * 1000) {
+    return;
+  }
+  lastCleanupTime = now;
+
+  for (const [id, negotiation] of activeNegotiations.entries()) {
+    if (now - negotiation.createdAt > NEGOTIATION_TTL_MS) {
+      activeNegotiations.delete(id);
+    }
+  }
+}
+
+/**
+ * Get a negotiation by ID, with TTL check
+ */
+function getNegotiation(id: string): ActiveNegotiation | undefined {
+  cleanupStaleNegotiationsIfNeeded();
+  const negotiation = activeNegotiations.get(id);
+  if (negotiation && Date.now() - negotiation.createdAt > NEGOTIATION_TTL_MS) {
+    activeNegotiations.delete(id);
+    return undefined;
+  }
+  return negotiation;
+}
+
+function generateNegotiationId(): string {
+  return `neg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+/**
+ * Live negotiation for buying players
+ * Handles the entire negotiation in real-time with max 2 counter rounds
+ */
+export async function negotiateTransfer(
+  db: ReturnType<typeof drizzle>,
+  d1: D1Database,
+  saveId: string,
+  playerId: string,
+  fromTeamId: string | null, // null for free agents
+  toTeamId: string,
+  offer: NegotiationOffer,
+  negotiationId?: string,
+  action?: 'counter' | 'accept' | 'walkaway',
+): Promise<NegotiationResult> {
+  // Get save info
+  const saveResult = await db
+    .select({
+      currentRound: saves.currentRound,
+      currentSeason: saves.currentSeason,
+      playerTeamId: saves.playerTeamId,
+    })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  const currentRound = saveResult[0]?.currentRound || 1;
+  const currentSeason = parseInt(saveResult[0]?.currentSeason || '2026', 10);
+
+  // Resume existing negotiation or start new one
+  let negotiation = negotiationId ? getNegotiation(negotiationId) : undefined;
+  let newNegotiationId = negotiationId || generateNegotiationId();
+  let round = 1;
+  let hardeningFactor = 1.0;
+
+  if (negotiation) {
+    round = negotiation.round + 1;
+    hardeningFactor = negotiation.hardeningFactor;
+
+    // Check if accepting AI's counter offer
+    if (action === 'accept' && negotiation.lastAiOffer) {
+      // Player accepts AI's counter - complete the transfer
+      const offerId = await createAndAcceptOffer(
+        db,
+        saveId,
+        playerId,
+        fromTeamId,
+        toTeamId,
+        negotiation.lastAiOffer.fee,
+        negotiation.lastAiOffer.wage,
+        offer.years,
+        currentRound,
+      );
+
+      const transferResult = await completeTransfer(db, d1, saveId, offerId);
+      activeNegotiations.delete(newNegotiationId);
+
+      return {
+        negotiationId: newNegotiationId,
+        round,
+        maxRounds: MAX_NEGOTIATION_ROUNDS,
+        aiResponse: { action: 'accept', reason: 'Deal!' },
+        canCounter: false,
+        completed: {
+          transferId: transferResult.transferId,
+          finalFee: negotiation.lastAiOffer.fee,
+          finalWage: negotiation.lastAiOffer.wage,
+        },
+      };
+    }
+
+    if (action === 'walkaway') {
+      activeNegotiations.delete(newNegotiationId);
+      return {
+        negotiationId: newNegotiationId,
+        round,
+        maxRounds: MAX_NEGOTIATION_ROUNDS,
+        aiResponse: { action: 'reject', reason: 'Negotiations ended' },
+        canCounter: false,
+      };
+    }
+
+    // Validate counter offer is meaningful (5% increase minimum)
+    if (negotiation.lastOffer) {
+      const feeIncrease = (offer.fee - negotiation.lastOffer.fee) / Math.max(negotiation.lastOffer.fee, 1);
+      const wageIncrease = (offer.wage - negotiation.lastOffer.wage) / Math.max(negotiation.lastOffer.wage, 1);
+
+      if (feeIncrease < MIN_COUNTER_INCREASE && wageIncrease < MIN_COUNTER_INCREASE) {
+        return {
+          negotiationId: newNegotiationId,
+          round: negotiation.round, // Don't advance round
+          maxRounds: MAX_NEGOTIATION_ROUNDS,
+          aiResponse: {
+            action: 'reject',
+            reason: 'Counter offer must be at least 5% higher',
+          },
+          canCounter: true, // Allow them to try again with a better offer
+        };
+      }
+    }
+    // Use the stored hardening factor from negotiation state (don't recalculate)
+  }
+
+  // Get player info
+  const playerResult = await db
+    .select({
+      name: players.name,
+      wage: players.wage,
+      age: players.age,
+      potential: players.potential,
+      marketValue: players.marketValue,
+      contractEndSeason: players.contractEndSeason,
+      attributes: players.attributes,
+      position: players.position,
+    })
+    .from(players)
+    .where(eq(players.id, playerId))
+    .limit(1);
+
+  if (playerResult.length === 0) {
+    throw new Error('Player not found');
+  }
+
+  const player = playerResult[0];
+  const attrs = player.attributes as Record<string, number>;
+
+  let aiDecision: { action: 'accept' | 'reject' | 'counter'; amount?: number; wage?: number };
+
+  if (fromTeamId === null) {
+    // Free agent negotiation - use player's current wage as baseline
+    const teamResult = await db
+      .select({ reputation: teams.reputation })
+      .from(teams)
+      .where(eq(teams.id, toTeamId))
+      .limit(1);
+
+    const teamRep = teamResult[0]?.reputation || 50;
+
+    // Use the player's actual wage as baseline (what they're used to earning)
+    // This ensures the modal shows what they'll actually accept
+    const playerWage = player.wage;
+
+    // Apply contract length multiplier - longer contracts = lower wage expectations
+    // Multiply by multiplier: 5yr (0.85) → lower expected wage, 1yr (1.25) → higher expected wage
+    const contractMultiplier = getContractWageMultiplier(offer.years);
+    const adjustedExpectedWage = Math.round(
+      playerWage * DEFAULT_FREE_AGENT_CONFIG.unemploymentFactor * contractMultiplier
+    );
+
+    // Use the new freeAgentDecision function with proper config
+    // Pass adjusted wage expectations to the decision function
+    const faDecision = freeAgentDecision(
+      adjustedExpectedWage / DEFAULT_FREE_AGENT_CONFIG.unemploymentFactor, // Reverse the unemployment factor since freeAgentDecision applies it
+      offer.wage,
+      teamRep,
+      round, // Pass round for hardening factor
+    );
+
+    if (faDecision.action === 'accept') {
+      aiDecision = { action: 'accept' };
+    } else if (faDecision.action === 'reject') {
+      // On final round, be more lenient
+      if (round >= MAX_NEGOTIATION_ROUNDS && offer.wage >= adjustedExpectedWage * 0.7) {
+        aiDecision = { action: 'accept' };
+      } else {
+        aiDecision = { action: 'reject' };
+      }
+    } else {
+      // Counter - freeAgentDecision already calculated the counter as midpoint
+      // between offer and expected wage, so use it directly
+      aiDecision = {
+        action: 'counter',
+        amount: 0,
+        wage: faDecision.wage,
+      };
+    }
+  } else {
+    // Listed player negotiation
+    const listingResult = await db
+      .select({ askingPrice: transferListings.askingPrice })
+      .from(transferListings)
+      .where(
+        and(
+          eq(transferListings.saveId, saveId),
+          eq(transferListings.playerId, playerId),
+        ),
+      )
+      .limit(1);
+
+    if (listingResult.length === 0) {
+      throw new Error('Player is not listed for sale');
+    }
+
+    const askingPrice = Math.round(listingResult[0].askingPrice * hardeningFactor);
+
+    const squadCount = await db
+      .select({ id: players.id })
+      .from(players)
+      .where(eq(players.teamId, fromTeamId));
+
+    const decision = aiSellDecision(
+      askingPrice,
+      offer.fee,
+      offer.wage,
+      squadCount.length,
+      createPlayerForCalc({
+        wage: player.wage,
+        age: player.age,
+        potential: player.potential,
+        marketValue: player.marketValue,
+        contractEndSeason: player.contractEndSeason,
+        attributes: attrs,
+        position: player.position,
+      }),
+      currentSeason,
+    );
+
+    if (decision.action === 'accept') {
+      aiDecision = { action: 'accept' };
+    } else if (decision.action === 'reject') {
+      // On final round, be more lenient
+      if (round >= MAX_NEGOTIATION_ROUNDS && offer.fee >= askingPrice * 0.85) {
+        aiDecision = { action: 'accept' };
+      } else {
+        aiDecision = { action: 'reject' };
+      }
+    } else {
+      // Counter - but if we're at max rounds, this is the final offer
+      if (round >= MAX_NEGOTIATION_ROUNDS) {
+        // Final round - no more counters, accept or reject
+        if (offer.fee >= askingPrice * 0.9) {
+          aiDecision = { action: 'accept' };
+        } else {
+          aiDecision = { action: 'reject' };
+        }
+      } else {
+        aiDecision = {
+          action: 'counter',
+          amount: decision.amount,
+          wage: decision.wage,
+        };
+      }
+    }
+  }
+
+  // Handle AI decision
+  if (aiDecision.action === 'accept') {
+    // Complete the transfer immediately
+    const offerId = await createAndAcceptOffer(
+      db,
+      saveId,
+      playerId,
+      fromTeamId,
+      toTeamId,
+      offer.fee,
+      offer.wage,
+      offer.years,
+      currentRound,
+    );
+
+    const transferResult = await completeTransfer(db, d1, saveId, offerId);
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: { action: 'accept', reason: 'Deal!' },
+      canCounter: false,
+      completed: {
+        transferId: transferResult.transferId,
+        finalFee: offer.fee,
+        finalWage: offer.wage,
+      },
+    };
+  }
+
+  if (aiDecision.action === 'reject') {
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: {
+        action: 'reject',
+        reason: round >= MAX_NEGOTIATION_ROUNDS
+          ? 'Final offer rejected. No deal.'
+          : 'Offer too low',
+      },
+      canCounter: false,
+    };
+  }
+
+  // Counter offer - only set if we have valid counter values
+  if (aiDecision.amount === undefined || aiDecision.wage === undefined) {
+    throw new Error('AI counter decision missing amount or wage');
+  }
+  // Store hardening factor for next round (add 5% for the next iteration)
+  const nextHardeningFactor = hardeningFactor + 0.05;
+  activeNegotiations.set(newNegotiationId, {
+    playerId,
+    fromTeamId,
+    toTeamId,
+    round,
+    lastOffer: offer,
+    lastAiOffer: { fee: aiDecision.amount, wage: aiDecision.wage },
+    hardeningFactor: nextHardeningFactor,
+    createdAt: Date.now(),
+  });
+
+  return {
+    negotiationId: newNegotiationId,
+    round,
+    maxRounds: MAX_NEGOTIATION_ROUNDS,
+    aiResponse: {
+      action: 'counter',
+      counterFee: aiDecision.amount,
+      counterWage: aiDecision.wage,
+      reason: 'We want more',
+    },
+    canCounter: round < MAX_NEGOTIATION_ROUNDS,
+  };
+}
+
+/**
+ * Helper to create an offer and immediately mark it as accepted
+ */
+async function createAndAcceptOffer(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  playerId: string,
+  fromTeamId: string | null,
+  toTeamId: string,
+  offerAmount: number,
+  offeredWage: number,
+  contractYears: number,
+  currentRound: number,
+): Promise<string> {
+  const offerId = generateOfferId(saveId);
+
+  await db.insert(transferOffers).values({
+    id: offerId,
+    saveId,
+    playerId,
+    fromTeamId,
+    toTeamId,
+    offerAmount,
+    offeredWage,
+    contractYears,
+    status: 'accepted',
+    createdRound: currentRound,
+    expiresRound: currentRound + OFFER_EXPIRY_ROUNDS,
+    respondedRound: currentRound,
+  });
+
+  return offerId;
+}
+
+/**
+ * Respond to incoming AI offer on player's listed player
+ * Used when AI makes offers on the player's listed players
+ */
+export async function negotiateIncomingOffer(
+  db: ReturnType<typeof drizzle>,
+  d1: D1Database,
+  saveId: string,
+  offerId: string,
+  action: 'accept' | 'reject' | 'counter',
+  counterOffer?: { fee: number; wage: number },
+  negotiationId?: string,
+): Promise<NegotiationResult> {
+  const saveResult = await db
+    .select({ currentRound: saves.currentRound, playerTeamId: saves.playerTeamId })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  const currentRound = saveResult[0]?.currentRound || 1;
+  const playerTeamId = saveResult[0]?.playerTeamId;
+
+  // Get the original offer
+  const offerResult = await db
+    .select()
+    .from(transferOffers)
+    .where(eq(transferOffers.id, offerId))
+    .limit(1);
+
+  if (offerResult.length === 0) {
+    throw new Error('Offer not found');
+  }
+
+  const offer = offerResult[0];
+
+  // Authorization: verify the offer is for the player's team (they own the player being sold)
+  if (offer.fromTeamId !== playerTeamId) {
+    throw new Error('Unauthorized: You can only negotiate offers for your own players');
+  }
+  let newNegotiationId = negotiationId || generateNegotiationId();
+  let negotiation = negotiationId ? getNegotiation(negotiationId) : undefined;
+  let round = negotiation ? negotiation.round + 1 : 1;
+  let hardeningFactor = negotiation ? negotiation.hardeningFactor : 1.0;
+
+  if (action === 'accept') {
+    // Accept the offer (or counter)
+    const finalFee = negotiation?.lastAiOffer?.fee ?? offer.offerAmount;
+    const finalWage = negotiation?.lastAiOffer?.wage ?? offer.offeredWage;
+
+    await db
+      .update(transferOffers)
+      .set({
+        status: 'accepted',
+        offerAmount: finalFee,
+        offeredWage: finalWage,
+        respondedRound: currentRound,
+      })
+      .where(eq(transferOffers.id, offerId));
+
+    const transferResult = await completeTransfer(db, d1, saveId, offerId);
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: { action: 'accept', reason: 'Deal!' },
+      canCounter: false,
+      completed: {
+        transferId: transferResult.transferId,
+        finalFee,
+        finalWage,
+      },
+    };
+  }
+
+  if (action === 'reject') {
+    await db
+      .update(transferOffers)
+      .set({ status: 'rejected', respondedRound: currentRound })
+      .where(eq(transferOffers.id, offerId));
+
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: { action: 'reject', reason: 'Offer rejected' },
+      canCounter: false,
+    };
+  }
+
+  // Counter offer
+  if (!counterOffer) {
+    throw new Error('Counter offer requires fee and wage');
+  }
+
+  // Validate meaningful increase
+  const lastFee = negotiation?.lastOffer?.fee ?? offer.offerAmount;
+  const feeIncrease = (counterOffer.fee - lastFee) / Math.max(lastFee, 1);
+  
+  if (feeIncrease < MIN_COUNTER_INCREASE && counterOffer.fee > lastFee) {
+    return {
+      negotiationId: newNegotiationId,
+      round: negotiation?.round ?? 1,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: {
+        action: 'reject',
+        reason: 'Counter offer must request at least 5% more',
+      },
+      canCounter: true,
+    };
+  }
+
+  // AI responds to player's counter - use stored factor, don't recalculate
+  const aiWillingness = Math.max(0.7, 1.0 - (round - 1) * 0.1);
+  const effectiveAsk = counterOffer.fee * aiWillingness;
+
+  let aiDecision: { action: 'accept' | 'reject' | 'counter'; fee?: number; wage?: number };
+
+  // AI evaluates the counter
+  if (offer.offerAmount >= effectiveAsk) {
+    aiDecision = { action: 'accept' };
+  } else if (round >= MAX_NEGOTIATION_ROUNDS) {
+    // Final round - accept if close, reject otherwise
+    if (offer.offerAmount >= counterOffer.fee * 0.85) {
+      aiDecision = { action: 'accept' };
+    } else {
+      aiDecision = { action: 'reject' };
+    }
+  } else {
+    // Counter back
+    const midpoint = Math.round((offer.offerAmount + counterOffer.fee) / 2);
+    aiDecision = {
+      action: 'counter',
+      fee: midpoint,
+      wage: Math.round((offer.offeredWage + counterOffer.wage) / 2),
+    };
+  }
+
+  if (aiDecision.action === 'accept') {
+    await db
+      .update(transferOffers)
+      .set({
+        status: 'accepted',
+        offerAmount: counterOffer.fee,
+        offeredWage: counterOffer.wage,
+        respondedRound: currentRound,
+      })
+      .where(eq(transferOffers.id, offerId));
+
+    const transferResult = await completeTransfer(db, d1, saveId, offerId);
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: { action: 'accept', reason: 'Deal!' },
+      canCounter: false,
+      completed: {
+        transferId: transferResult.transferId,
+        finalFee: counterOffer.fee,
+        finalWage: counterOffer.wage,
+      },
+    };
+  }
+
+  if (aiDecision.action === 'reject') {
+    await db
+      .update(transferOffers)
+      .set({ status: 'rejected', respondedRound: currentRound })
+      .where(eq(transferOffers.id, offerId));
+
+    activeNegotiations.delete(newNegotiationId);
+
+    return {
+      negotiationId: newNegotiationId,
+      round,
+      maxRounds: MAX_NEGOTIATION_ROUNDS,
+      aiResponse: { action: 'reject', reason: 'No deal' },
+      canCounter: false,
+    };
+  }
+
+  // Store negotiation state for next round - only if we have valid counter values
+  if (aiDecision.fee === undefined || aiDecision.wage === undefined) {
+    throw new Error('AI counter decision missing fee or wage');
+  }
+  // Store hardening factor for next round (add 5% for the next iteration)
+  const nextHardeningFactor = hardeningFactor + 0.05;
+  activeNegotiations.set(newNegotiationId, {
+    playerId: offer.playerId,
+    fromTeamId: offer.fromTeamId,
+    toTeamId: offer.toTeamId,
+    round,
+    lastOffer: { fee: counterOffer.fee, wage: counterOffer.wage, years: offer.contractYears },
+    lastAiOffer: { fee: aiDecision.fee, wage: aiDecision.wage },
+    hardeningFactor: nextHardeningFactor,
+    createdAt: Date.now(),
+  });
+
+  // Update offer with counter
+  await db
+    .update(transferOffers)
+    .set({
+      status: 'counter',
+      counterAmount: aiDecision.fee,
+      counterWage: aiDecision.wage,
+      respondedRound: currentRound,
+    })
+    .where(eq(transferOffers.id, offerId));
+
+  return {
+    negotiationId: newNegotiationId,
+    round,
+    maxRounds: MAX_NEGOTIATION_ROUNDS,
+    aiResponse: {
+      action: 'counter',
+      counterFee: aiDecision.fee,
+      counterWage: aiDecision.wage,
+      reason: 'We can meet in the middle',
+    },
+    canCounter: round < MAX_NEGOTIATION_ROUNDS,
+  };
 }

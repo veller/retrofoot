@@ -54,6 +54,30 @@ export interface OffersData {
   outgoing: ActiveOffer[];
 }
 
+export interface NegotiationOffer {
+  fee: number;
+  wage: number;
+  years: number;
+}
+
+export interface NegotiationResult {
+  negotiationId: string;
+  round: number;
+  maxRounds: number;
+  aiResponse: {
+    action: 'accept' | 'reject' | 'counter';
+    counterFee?: number;
+    counterWage?: number;
+    reason?: string;
+  };
+  canCounter: boolean;
+  completed?: {
+    transferId: string;
+    finalFee: number;
+    finalWage: number;
+  };
+}
+
 // ============================================================================
 // Hook: useTransferMarket
 // ============================================================================
@@ -85,6 +109,8 @@ export function useTransferMarket(saveId: string | undefined) {
         if (err instanceof Error && err.name === 'AbortError') return;
         if (!signal?.aborted) {
           setError(err instanceof Error ? err.message : 'Unknown error');
+          // Reset data on error to prevent stale display
+          setData(null);
         }
       } finally {
         if (!signal?.aborted) {
@@ -139,6 +165,8 @@ export function useTeamListings(
         if (err instanceof Error && err.name === 'AbortError') return;
         if (!signal?.aborted) {
           setError(err instanceof Error ? err.message : 'Unknown error');
+          // Reset data on error to prevent stale display
+          setListings([]);
         }
       } finally {
         if (!signal?.aborted) {
@@ -193,6 +221,8 @@ export function useTeamOffers(
         if (err instanceof Error && err.name === 'AbortError') return;
         if (!signal?.aborted) {
           setError(err instanceof Error ? err.message : 'Unknown error');
+          // Reset data on error to prevent stale display
+          setData({ incoming: [], outgoing: [] });
         }
       } finally {
         if (!signal?.aborted) {
@@ -384,6 +414,83 @@ export async function completeTransfer(
       };
     }
     return { success: true, transferId: json.transferId };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
+
+// ============================================================================
+// Live Negotiation API Functions
+// ============================================================================
+
+/**
+ * Negotiate transfer for buying a player (live, multi-round)
+ */
+export async function negotiateTransfer(
+  saveId: string,
+  playerId: string,
+  fromTeamId: string | null,
+  offer: NegotiationOffer,
+  negotiationId?: string,
+  action?: 'counter' | 'accept' | 'walkaway',
+): Promise<{ success: boolean; result?: NegotiationResult; error?: string }> {
+  try {
+    const response = await apiFetch(`/api/transfer/negotiate/${saveId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerId,
+        fromTeamId,
+        offer,
+        negotiationId,
+        action,
+      }),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      return { success: false, error: json.error || 'Failed to negotiate' };
+    }
+    return { success: true, result: json as NegotiationResult };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Negotiate incoming offer on player's listed player
+ */
+export async function negotiateIncomingOffer(
+  saveId: string,
+  offerId: string,
+  action: 'accept' | 'reject' | 'counter',
+  counterOffer?: { fee: number; wage: number },
+  negotiationId?: string,
+): Promise<{ success: boolean; result?: NegotiationResult; error?: string }> {
+  try {
+    const response = await apiFetch(
+      `/api/transfer/negotiate-incoming/${saveId}/${offerId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          counterOffer,
+          negotiationId,
+        }),
+      },
+    );
+    const json = await response.json();
+    if (!response.ok) {
+      return { success: false, error: json.error || 'Failed to negotiate' };
+    }
+    return { success: true, result: json as NegotiationResult };
   } catch (err) {
     return {
       success: false,

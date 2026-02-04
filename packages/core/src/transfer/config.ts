@@ -31,7 +31,8 @@ export interface TransferConfig {
   upgradeQualityThreshold: number;
 
   // AI Selling Behavior
-  /** Accept offer if >= this percentage of asking price (0.0 - 1.0) */
+  /** Accept offer if >= this percentage of asking price (0.0 - 1.0)
+   * Note: Use 0.995 to allow for display rounding (322K might be 322,500) */
   acceptThreshold: number;
   /** Accept offer if overstaffed and >= this percentage (0.0 - 1.0) */
   overstaffedAcceptThreshold: number;
@@ -61,7 +62,7 @@ export const DEFAULT_TRANSFER_CONFIG: TransferConfig = {
   baseOfferProbability: 0.7,
   allowPositionUpgrades: true,
   upgradeQualityThreshold: 6,
-  acceptThreshold: 1.0,
+  acceptThreshold: 0.995, // 0.5% tolerance for display rounding
   overstaffedAcceptThreshold: 0.8,
   counterThreshold: 0.75,
   idealSquadSize: 28,

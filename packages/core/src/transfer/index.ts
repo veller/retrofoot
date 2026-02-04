@@ -46,9 +46,6 @@ export const CONTRACT_EXPIRY_THRESHOLD = 1;
 /** Ideal squad size for AI decisions */
 export const IDEAL_SQUAD_SIZE = 28;
 
-/** Minimum overall relative to team average for AI buys */
-export const AI_BUY_OVERALL_THRESHOLD = -5;
-
 // ============================================================================
 // VALUATION FUNCTIONS
 // ============================================================================
@@ -189,6 +186,114 @@ export function aiSellDecision(
   }
 
   // Reject low offers
+  return { action: 'reject' };
+}
+
+
+// ============================================================================
+// CONTRACT LENGTH / WAGE INTELLIGENCE
+// ============================================================================
+
+export interface ContractWageConfig {
+  yearMultipliers: Record<number, number>;
+}
+
+export const DEFAULT_CONTRACT_WAGE_CONFIG: ContractWageConfig = {
+  yearMultipliers: {
+    1: 1.25,   // 1 year: 25% higher wage demand
+    2: 1.10,   // 2 years: 10% higher
+    3: 1.00,   // 3 years: baseline
+    4: 0.92,   // 4 years: 8% discount
+    5: 0.85,   // 5 years: 15% discount
+  },
+};
+
+export function getContractWageMultiplier(
+  years: number,
+  config: ContractWageConfig = DEFAULT_CONTRACT_WAGE_CONFIG
+): number {
+  return config.yearMultipliers[years] ?? 1.0;
+}
+
+// ============================================================================
+// FREE AGENT DECISION
+// ============================================================================
+
+export interface FreeAgentConfig {
+  /** Accept threshold - offer >= this ratio of expected wage = accept (default 0.90) */
+  acceptThreshold: number;
+  /** Counter threshold - offer >= this ratio = counter (default 0.60) */
+  counterThreshold: number;
+  /** Prestige bonus - accept lower if team has high reputation (default 0.85) */
+  prestigeAcceptThreshold: number;
+  /** Reputation threshold to trigger prestige bonus (default 70) */
+  prestigeReputationMin: number;
+  /** Unemployment desperation - reduces expectations (default 0.85) */
+  unemploymentFactor: number;
+}
+
+export const DEFAULT_FREE_AGENT_CONFIG: FreeAgentConfig = {
+  acceptThreshold: 0.90,
+  counterThreshold: 0.60,
+  prestigeAcceptThreshold: 0.80,
+  prestigeReputationMin: 70,
+  unemploymentFactor: 0.85,
+};
+
+export type FreeAgentDecision =
+  | { action: 'accept' }
+  | { action: 'reject' }
+  | { action: 'counter'; wage: number };
+
+/**
+ * Free agent decision on whether to accept a contract offer
+ * 
+ * Free agents are unemployed and more willing to negotiate:
+ * - Accept if offer >= 90% of expected wage
+ * - Accept if offer >= 80% AND team has high reputation (prestige)
+ * - Counter if offer >= 60% of expected wage
+ * - Reject if offer < 60% (insulting)
+ * 
+ * Expected wage = player's current wage × unemployment factor (85%)
+ * This means a player earning $100k/wk would accept around $76k+ easily
+ */
+export function freeAgentDecision(
+  playerCurrentWage: number,
+  offeredWage: number,
+  teamReputation: number = 50,
+  round: number = 1,
+  config: FreeAgentConfig = DEFAULT_FREE_AGENT_CONFIG,
+): FreeAgentDecision {
+  // Free agents lower their expectations due to unemployment
+  const expectedWage = Math.round(playerCurrentWage * config.unemploymentFactor);
+  
+  // Apply hardening factor for subsequent rounds (+5% per round)
+  const hardeningFactor = 1.0 + (round - 1) * 0.05;
+  const adjustedExpectedWage = Math.round(expectedWage * hardeningFactor);
+  
+  const wageRatio = offeredWage / adjustedExpectedWage;
+  
+  // Accept if offer meets or exceeds expected wage
+  if (wageRatio >= config.acceptThreshold) {
+    return { action: 'accept' };
+  }
+  
+  // Accept if high-reputation team offers decent wage (prestige factor)
+  if (
+    teamReputation >= config.prestigeReputationMin &&
+    wageRatio >= config.prestigeAcceptThreshold
+  ) {
+    return { action: 'accept' };
+  }
+  
+  // Counter if offer is in negotiable range
+  if (wageRatio >= config.counterThreshold) {
+    // Counter at midpoint between offer and expected
+    const counterWage = Math.round((offeredWage + adjustedExpectedWage) / 2);
+    return { action: 'counter', wage: counterWage };
+  }
+  
+  // Reject insulting offers
   return { action: 'reject' };
 }
 
@@ -390,6 +495,7 @@ export function aiFreeAgentDecision(
   teamAverageOverall: number,
   positionNeeds: PositionNeeds,
   teamReputation: number,
+  config: TransferConfig = DEFAULT_TRANSFER_CONFIG,
 ): {
   willSign: boolean;
   offeredWage?: number;
@@ -403,8 +509,8 @@ export function aiFreeAgentDecision(
     return { willSign: false, reason: 'Position not needed' };
   }
 
-  // Check if quality fits (free agents can be slightly below team level)
-  if (overall < teamAverageOverall + AI_BUY_OVERALL_THRESHOLD - 3) {
+  // Check if quality fits (free agents can be slightly below team level, -3 extra tolerance)
+  if (overall < teamAverageOverall + config.buyQualityThreshold - 3) {
     return { willSign: false, reason: 'Player quality too low' };
   }
 

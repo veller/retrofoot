@@ -1,46 +1,50 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { formatCurrency, type Team } from '@retrofoot/core';
+import { formatCurrency, type Team, calculateOverall } from '@retrofoot/core';
 import {
   useTransferMarket,
   useTeamListings,
   useTeamOffers,
-  makeTransferOffer,
   respondToOffer,
-  acceptCounterOffer,
-  completeTransfer,
   listPlayerForSale,
   removePlayerListing,
   type MarketPlayer,
+  type ActiveOffer,
 } from '../../hooks';
-import { PlayerListingCard } from './PlayerListingCard';
-import { PlayerDetailModal } from './PlayerDetailModal';
-import { OfferCard } from './OfferCard';
+import { PlayerListRow, PlayerListHeader } from './PlayerListRow';
+import { OfferListRow } from './OfferListRow';
+import { CounterOfferModal } from './CounterOfferModal';
+import { NegotiationModal } from './NegotiationModal';
 import {
   TransferFilters,
   DEFAULT_FILTERS,
   type FilterState,
 } from './TransferFilters';
 import { PositionBadge } from '../PositionBadge';
-import { calculateOverall } from '@retrofoot/core';
 
-type TransferTab = 'available' | 'free_agents' | 'offers' | 'my_listed';
+type TransferTab = 'search' | 'my_transfers';
+type PlayerStatusFilter = 'all' | 'listed' | 'free_agents';
 
 interface TransferMarketPanelProps {
   saveId: string;
   playerTeam: Team;
   currentRound: number;
+  onTransferComplete?: () => void;
 }
 
 export function TransferMarketPanel({
   saveId,
   playerTeam,
   currentRound,
+  onTransferComplete,
 }: TransferMarketPanelProps) {
-  const [activeTab, setActiveTab] = useState<TransferTab>('available');
+  const [activeTab, setActiveTab] = useState<TransferTab>('search');
+  const [statusFilter, setStatusFilter] = useState<PlayerStatusFilter>('all');
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [selectedPlayer, setSelectedPlayer] = useState<MarketPlayer | null>(
     null,
   );
+  const [counterOfferTarget, setCounterOfferTarget] =
+    useState<ActiveOffer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{
     type: 'success' | 'error';
@@ -59,7 +63,6 @@ export function TransferMarketPanel({
   );
   const {
     incoming,
-    outgoing,
     refetch: refetchOffers,
   } = useTeamOffers(saveId, playerTeam.id);
 
@@ -88,62 +91,52 @@ export function TransferMarketPanel({
     [filters],
   );
 
-  const filteredListed = useMemo(
-    () => filterPlayers(marketData?.listed || []),
-    [marketData?.listed, filterPlayers],
-  );
+  // Combined search results based on status filter
+  const searchResults = useMemo(() => {
+    const listed = marketData?.listed || [];
+    const freeAgents = marketData?.freeAgents || [];
 
-  const filteredFreeAgents = useMemo(
-    () => filterPlayers(marketData?.freeAgents || []),
-    [marketData?.freeAgents, filterPlayers],
-  );
-
-  // Action handlers
-  const handleMakeOffer = async (
-    offerAmount: number,
-    offeredWage: number,
-    contractYears: number,
-  ) => {
-    if (!selectedPlayer) return;
-
-    setIsSubmitting(true);
-    setActionMessage(null);
-
-    const result = await makeTransferOffer(
-      saveId,
-      selectedPlayer.playerId,
-      selectedPlayer.teamId,
-      offerAmount,
-      offeredWage,
-      contractYears,
-    );
-
-    setIsSubmitting(false);
-
-    if (result.success) {
-      let message = 'Offer submitted!';
-      if (result.aiResponse) {
-        if (result.aiResponse.action === 'accept') {
-          message = 'Offer accepted! Complete the transfer in the Offers tab.';
-        } else if (result.aiResponse.action === 'reject') {
-          message = 'Offer rejected by the club.';
-        } else if (result.aiResponse.action === 'counter') {
-          message = `Counter offer received: ${formatCurrency(result.aiResponse.counterAmount || 0)} fee, ${formatCurrency(result.aiResponse.counterWage || 0)}/wk wage`;
-        }
-      }
-      setActionMessage({ type: 'success', text: message });
-      setSelectedPlayer(null);
-      refetchOffers();
-      refetchMarket();
+    let combined: MarketPlayer[];
+    if (statusFilter === 'listed') {
+      combined = listed;
+    } else if (statusFilter === 'free_agents') {
+      combined = freeAgents;
     } else {
-      setActionMessage({
-        type: 'error',
-        text: result.error || 'Failed to make offer',
-      });
+      combined = [...listed, ...freeAgents];
     }
-  };
 
-  // Generic handler for offer actions
+    return filterPlayers(combined);
+  }, [marketData, statusFilter, filterPlayers]);
+
+  // Filter active offers (hide expired, rejected, completed, cancelled)
+  const filteredIncoming = useMemo(
+    () =>
+      incoming.filter(
+        (o) =>
+          o.status !== 'expired' &&
+          o.status !== 'rejected' &&
+          o.status !== 'completed' &&
+          o.status !== 'cancelled',
+      ),
+    [incoming],
+  );
+
+  // Handle transfer completion from NegotiationModal
+  const handleTransferComplete = useCallback(() => {
+    setActionMessage({
+      type: 'success',
+      text: 'Transfer completed! Player has joined your team.',
+    });
+    setSelectedPlayer(null);
+    // Refresh all data
+    refetchMarket();
+    refetchListings();
+    refetchOffers();
+    // Refresh main save data (squad tab)
+    onTransferComplete?.();
+  }, [refetchMarket, refetchListings, refetchOffers, onTransferComplete]);
+
+  // Generic handler for offer actions with error handling
   const handleOfferAction = async <
     T extends { success: boolean; error?: string },
   >(
@@ -151,17 +144,28 @@ export function TransferMarketPanel({
     successMessage: string,
     errorMessage: string,
     refreshMarket = false,
+    isTransferComplete = false,
   ) => {
     setIsSubmitting(true);
-    const result = await action();
-    setIsSubmitting(false);
+    try {
+      const result = await action();
 
-    if (result.success) {
-      setActionMessage({ type: 'success', text: successMessage });
-      refetchOffers();
-      if (refreshMarket) refetchMarket();
-    } else {
-      setActionMessage({ type: 'error', text: result.error || errorMessage });
+      if (result.success) {
+        setActionMessage({ type: 'success', text: successMessage });
+        refetchOffers();
+        if (refreshMarket) refetchMarket();
+        // If this is a transfer completion (sale), refresh squad data too
+        if (isTransferComplete) onTransferComplete?.();
+      } else {
+        setActionMessage({ type: 'error', text: result.error || errorMessage });
+      }
+    } catch (err) {
+      setActionMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : errorMessage,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -171,24 +175,28 @@ export function TransferMarketPanel({
   ) =>
     handleOfferAction(
       () => respondToOffer(saveId, offerId, response),
-      response === 'accept' ? 'Offer accepted!' : 'Offer rejected.',
+      response === 'accept'
+        ? 'Transfer completed! Player has been sold.'
+        : 'Offer rejected.',
       'Failed to respond',
+      response === 'accept', // refreshMarket
+      response === 'accept', // isTransferComplete (sale happened)
     );
 
-  const handleAcceptCounter = (offerId: string) =>
-    handleOfferAction(
-      () => acceptCounterOffer(saveId, offerId),
-      'Counter offer accepted! Complete the transfer.',
-      'Failed to accept counter',
-    );
+  // Handle counter offer completion from CounterOfferModal
+  const handleCounterOfferComplete = useCallback(() => {
+    setCounterOfferTarget(null);
+    setActionMessage({ type: 'success', text: 'Player sold!' });
+    refetchOffers();
+    refetchListings();
+    refetchMarket();
+    onTransferComplete?.();
+  }, [refetchOffers, refetchListings, refetchMarket, onTransferComplete]);
 
-  const handleCompleteTransfer = (offerId: string) =>
-    handleOfferAction(
-      () => completeTransfer(saveId, offerId),
-      'Transfer completed! Player has joined your team.',
-      'Failed to complete transfer',
-      true,
-    );
+  // Handle counter offer rejection (AI walked away)
+  const handleCounterOfferRejected = useCallback(() => {
+    refetchOffers(); // Remove rejected offer from list
+  }, [refetchOffers]);
 
   const handleListPlayer = async (playerId: string) => {
     setIsSubmitting(true);
@@ -230,19 +238,44 @@ export function TransferMarketPanel({
   // Tab content
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'available':
+      case 'search':
         return (
           <div className="space-y-4">
-            <TransferFilters filters={filters} onChange={setFilters} />
+            {/* Status Toggle + Filters */}
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex gap-1 bg-slate-700/50 rounded-lg p-1">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'listed', label: 'Listed' },
+                  { id: 'free_agents', label: 'Free Agents' },
+                ].map((option) => (
+                  <button
+                    key={option.id}
+                    onClick={() =>
+                      setStatusFilter(option.id as PlayerStatusFilter)
+                    }
+                    className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                      statusFilter === option.id
+                        ? 'bg-pitch-600 text-white'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <TransferFilters filters={filters} onChange={setFilters} />
+            </div>
 
             {marketLoading ? (
               <p className="text-slate-400">Loading market...</p>
-            ) : filteredListed.length === 0 ? (
+            ) : searchResults.length === 0 ? (
               <p className="text-slate-500">No players match your filters.</p>
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredListed.map((player) => (
-                  <PlayerListingCard
+              <div className="space-y-1">
+                <PlayerListHeader />
+                {searchResults.map((player) => (
+                  <PlayerListRow
                     key={player.id}
                     player={player}
                     onClick={() => setSelectedPlayer(player)}
@@ -254,52 +287,29 @@ export function TransferMarketPanel({
           </div>
         );
 
-      case 'free_agents':
-        return (
-          <div className="space-y-4">
-            <TransferFilters filters={filters} onChange={setFilters} />
-
-            {marketLoading ? (
-              <p className="text-slate-400">Loading free agents...</p>
-            ) : filteredFreeAgents.length === 0 ? (
-              <p className="text-slate-500">
-                No free agents match your filters.
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredFreeAgents.map((player) => (
-                  <PlayerListingCard
-                    key={player.id}
-                    player={player}
-                    onClick={() => setSelectedPlayer(player)}
-                    isSelected={selectedPlayer?.id === player.id}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-
-      case 'offers':
+      case 'my_transfers':
         return (
           <div className="space-y-6">
-            {/* Incoming Offers */}
+            {/* Bids on My Players (incoming) */}
             <div>
               <h3 className="text-lg font-bold text-white mb-3">
-                Incoming Offers ({incoming.length})
+                Bids on My Players ({filteredIncoming.length})
               </h3>
-              {incoming.length === 0 ? (
-                <p className="text-slate-500 text-sm">No incoming offers.</p>
+              {filteredIncoming.length === 0 ? (
+                <p className="text-slate-500 text-sm">
+                  No bids on your players.
+                </p>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {incoming.map((offer) => (
-                    <OfferCard
+                <div className="space-y-2">
+                  {filteredIncoming.map((offer) => (
+                    <OfferListRow
                       key={offer.id}
                       offer={offer}
                       direction="incoming"
                       currentRound={currentRound}
                       onAccept={() => handleRespondToOffer(offer.id, 'accept')}
                       onReject={() => handleRespondToOffer(offer.id, 'reject')}
+                      onCounter={() => setCounterOfferTarget(offer)}
                       isProcessing={isSubmitting}
                     />
                   ))}
@@ -307,37 +317,6 @@ export function TransferMarketPanel({
               )}
             </div>
 
-            {/* Outgoing Offers */}
-            <div>
-              <h3 className="text-lg font-bold text-white mb-3">
-                My Offers ({outgoing.length})
-              </h3>
-              {outgoing.length === 0 ? (
-                <p className="text-slate-500 text-sm">
-                  You haven't made any offers.
-                </p>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {outgoing.map((offer) => (
-                    <OfferCard
-                      key={offer.id}
-                      offer={offer}
-                      direction="outgoing"
-                      currentRound={currentRound}
-                      onAcceptCounter={() => handleAcceptCounter(offer.id)}
-                      onComplete={() => handleCompleteTransfer(offer.id)}
-                      isProcessing={isSubmitting}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 'my_listed':
-        return (
-          <div className="space-y-6">
             {/* Listed Players */}
             <div>
               <h3 className="text-lg font-bold text-white mb-3">
@@ -348,35 +327,29 @@ export function TransferMarketPanel({
                   No players listed for sale.
                 </p>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-2">
                   {myListings.map((listing) => (
                     <div
                       key={listing.id}
-                      className="bg-slate-700/50 border border-slate-600 rounded-lg p-3"
+                      className="flex items-center gap-3 px-3 py-2 bg-slate-700/30 border border-slate-600/50 rounded-lg"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <PositionBadge position={listing.position} />
-                          <span className="text-white font-medium">
-                            {listing.playerName}
-                          </span>
-                        </div>
-                        <span className="text-pitch-400 font-bold">
-                          {listing.overall}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-400">
-                          Asking: {formatCurrency(listing.askingPrice)}
-                        </span>
-                        <button
-                          onClick={() => handleRemoveListing(listing.playerId)}
-                          disabled={isSubmitting}
-                          className="text-red-400 hover:text-red-300 text-xs disabled:opacity-50"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      <PositionBadge position={listing.position} />
+                      <span className="text-white font-medium flex-1">
+                        {listing.playerName}
+                      </span>
+                      <span className="text-slate-400 text-sm">
+                        OVR {listing.overall}
+                      </span>
+                      <span className="text-pitch-400 text-sm">
+                        {formatCurrency(listing.askingPrice)}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveListing(listing.playerId)}
+                        disabled={isSubmitting}
+                        className="px-3 py-1 text-red-400 hover:text-red-300 text-sm border border-red-500/50 rounded hover:border-red-400 transition-colors disabled:opacity-50"
+                      >
+                        Unlist
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -388,7 +361,7 @@ export function TransferMarketPanel({
               <h3 className="text-lg font-bold text-white mb-3">
                 List a Player
               </h3>
-              <div className="grid gap-2">
+              <div className="space-y-1">
                 {playerTeam.players
                   .filter(
                     (p) => !myListings.some((l) => l.playerId === p.id),
@@ -397,40 +370,39 @@ export function TransferMarketPanel({
                   .map((player) => (
                     <div
                       key={player.id}
-                      className="bg-slate-700/50 border border-slate-600 rounded px-3 py-2 flex items-center justify-between"
+                      className="flex items-center gap-3 px-3 py-2 bg-slate-700/30 border border-slate-600/50 rounded-lg"
                     >
-                      <div className="flex items-center gap-2">
-                        <PositionBadge position={player.position} />
-                        <span className="text-white">
-                          {player.nickname || player.name}
-                        </span>
-                        <span className="text-slate-400 text-sm">
-                          {player.age}y
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-pitch-400 font-medium">
-                          OVR {calculateOverall(player)}
-                        </span>
-                        <button
-                          onClick={() => handleListPlayer(player.id)}
-                          disabled={isSubmitting}
-                          className="px-3 py-1 bg-pitch-600 hover:bg-pitch-500 text-white text-sm rounded disabled:opacity-50"
-                        >
-                          List
-                        </button>
-                      </div>
+                      <PositionBadge position={player.position} />
+                      <span className="text-white flex-1">
+                        {player.nickname || player.name}
+                      </span>
+                      <span className="text-slate-400 text-sm">
+                        {player.age}y
+                      </span>
+                      <span className="text-pitch-400 font-medium">
+                        OVR {calculateOverall(player)}
+                      </span>
+                      <button
+                        onClick={() => handleListPlayer(player.id)}
+                        disabled={isSubmitting}
+                        className="px-3 py-1 bg-pitch-600 hover:bg-pitch-500 text-white text-sm rounded disabled:opacity-50"
+                      >
+                        List
+                      </button>
                     </div>
                   ))}
               </div>
             </div>
           </div>
         );
+
+      default:
+        return null;
     }
   };
 
-  // Count pending incoming offers
-  const pendingIncoming = incoming.filter((o) => o.status === 'pending');
+  // Count pending incoming offers for alert
+  const pendingIncoming = filteredIncoming.filter((o) => o.status === 'pending');
 
   return (
     <div className="p-4 space-y-4">
@@ -438,14 +410,14 @@ export function TransferMarketPanel({
       {pendingIncoming.length > 0 && (
         <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm flex items-center gap-2">
           <span className="font-medium">
-            {pendingIncoming.length} incoming offer
+            {pendingIncoming.length} incoming bid
             {pendingIncoming.length > 1 ? 's' : ''} awaiting response
           </span>
           <button
-            onClick={() => setActiveTab('offers')}
+            onClick={() => setActiveTab('my_transfers')}
             className="ml-auto text-amber-400 hover:text-amber-300 underline"
           >
-            View Offers
+            View Bids
           </button>
         </div>
       )}
@@ -489,21 +461,15 @@ export function TransferMarketPanel({
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs - Simplified to 2 tabs */}
       <div className="flex gap-1 border-b border-slate-700 overflow-x-auto">
         {[
-          { id: 'available', label: 'Available', count: filteredListed.length },
+          { id: 'search', label: 'Search Players', count: searchResults.length },
           {
-            id: 'free_agents',
-            label: 'Free Agents',
-            count: filteredFreeAgents.length,
+            id: 'my_transfers',
+            label: 'My Transfers',
+            count: myListings.length + filteredIncoming.length,
           },
-          {
-            id: 'offers',
-            label: 'Offers',
-            count: incoming.length + outgoing.length,
-          },
-          { id: 'my_listed', label: 'My Listed', count: myListings.length },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -529,15 +495,26 @@ export function TransferMarketPanel({
         {renderTabContent()}
       </div>
 
-      {/* Player Detail Modal */}
+      {/* Negotiation Modal (replaces PlayerDetailModal) */}
       {selectedPlayer && (
-        <PlayerDetailModal
+        <NegotiationModal
           player={selectedPlayer}
           teamBudget={playerTeam.budget}
           teamWageBudget={playerTeam.wageBudget}
+          saveId={saveId}
           onClose={() => setSelectedPlayer(null)}
-          onMakeOffer={handleMakeOffer}
-          isSubmitting={isSubmitting}
+          onComplete={handleTransferComplete}
+        />
+      )}
+
+      {/* Counter Offer Modal for incoming bids */}
+      {counterOfferTarget && (
+        <CounterOfferModal
+          offer={counterOfferTarget}
+          saveId={saveId}
+          onClose={() => setCounterOfferTarget(null)}
+          onComplete={handleCounterOfferComplete}
+          onRejected={handleCounterOfferRejected}
         />
       )}
     </div>
