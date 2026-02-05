@@ -50,11 +50,11 @@ export function createAuth(env?: CloudflareBindings) {
     },
     advanced: {
       crossSubDomainCookies: {
-        enabled: true,
+        enabled: env?.ENVIRONMENT !== 'development',
       },
       defaultCookieAttributes: {
-        sameSite: 'none',
-        secure: true,
+        sameSite: env?.ENVIRONMENT === 'development' ? 'lax' : 'none',
+        secure: env?.ENVIRONMENT !== 'development',
       },
     },
     trustedOrigins: [
