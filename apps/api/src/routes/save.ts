@@ -7,7 +7,19 @@ import {
   players,
   standings,
   transactions,
+  tactics,
 } from '@retrofoot/db/schema';
+import {
+  DEFAULT_FORMATION,
+  FORMATION_OPTIONS,
+  evaluateFormationEligibility,
+  normalizeFormation,
+  selectBestLineup,
+  type FormationType,
+  type Player,
+  type Position,
+  type TacticalPosture,
+} from '@retrofoot/core';
 import { seedNewGame, getAvailableTeams } from '../lib/seed';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
@@ -283,6 +295,270 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
     .where(eq(players.teamId, teamId));
 
   return c.json({ squad });
+});
+
+saveRoutes.get('/:id/tactics/:teamId', async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+
+  if (!session?.user?.id) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const saveId = c.req.param('id');
+  const teamId = c.req.param('teamId');
+  const db = drizzle(c.env.DB);
+
+  const saveResult = await db
+    .select({ userId: saves.userId })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0 || saveResult[0].userId !== session.user.id) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const teamResult = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.saveId, saveId)))
+    .limit(1);
+
+  if (teamResult.length === 0) {
+    return c.json({ error: 'Team not found for this save' }, 404);
+  }
+
+  const current = await db
+    .select({
+      formation: tactics.formation,
+      posture: tactics.posture,
+      lineup: tactics.lineup,
+      substitutes: tactics.substitutes,
+    })
+    .from(tactics)
+    .where(and(eq(tactics.saveId, saveId), eq(tactics.teamId, teamId)))
+    .limit(1);
+
+  if (current.length === 0) {
+    return c.json({ error: 'Tactics not found' }, 404);
+  }
+
+  const row = current[0];
+  return c.json({
+    tactics: {
+      formation: normalizeFormation(row.formation),
+      posture: row.posture,
+      lineup: (row.lineup as string[]) ?? [],
+      substitutes: (row.substitutes as string[]) ?? [],
+    },
+  });
+});
+
+saveRoutes.put('/:id/tactics/:teamId', async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+
+  if (!session?.user?.id) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const saveId = c.req.param('id');
+  const teamId = c.req.param('teamId');
+  const db = drizzle(c.env.DB);
+
+  const saveResult = await db
+    .select({ userId: saves.userId })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0 || saveResult[0].userId !== session.user.id) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const teamResult = await db
+    .select({
+      id: teams.id,
+      name: teams.name,
+      shortName: teams.shortName,
+      primaryColor: teams.primaryColor,
+      secondaryColor: teams.secondaryColor,
+      stadium: teams.stadium,
+      capacity: teams.capacity,
+      reputation: teams.reputation,
+      budget: teams.budget,
+      wageBudget: teams.wageBudget,
+      momentum: teams.momentum,
+      lastFiveResults: teams.lastFiveResults,
+    })
+    .from(teams)
+    .where(and(eq(teams.id, teamId), eq(teams.saveId, saveId)))
+    .limit(1);
+
+  if (teamResult.length === 0) {
+    return c.json({ error: 'Team not found for this save' }, 404);
+  }
+
+  const teamPlayers = await db
+    .select({
+      id: players.id,
+      name: players.name,
+      nickname: players.nickname,
+      age: players.age,
+      nationality: players.nationality,
+      position: players.position,
+      preferredFoot: players.preferredFoot,
+      attributes: players.attributes,
+      potential: players.potential,
+      morale: players.morale,
+      fitness: players.fitness,
+      injured: players.injured,
+      injuryWeeks: players.injuryWeeks,
+      contractEndSeason: players.contractEndSeason,
+      wage: players.wage,
+      marketValue: players.marketValue,
+      status: players.status,
+      form: players.form,
+      lastFiveRatings: players.lastFiveRatings,
+      seasonGoals: players.seasonGoals,
+      seasonAssists: players.seasonAssists,
+      seasonMinutes: players.seasonMinutes,
+      seasonAvgRating: players.seasonAvgRating,
+    })
+    .from(players)
+    .where(and(eq(players.teamId, teamId), eq(players.saveId, saveId)));
+
+  const body = await c.req.json<{
+    formation?: string;
+    posture?: string;
+    lineup?: string[];
+    substitutes?: string[];
+  }>();
+
+  const formation = normalizeFormation(body.formation);
+  const posture = body.posture as TacticalPosture;
+
+  if (!['defensive', 'balanced', 'attacking'].includes(posture)) {
+    return c.json({ error: 'Invalid posture' }, 400);
+  }
+
+  const availabilityPlayers = teamPlayers.map((player) => ({
+    position: player.position as Position,
+    injured: player.injured ?? false,
+    fitness: player.fitness ?? 100,
+  }));
+  const eligibility = evaluateFormationEligibility(formation, availabilityPlayers);
+  if (!eligibility.eligible) {
+    return c.json(
+      {
+        error: 'Formation not eligible for available players',
+        formation,
+        required: eligibility.required,
+        available: eligibility.available,
+        missing: eligibility.missing,
+      },
+      400,
+    );
+  }
+
+  const playerIds = new Set(teamPlayers.map((player) => player.id));
+  let lineup = Array.isArray(body.lineup) ? body.lineup : [];
+  let substitutes = Array.isArray(body.substitutes) ? body.substitutes : [];
+
+  lineup = lineup.filter((id) => typeof id === 'string' && playerIds.has(id));
+  substitutes = substitutes.filter(
+    (id) => typeof id === 'string' && playerIds.has(id),
+  );
+
+  if (lineup.length < 11) {
+    const corePlayers: Player[] = teamPlayers.map((player) => ({
+      id: player.id,
+      name: player.name,
+      nickname: player.nickname ?? undefined,
+      age: player.age,
+      nationality: player.nationality,
+      position: player.position as Position,
+      preferredFoot:
+        (player.preferredFoot as 'left' | 'right' | 'both') ?? 'right',
+      attributes: player.attributes as Player['attributes'],
+      potential: player.potential,
+      morale: player.morale ?? 70,
+      fitness: player.fitness ?? 100,
+      injured: player.injured ?? false,
+      injuryWeeks: player.injuryWeeks ?? 0,
+      contractEndSeason: player.contractEndSeason,
+      wage: player.wage,
+      marketValue: player.marketValue,
+      status:
+        (player.status as
+          | 'active'
+          | 'retiring'
+          | 'retired'
+          | 'deceased'
+          | 'suspended') ?? 'active',
+      form: {
+        form: player.form ?? 70,
+        lastFiveRatings: (player.lastFiveRatings as number[]) ?? [],
+        seasonGoals: player.seasonGoals ?? 0,
+        seasonAssists: player.seasonAssists ?? 0,
+        seasonMinutes: player.seasonMinutes ?? 0,
+        seasonAvgRating: player.seasonAvgRating ?? 0,
+      },
+    }));
+
+    const defaultTactics = selectBestLineup(
+      {
+        ...teamResult[0],
+        badgeUrl: undefined,
+        momentum: teamResult[0].momentum ?? 50,
+        lastFiveResults:
+          (teamResult[0].lastFiveResults as ('W' | 'D' | 'L')[]) ?? [],
+        players: corePlayers,
+      },
+      formation,
+    );
+    lineup = defaultTactics.lineup;
+    substitutes = defaultTactics.substitutes;
+  }
+
+  // Remove duplicates between lineup and bench.
+  const lineupSet = new Set(lineup);
+  substitutes = substitutes.filter((id) => !lineupSet.has(id));
+
+  const existing = await db
+    .select({ id: tactics.id })
+    .from(tactics)
+    .where(and(eq(tactics.saveId, saveId), eq(tactics.teamId, teamId)))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(tactics)
+      .set({ formation, posture, lineup, substitutes })
+      .where(eq(tactics.id, existing[0].id));
+  } else {
+    await db.insert(tactics).values({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      saveId,
+      teamId,
+      formation,
+      posture,
+      lineup,
+      substitutes,
+    });
+  }
+
+  return c.json({
+    success: true,
+    tactics: { formation, posture, lineup, substitutes },
+    allowedFormations: FORMATION_OPTIONS,
+    fallbackFormation: DEFAULT_FORMATION as FormationType,
+  });
 });
 
 /**

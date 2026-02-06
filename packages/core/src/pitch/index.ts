@@ -39,19 +39,6 @@ const FORMATION_COORDINATES: Record<FormationType, SlotCoordinate[]> = {
     { x: 50, y: 82 }, // ST
     { x: 15, y: 75 }, // LW
   ],
-  '4-2-3-1': [
-    { x: 50, y: 8 }, // GK
-    { x: 85, y: 18 }, // RB
-    { x: 65, y: 18 }, // CB
-    { x: 35, y: 18 }, // CB
-    { x: 15, y: 18 }, // LB
-    { x: 62, y: 32 }, // CDM
-    { x: 38, y: 32 }, // CDM
-    { x: 80, y: 55 }, // RM
-    { x: 50, y: 62 }, // CAM
-    { x: 20, y: 55 }, // LM
-    { x: 50, y: 85 }, // ST
-  ],
   '3-5-2': [
     { x: 50, y: 8 }, // GK
     { x: 70, y: 18 }, // CB

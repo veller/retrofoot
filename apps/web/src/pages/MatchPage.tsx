@@ -17,15 +17,20 @@ import {
   makeSubstitution,
   formatCurrency,
   BASE_TICKET_PRICE,
+  evaluateFormationEligibility,
 } from '@retrofoot/core';
 import { apiFetch } from '../lib/api';
-import { useSaveMatchData } from '../hooks';
+import { useSaveMatchData, fetchTeamTactics, saveTeamTactics } from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
 import { useGameStore } from '../stores/gameStore';
 
-type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
+type MatchPhase =
+  | 'pre_match'
+  | 'live'
+  | 'substitutions'
+  | 'post_match';
 
 // Event types that should be persisted to the database
 const PERSISTENT_EVENT_TYPES = new Set([
@@ -299,32 +304,42 @@ export function MatchPage() {
 
   // Initialize player tactics when data loads - prefer gameStore tactics
   useEffect(() => {
-    if (matchData && !playerTactics) {
-      // First, try to use tactics from the game store (set by GamePage)
-      if (gameStoreTactics && gameStoreTactics.lineup.length >= 11) {
-        // Validate that the lineup player IDs exist in the current team
-        const playerTeam = matchData.teams.find(
-          (t) => t.id === matchData.playerTeamId,
-        );
-        if (playerTeam) {
-          const playerIds = new Set(playerTeam.players.map((p) => p.id));
-          const lineupValid = gameStoreTactics.lineup.every((id) =>
-            playerIds.has(id),
-          );
+    let cancelled = false;
 
-          if (lineupValid) {
-            setPlayerTactics(gameStoreTactics);
-            return;
-          }
+    async function hydrateMatchTactics() {
+      if (!matchData || playerTactics) return;
+      const playerTeam = matchData.teams.find(
+        (team) => team.id === matchData.playerTeamId,
+      );
+      if (!playerTeam || playerTeam.players.length < 11) return;
+      const playerIds = new Set(playerTeam.players.map((player) => player.id));
+
+      // First, try game store tactics.
+      if (gameStoreTactics && gameStoreTactics.lineup.length >= 11) {
+        const lineupValid = gameStoreTactics.lineup.every((id) =>
+          playerIds.has(id),
+        );
+        if (lineupValid && !cancelled) {
+          setPlayerTactics(gameStoreTactics);
+          return;
         }
       }
 
-      // Fallback: generate default tactics if none in store
-      const playerTeam = matchData.teams.find(
-        (t) => t.id === matchData.playerTeamId,
-      );
-      if (playerTeam && playerTeam.players.length >= 11) {
-        const { lineup, substitutes } = selectBestLineup(playerTeam, '4-3-3');
+      if (saveId) {
+        try {
+          const persisted = await fetchTeamTactics(saveId, matchData.playerTeamId);
+          if (persisted && persisted.lineup.length >= 11 && !cancelled) {
+            setPlayerTactics(persisted);
+            return;
+          }
+        } catch (error) {
+          console.error('Failed to load persisted tactics for match:', error);
+        }
+      }
+
+      // Last fallback: auto-select.
+      const { lineup, substitutes } = selectBestLineup(playerTeam, '4-3-3');
+      if (!cancelled) {
         setPlayerTactics({
           formation: '4-3-3',
           posture: 'balanced',
@@ -333,7 +348,12 @@ export function MatchPage() {
         });
       }
     }
-  }, [matchData, playerTactics, gameStoreTactics]);
+
+    void hydrateMatchTactics();
+    return () => {
+      cancelled = true;
+    };
+  }, [matchData, playerTactics, gameStoreTactics, saveId]);
 
   // Initialize match states when confirmed
   const handleConfirmMatch = useCallback(() => {
@@ -500,6 +520,80 @@ export function MatchPage() {
     [playerMatchIndex, matchData?.playerTeamId],
   );
 
+  const handleApplyLiveTactics = useCallback(
+    (nextTactics: Tactics) => {
+      if (!matchData || !playerTactics) return;
+      const playerTeam = matchData.teams.find(
+        (team) => team.id === matchData.playerTeamId,
+      );
+      if (!playerTeam) return;
+
+      const normalizedFormation = nextTactics.formation;
+      const eligibility = evaluateFormationEligibility(
+        normalizedFormation,
+        playerTeam.players,
+      );
+      if (!eligibility.eligible) return;
+
+      const autoSelection = selectBestLineup(playerTeam, normalizedFormation);
+      const updatedTactics: Tactics = {
+        ...playerTactics,
+        ...nextTactics,
+        formation: normalizedFormation,
+        lineup: autoSelection.lineup,
+        substitutes: autoSelection.substitutes,
+      };
+
+      setPlayerTactics(updatedTactics);
+
+      setMatches((prev) => {
+        if (playerMatchIndex < 0 || !prev[playerMatchIndex]) return prev;
+        const updated = [...prev];
+        const match = updated[playerMatchIndex];
+        const isHome = match.homeTeam.id === matchData.playerTeamId;
+
+        if (isHome) {
+          match.state.homeTactics = { ...updatedTactics };
+          match.state.homeLineup = updatedTactics.lineup
+            .map((id) => match.homeTeam.players.find((player) => player.id === id))
+            .filter((player) => player !== undefined);
+          match.state.homeSubs = updatedTactics.substitutes
+            .map((id) => match.homeTeam.players.find((player) => player.id === id))
+            .filter((player) => player !== undefined);
+        } else {
+          match.state.awayTactics = { ...updatedTactics };
+          match.state.awayLineup = updatedTactics.lineup
+            .map((id) => match.awayTeam.players.find((player) => player.id === id))
+            .filter((player) => player !== undefined);
+          match.state.awaySubs = updatedTactics.substitutes
+            .map((id) => match.awayTeam.players.find((player) => player.id === id))
+            .filter((player) => player !== undefined);
+        }
+
+        return updated.map((item) => ({
+          ...item,
+          state: {
+            ...item.state,
+            homeLineup: [...item.state.homeLineup],
+            awayLineup: [...item.state.awayLineup],
+            homeSubs: [...item.state.homeSubs],
+            awaySubs: [...item.state.awaySubs],
+          },
+        }));
+      });
+
+      if (saveId) {
+        void saveTeamTactics(saveId, matchData.playerTeamId, updatedTactics).catch(
+          (error) => {
+            console.error('Failed to persist live tactics:', error);
+          },
+        );
+      }
+      setPhase('live');
+    },
+    [matchData, playerMatchIndex, playerTactics, saveId],
+  );
+
   const handleFinish = useCallback(async () => {
     if (!saveId || results.length === 0) return;
 
@@ -622,15 +716,22 @@ export function MatchPage() {
   if (phase === 'substitutions' && matches[playerMatchIndex]) {
     const playerMatch = matches[playerMatchIndex];
     const isHome = playerMatch.homeTeam.id === matchData.playerTeamId;
+    const playerTeam =
+      matchData.teams.find((team) => team.id === matchData.playerTeamId) ?? null;
 
-    return (
-      <SubstitutionPanel
-        matchState={playerMatch.state}
-        isHome={isHome}
-        onClose={handleCloseSubstitutions}
-        onSubstitute={handleSubstitute}
-      />
-    );
+    if (playerTeam && playerTactics) {
+      return (
+        <SubstitutionPanel
+          playerTeam={playerTeam}
+          currentTactics={playerTactics}
+          matchState={playerMatch.state}
+          isHome={isHome}
+          onClose={handleCloseSubstitutions}
+          onSubstitute={handleSubstitute}
+          onApplyTactics={handleApplyLiveTactics}
+        />
+      );
+    }
   }
 
   // Post-match phase

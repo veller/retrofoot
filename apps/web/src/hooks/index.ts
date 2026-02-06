@@ -2,7 +2,13 @@
 export { useAuth } from './useAuth';
 export { useSaves, useCreateSave } from './useSaves';
 export type { SaveSummary } from './useSaves';
-export { useSaveData, useSaveMatchData, useTransactions } from './useSaveData';
+export {
+  useSaveData,
+  useSaveMatchData,
+  useTransactions,
+  fetchTeamTactics,
+  saveTeamTactics,
+} from './useSaveData';
 export type {
   SaveData,
   MatchData,

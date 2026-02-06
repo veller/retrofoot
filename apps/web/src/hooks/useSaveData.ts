@@ -6,7 +6,11 @@ import type {
   PlayerForm,
   Position,
   StandingEntry,
+  Tactics,
+  TacticalPosture,
+  FormationType,
 } from '@retrofoot/core';
+import { normalizeFormation } from '@retrofoot/core';
 import { apiFetch } from '../lib/api';
 
 // API response types (from database)
@@ -100,6 +104,15 @@ interface UseSaveDataResult {
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+}
+
+interface ApiTacticsResponse {
+  tactics: {
+    formation: string;
+    posture: TacticalPosture;
+    lineup: string[];
+    substitutes: string[];
+  };
 }
 
 /**
@@ -503,6 +516,55 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
     isLoading,
     error,
     refetch: fetchData,
+  };
+}
+
+export async function fetchTeamTactics(
+  saveId: string,
+  teamId: string,
+): Promise<Tactics | null> {
+  const response = await apiFetch(`/api/save/${saveId}/tactics/${teamId}`);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error('Failed to fetch tactics');
+  }
+
+  const payload: ApiTacticsResponse = await response.json();
+  return {
+    formation: normalizeFormation(payload.tactics.formation),
+    posture: payload.tactics.posture,
+    lineup: payload.tactics.lineup ?? [],
+    substitutes: payload.tactics.substitutes ?? [],
+  };
+}
+
+export async function saveTeamTactics(
+  saveId: string,
+  teamId: string,
+  tactics: Tactics,
+): Promise<Tactics> {
+  const response = await apiFetch(`/api/save/${saveId}/tactics/${teamId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      formation: tactics.formation,
+      posture: tactics.posture,
+      lineup: tactics.lineup,
+      substitutes: tactics.substitutes,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || 'Failed to save tactics');
+  }
+
+  const payload: ApiTacticsResponse = await response.json();
+  return {
+    formation: normalizeFormation(payload.tactics.formation) as FormationType,
+    posture: payload.tactics.posture as TacticalPosture,
+    lineup: payload.tactics.lineup ?? [],
+    substitutes: payload.tactics.substitutes ?? [],
   };
 }
 

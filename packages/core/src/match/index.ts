@@ -40,6 +40,14 @@ import {
   EVENT_THRESHOLD_FREE_KICK,
   EVENT_THRESHOLD_SAVE,
 } from './constants';
+import {
+  calculateFormationMatchupImpact,
+  getPostureImpact,
+  mergeTacticalImpacts,
+  POSSESSION_CHANCE_MAX,
+  POSSESSION_CHANCE_MIN,
+  type TacticalImpact,
+} from './tactical-constants';
 
 // Match simulation configuration
 export interface MatchConfig {
@@ -70,6 +78,8 @@ export interface MatchState {
   stoppageTime: number;
   homeRedCards: number;
   awayRedCards: number;
+  homeTacticalImpact: TacticalImpact;
+  awayTacticalImpact: TacticalImpact;
 }
 
 // Live match state for a single match in multi-match simulation
@@ -287,14 +297,7 @@ function calculateTeamStrength(
     avgStrength -= calculateRedCardPenalty(options.redCards);
   }
 
-  // Adjust for tactical posture
-  const postureModifiers: Record<string, number> = {
-    attacking: 3,
-    defensive: -3,
-    balanced: 0,
-  };
-
-  return avgStrength + (postureModifiers[tactics.posture] ?? 0);
+  return avgStrength;
 }
 
 // Options for calculateChanceSuccess
@@ -307,6 +310,8 @@ interface ChanceSuccessOptions {
   awayRedCards?: number;
   minute?: number;
   scorer?: Player;
+  attackingImpact?: TacticalImpact;
+  defendingImpact?: TacticalImpact;
 }
 
 // Calculate attack vs defense for a chance
@@ -346,6 +351,14 @@ function calculateChanceSuccess(
   // Base chance modified by strength difference
   const strengthDiff = attackStrength - defenseStrength;
   let baseChance = BASE_GOAL_CONVERSION + (strengthDiff / 100) * 0.2;
+
+  const attackingImpact = options?.attackingImpact;
+  const defendingImpact = options?.defendingImpact;
+  if (attackingImpact || defendingImpact) {
+    const attackingCreation = attackingImpact?.creation ?? 0;
+    const defendingPrevention = defendingImpact?.prevention ?? 0;
+    baseChance += (attackingCreation - defendingPrevention) * 0.35;
+  }
 
   // Home conversion bonus (+5% if home and not neutral venue)
   if (isHome && !isNeutralVenue) {
@@ -413,6 +426,8 @@ export function createMatchState(config: MatchConfig): MatchState {
     stoppageTime: randomInt(1, 5),
     homeRedCards: 0,
     awayRedCards: 0,
+    homeTacticalImpact: { possession: 0, creation: 0, prevention: 0 },
+    awayTacticalImpact: { possession: 0, creation: 0, prevention: 0 },
   };
 }
 
@@ -497,6 +512,26 @@ function pickSetPieceScorer(
 
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
+  const homeFormationImpact = calculateFormationMatchupImpact(
+    state.homeTactics.formation,
+    state.awayTactics.formation,
+  );
+  const awayFormationImpact = calculateFormationMatchupImpact(
+    state.awayTactics.formation,
+    state.homeTactics.formation,
+  );
+  const homePostureImpact = getPostureImpact(state.homeTactics.posture);
+  const awayPostureImpact = getPostureImpact(state.awayTactics.posture);
+
+  state.homeTacticalImpact = mergeTacticalImpacts(
+    homeFormationImpact,
+    homePostureImpact,
+  );
+  state.awayTacticalImpact = mergeTacticalImpacts(
+    awayFormationImpact,
+    awayPostureImpact,
+  );
+
   // Calculate team strengths with all modifiers
   const homeStrength = calculateTeamStrength(
     state.homeLineup,
@@ -520,16 +555,19 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
   // Determine which team has possession
   const possessionRoll = random();
   let homePossChance = 0.5 + (homeStrength - awayStrength) / 200;
+  homePossChance +=
+    state.homeTacticalImpact.possession - state.awayTacticalImpact.possession;
 
   // Home possession bonus (if not neutral venue)
   if (!config.neutralVenue) {
     homePossChance += HOME_POSSESSION_BONUS;
   }
+  homePossChance = Math.max(
+    POSSESSION_CHANCE_MIN,
+    Math.min(POSSESSION_CHANCE_MAX, homePossChance),
+  );
 
   state.possession = possessionRoll < homePossChance ? 'home' : 'away';
-
-  // Chance of something happening this minute
-  if (random() > EVENT_PROBABILITY_PER_MINUTE) return;
 
   const attackingTeam = state.possession;
   const attackingPlayers =
@@ -543,6 +581,27 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
   const teamObj = attackingTeam === 'home' ? config.homeTeam : config.awayTeam;
   const defendingTeamObj =
     attackingTeam === 'home' ? config.awayTeam : config.homeTeam;
+  const attackingImpact =
+    attackingTeam === 'home'
+      ? state.homeTacticalImpact
+      : state.awayTacticalImpact;
+  const defendingImpact =
+    attackingTeam === 'home'
+      ? state.awayTacticalImpact
+      : state.homeTacticalImpact;
+
+  const eventProbability = Math.max(
+    0.05,
+    Math.min(
+      0.35,
+      EVENT_PROBABILITY_PER_MINUTE +
+        attackingImpact.creation * 0.2 -
+        defendingImpact.prevention * 0.1,
+    ),
+  );
+
+  // Chance of something happening this minute
+  if (random() > eventProbability) return;
 
   // What kind of event?
   const eventRoll = random();
@@ -565,6 +624,8 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         awayRedCards: state.awayRedCards,
         minute: state.minute,
         scorer,
+        attackingImpact,
+        defendingImpact,
       },
     );
 

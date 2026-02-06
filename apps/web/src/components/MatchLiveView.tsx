@@ -317,7 +317,7 @@ function ControlButtons({
           onClick={onSubstitutions}
           className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
         >
-          Substitutions
+          Team Changes
         </button>
       )}
     </div>
@@ -382,7 +382,7 @@ function MobileControlBar({
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors"
           >
             <SubstitutionIcon className="w-5 h-5" />
-            <span>Substitutions</span>
+            <span>Team Changes</span>
           </button>
         )}
       </div>

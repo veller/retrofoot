@@ -45,7 +45,6 @@ interface PitchViewProps {
   substitutes: string[];
   playersById: Map<string, Player>;
   formation: FormationType;
-  /** When defensive/attacking, show a tiny arrow on each player (blue back, red forward). */
   posture?: TacticalPosture | null;
   onPlayerClick?: (slot: PitchSlot, playerId: string | undefined) => void;
   selectedSlot?: PitchSlot | null;
@@ -71,6 +70,15 @@ export function PitchView({
   const overLimit = benchCount > benchLimit;
   const excessCount = overLimit ? benchCount - benchLimit : 0;
   const coordinates = getFormationSlotCoordinates(formation);
+
+  function getPostureYOffset(position: Position): number {
+    if (!posture || posture === 'balanced') return 0;
+    const direction = posture === 'attacking' ? -1 : 1;
+    if (position === 'DEF') return 2.4 * direction;
+    if (position === 'MID') return 1.4 * direction;
+    if (position === 'ATT') return 0.8 * direction;
+    return 0;
+  }
 
   return (
     <div className="flex flex-col gap-4 items-center">
@@ -181,39 +189,15 @@ export function PitchView({
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
 
-            const showTacticalArrow =
-              posture === 'defensive' || posture === 'attacking';
-            const isDefensive = posture === 'defensive';
-
             return (
               <div
                 key={playerId}
                 className="absolute -translate-x-1/2 -translate-y-1/2 group"
                 style={{
                   left: `${coord.y}%`,
-                  top: `${coord.x}%`,
+                  top: `${coord.x + getPostureYOffset(player.position)}%`,
                 }}
               >
-                {showTacticalArrow && (
-                  <div
-                    className={`absolute left-1/2 -top-1.5 md:-top-2 w-2.5 md:w-3 h-1.5 md:h-2 flex items-center justify-center pointer-events-none ${isDefensive ? 'text-blue-400' : 'text-red-500'}`}
-                    style={{
-                      transform: `translate(-50%, 0) rotate(${isDefensive ? '180' : '0'}deg)`,
-                    }}
-                  >
-                    <svg
-                      viewBox="0 0 8 6"
-                      className="w-2.5 md:w-3 h-1.5 md:h-2 block"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M1 3h6M4 1l2 2-2 2" />
-                    </svg>
-                  </div>
-                )}
                 <div
                   role="button"
                   tabIndex={0}

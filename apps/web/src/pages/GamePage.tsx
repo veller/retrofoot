@@ -3,6 +3,11 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
+  FORMATION_OPTIONS,
+  DEFAULT_FORMATION,
+  evaluateFormationEligibility,
+  getEligibleFormations,
+  normalizeFormation,
   calculateRoundSponsorship,
   calculateStadiumMaintenance,
   calculateOperatingCosts,
@@ -28,6 +33,8 @@ import {
   useTeamListings,
   useTeamOffers,
   useSeasonHistory,
+  fetchTeamTactics,
+  saveTeamTactics,
   listPlayerForSale,
   removePlayerListing,
   type LeaderboardEntry,
@@ -39,17 +46,6 @@ type GameTab = 'squad' | 'table' | 'transfers' | 'finances' | 'history';
 type MobileSquadView = 'squad' | 'pitch' | 'info';
 
 const BENCH_LIMIT = 7;
-
-const FORMATION_OPTIONS: FormationType[] = [
-  '4-3-3',
-  '4-4-2',
-  '4-2-3-1',
-  '3-5-2',
-  '4-5-1',
-  '5-3-2',
-  '5-4-1',
-  '3-4-3',
-];
 
 const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'defensive', label: 'Defensive' },
@@ -89,6 +85,7 @@ export function GamePage() {
 
   // Local tactics state - initialized when data loads
   const [tactics, setTactics] = useState<Tactics | null>(null);
+  const [isTacticsHydrated, setIsTacticsHydrated] = useState(false);
 
   // Game store for match functionality
   const gameStoreTeams = useGameStore((s) => s.teams);
@@ -147,18 +144,83 @@ export function GamePage() {
     navigate(`/game/${saveId}/match`);
   };
 
-  // Initialize tactics on first load
+  // Initialize tactics from persisted API state.
   useEffect(() => {
-    if (playerTeam && !tactics) {
-      const { lineup, substitutes } = selectBestLineup(playerTeam, '4-3-3');
-      setTactics({
-        formation: '4-3-3',
-        posture: 'balanced',
-        lineup,
-        substitutes,
-      });
+    let cancelled = false;
+
+    async function hydrateTactics() {
+      if (!saveId || !playerTeam) return;
+      setIsTacticsHydrated(false);
+
+      try {
+        const persisted = await fetchTeamTactics(saveId, playerTeam.id);
+        const eligibleFormations = getEligibleFormations(playerTeam);
+        const fallbackFormation = eligibleFormations[0] ?? DEFAULT_FORMATION;
+
+        if (!persisted) {
+          const fallbackLineup = selectBestLineup(playerTeam, fallbackFormation);
+          const defaults: Tactics = {
+            formation: fallbackFormation,
+            posture: 'balanced',
+            lineup: fallbackLineup.lineup,
+            substitutes: fallbackLineup.substitutes,
+          };
+          if (!cancelled) {
+            setTactics(defaults);
+            setStoreTactics(defaults);
+            setIsTacticsHydrated(true);
+          }
+          await saveTeamTactics(saveId, playerTeam.id, defaults);
+          return;
+        }
+
+        const normalizedFormation = normalizeFormation(persisted.formation);
+        const formationEligibility = evaluateFormationEligibility(
+          normalizedFormation,
+          playerTeam.players,
+        );
+        const selectedFormation = formationEligibility.eligible
+          ? normalizedFormation
+          : fallbackFormation;
+        const playerIds = new Set(playerTeam.players.map((player) => player.id));
+        const lineup = persisted.lineup.filter((id) => playerIds.has(id));
+        const substitutes = persisted.substitutes.filter((id) =>
+          playerIds.has(id),
+        );
+        const rebuilt = selectBestLineup(playerTeam, selectedFormation);
+        const hydrated: Tactics = {
+          formation: selectedFormation,
+          posture: persisted.posture,
+          lineup: lineup.length >= 11 ? lineup : rebuilt.lineup,
+          substitutes: substitutes.length > 0 ? substitutes : rebuilt.substitutes,
+        };
+        if (!cancelled) {
+          setTactics(hydrated);
+          setStoreTactics(hydrated);
+          setIsTacticsHydrated(true);
+        }
+      } catch (err) {
+        const fallbackLineup = selectBestLineup(playerTeam, DEFAULT_FORMATION);
+        const fallback: Tactics = {
+          formation: DEFAULT_FORMATION,
+          posture: 'balanced',
+          lineup: fallbackLineup.lineup,
+          substitutes: fallbackLineup.substitutes,
+        };
+        if (!cancelled) {
+          console.error('Failed to hydrate tactics:', err);
+          setTactics(fallback);
+          setStoreTactics(fallback);
+          setIsTacticsHydrated(true);
+        }
+      }
     }
-  }, [playerTeam, tactics]);
+
+    void hydrateTactics();
+    return () => {
+      cancelled = true;
+    };
+  }, [saveId, playerTeam, setStoreTactics]);
 
   // Sync tactics to game store when local tactics change
   // We only sync when tactics is non-null (after initialization)
@@ -167,6 +229,20 @@ export function GamePage() {
       setStoreTactics(tactics);
     }
   }, [tactics, setStoreTactics]);
+
+  useEffect(() => {
+    if (!saveId || !playerTeam || !tactics || !isTacticsHydrated) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void saveTeamTactics(saveId, playerTeam.id, tactics).catch((err) => {
+        console.error('Failed to persist tactics:', err);
+      });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [saveId, playerTeam, tactics, isTacticsHydrated]);
 
   if (isLoading) {
     return (
@@ -498,9 +574,22 @@ function SquadPanel({
   const lineup = tactics.lineup;
   const substitutes = tactics.substitutes;
   const formation = tactics.formation;
+  const formationEligibility = useMemo(
+    () =>
+      FORMATION_OPTIONS.map((candidate) => ({
+        formation: candidate,
+        info: evaluateFormationEligibility(candidate, playerTeam.players),
+      })),
+    [playerTeam.players],
+  );
 
   const setFormation = useCallback(
     (newFormation: FormationType) => {
+      const eligibility = evaluateFormationEligibility(
+        newFormation,
+        playerTeam.players,
+      );
+      if (!eligibility.eligible) return;
       const { lineup: newLineup, substitutes: newSubs } = selectBestLineup(
         playerTeam,
         newFormation,
@@ -518,6 +607,14 @@ function SquadPanel({
     },
     [playerTeam, setTactics],
   );
+
+  useEffect(() => {
+    const current = formationEligibility.find((e) => e.formation === formation);
+    if (current?.info.eligible) return;
+    const nextEligible = formationEligibility.find((e) => e.info.eligible);
+    if (!nextEligible) return;
+    setFormation(nextEligible.formation);
+  }, [formationEligibility, formation, setFormation]);
 
   const setPosture = useCallback(
     (posture: TacticalPosture) => {
@@ -590,7 +687,6 @@ function SquadPanel({
     () => new Map(playerTeam.players.map((p) => [p.id, p])),
     [playerTeam.players],
   );
-
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
@@ -809,30 +905,27 @@ function SquadPanel({
             <h2 className="text-lg lg:text-xl font-bold text-white">
               Formation
             </h2>
-            <div className="flex items-center gap-2 lg:gap-4 flex-wrap">
+            <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-[minmax(120px,160px)_1fr] gap-2 lg:gap-3 items-stretch">
               <select
                 value={formation}
                 onChange={(e) => setFormation(e.target.value as FormationType)}
-                className="select-chevron bg-slate-700 text-white text-sm px-2 lg:px-3 py-1.5 rounded border border-slate-600"
+                className="select-chevron h-10 bg-slate-700 text-white text-sm px-3 rounded-lg border border-slate-600 font-medium"
               >
-                {FORMATION_OPTIONS.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
+                {formationEligibility.map(({ formation: option, info }) => (
+                  <option key={option} value={option} disabled={!info.eligible}>
+                    {option}
                   </option>
                 ))}
               </select>
-              <div className="flex items-center gap-1 lg:gap-2">
-                <span className="text-slate-400 text-xs lg:text-sm hidden sm:inline">
-                  Posture
-                </span>
+              <div className="grid grid-cols-3 gap-2">
                 {POSTURE_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
                     onClick={() => setPosture(value)}
-                    className={`px-2 lg:px-3 py-1 lg:py-1.5 rounded text-xs lg:text-sm font-medium transition-colors ${
+                    className={`h-10 px-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors border ${
                       tactics.posture === value
-                        ? 'bg-pitch-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        ? 'bg-pitch-600 text-white border-pitch-500'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600'
                     }`}
                   >
                     {label}
@@ -846,6 +939,26 @@ function SquadPanel({
               Click another player to swap
             </p>
           )}
+          {(() => {
+            const selected = formationEligibility.find(
+              (entry) => entry.formation === formation,
+            );
+            if (!selected || selected.info.eligible) return null;
+            const missing = Object.entries(selected.info.missing).filter(
+              ([, value]) => value > 0,
+            );
+            return (
+              <p className="text-xs text-amber-400 mb-2">
+                Unavailable:{' '}
+                {missing
+                  .map(([position]) => {
+                    const key = position as Position;
+                    return `need ${selected.info.required[key]}, have ${selected.info.available[key]} ${position}`;
+                  })
+                  .join(' · ')}
+              </p>
+            );
+          })()}
           <PitchView
             lineup={lineup}
             substitutes={substitutes}

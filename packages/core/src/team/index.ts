@@ -7,9 +7,36 @@ import type { Team, Player, Tactics, FormationType, Position } from '../types';
 import { calculateOverall } from '../types';
 import { generatePlayer } from '../player';
 
+export const FORMATION_OPTIONS: FormationType[] = [
+  '4-4-2',
+  '4-3-3',
+  '3-5-2',
+  '4-5-1',
+  '5-3-2',
+  '5-4-1',
+  '3-4-3',
+];
+
+export const DEFAULT_FORMATION: FormationType = '4-3-3';
+export const MIN_FITNESS_FOR_AVAILABILITY = 50;
+
+export interface FormationAvailabilityCounts {
+  GK: number;
+  DEF: number;
+  MID: number;
+  ATT: number;
+}
+
+export interface FormationEligibility {
+  eligible: boolean;
+  required: FormationAvailabilityCounts;
+  available: FormationAvailabilityCounts;
+  missing: FormationAvailabilityCounts;
+}
+
 // Formation position mappings (simplified: GK, DEF, MID, ATT)
 // The number after each position type indicates count needed
-const FORMATION_POSITIONS: Record<FormationType, Position[]> = {
+export const FORMATION_POSITIONS: Record<FormationType, Position[]> = {
   '4-4-2': [
     'GK',
     'DEF',
@@ -34,19 +61,6 @@ const FORMATION_POSITIONS: Record<FormationType, Position[]> = {
     'MID',
     'ATT',
     'ATT',
-    'ATT',
-  ],
-  '4-2-3-1': [
-    'GK',
-    'DEF',
-    'DEF',
-    'DEF',
-    'DEF',
-    'MID',
-    'MID',
-    'MID',
-    'MID',
-    'MID',
     'ATT',
   ],
   '3-5-2': [
@@ -116,14 +130,86 @@ const FORMATION_POSITIONS: Record<FormationType, Position[]> = {
   ],
 };
 
+export function normalizeFormation(
+  formation: string | FormationType | null | undefined,
+): FormationType {
+  if (!formation) return DEFAULT_FORMATION;
+  const normalized = String(formation).trim();
+  if ((FORMATION_OPTIONS as string[]).includes(normalized)) {
+    return normalized as FormationType;
+  }
+  const blocks = normalized.split('-');
+  if (blocks.length !== 3) {
+    return DEFAULT_FORMATION;
+  }
+  return DEFAULT_FORMATION;
+}
+
+function buildZeroCounts(): FormationAvailabilityCounts {
+  return { GK: 0, DEF: 0, MID: 0, ATT: 0 };
+}
+
+function toAvailabilityCounts(
+  positions: Position[],
+): FormationAvailabilityCounts {
+  const counts = buildZeroCounts();
+  for (const position of positions) {
+    counts[position] += 1;
+  }
+  return counts;
+}
+
+export function getFormationRequirements(
+  formation: FormationType,
+): FormationAvailabilityCounts {
+  return toAvailabilityCounts(FORMATION_POSITIONS[formation]);
+}
+
+export function getAvailablePlayerCounts(
+  players: Pick<Player, 'position' | 'injured' | 'fitness'>[],
+): FormationAvailabilityCounts {
+  const counts = buildZeroCounts();
+  for (const player of players) {
+    if (player.injured) continue;
+    if ((player.fitness ?? 0) <= MIN_FITNESS_FOR_AVAILABILITY) continue;
+    counts[player.position] += 1;
+  }
+  return counts;
+}
+
+export function evaluateFormationEligibility(
+  formation: FormationType,
+  players: Pick<Player, 'position' | 'injured' | 'fitness'>[],
+): FormationEligibility {
+  const required = getFormationRequirements(formation);
+  const available = getAvailablePlayerCounts(players);
+  const missing: FormationAvailabilityCounts = {
+    GK: Math.max(0, required.GK - available.GK),
+    DEF: Math.max(0, required.DEF - available.DEF),
+    MID: Math.max(0, required.MID - available.MID),
+    ATT: Math.max(0, required.ATT - available.ATT),
+  };
+  const eligible =
+    missing.GK === 0 && missing.DEF === 0 && missing.MID === 0 && missing.ATT === 0;
+
+  return { eligible, required, available, missing };
+}
+
+export function getEligibleFormations(team: Team): FormationType[] {
+  return FORMATION_OPTIONS.filter(
+    (formation) => evaluateFormationEligibility(formation, team.players).eligible,
+  );
+}
+
 // Auto-select best lineup for a formation
 export function selectBestLineup(
   team: Team,
   formation: FormationType,
 ): { lineup: string[]; substitutes: string[] } {
-  const positions = FORMATION_POSITIONS[formation];
+  const safeFormation = normalizeFormation(formation);
+  const positions = FORMATION_POSITIONS[safeFormation];
   const availablePlayers = team.players.filter(
-    (p) => !p.injured && p.fitness > 50,
+    (p) => !p.injured && p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
   );
   const usedPlayerIds = new Set<string>();
   const lineup: string[] = [];
@@ -212,7 +298,8 @@ export function swapPlayersInTactics(
 
 // Create default tactics for a team
 export function createDefaultTactics(team: Team): Tactics {
-  const formation: FormationType = '4-3-3';
+  const firstEligible = getEligibleFormations(team)[0];
+  const formation = firstEligible ?? DEFAULT_FORMATION;
   const { lineup, substitutes } = selectBestLineup(team, formation);
 
   return {

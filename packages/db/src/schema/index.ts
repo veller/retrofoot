@@ -301,19 +301,28 @@ export const transferOffers = sqliteTable('transfer_offers', {
 // Tactics (per team per save)
 // ============================================================================
 
-export const tactics = sqliteTable('tactics', {
-  id: text('id').primaryKey(),
-  saveId: text('save_id')
-    .notNull()
-    .references(() => saves.id, { onDelete: 'cascade' }),
-  teamId: text('team_id')
-    .notNull()
-    .references(() => teams.id, { onDelete: 'cascade' }),
-  formation: text('formation').notNull(),
-  posture: text('posture').notNull(),
-  lineup: text('lineup', { mode: 'json' }).notNull(), // Array of player IDs
-  substitutes: text('substitutes', { mode: 'json' }).notNull(), // Array of player IDs
-});
+export const tactics = sqliteTable(
+  'tactics',
+  {
+    id: text('id').primaryKey(),
+    saveId: text('save_id')
+      .notNull()
+      .references(() => saves.id, { onDelete: 'cascade' }),
+    teamId: text('team_id')
+      .notNull()
+      .references(() => teams.id, { onDelete: 'cascade' }),
+    formation: text('formation').notNull(),
+    posture: text('posture').notNull(),
+    lineup: text('lineup', { mode: 'json' }).notNull(), // Array of player IDs
+    substitutes: text('substitutes', { mode: 'json' }).notNull(), // Array of player IDs
+  },
+  (table) => ({
+    saveTeamUnique: uniqueIndex('tactics_save_team_unique').on(
+      table.saveId,
+      table.teamId,
+    ),
+  }),
+);
 
 // ============================================================================
 // Financial Transactions (history tracking)
