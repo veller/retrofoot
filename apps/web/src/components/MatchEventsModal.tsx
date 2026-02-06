@@ -1,73 +1,10 @@
 import { useMemo } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
+import { EventIcon } from './EventIcon';
+import { isSignificantEvent } from './matchEventUtils';
 
-const SIGNIFICANT_EVENT_TYPES: MatchEvent['type'][] = [
-  'goal',
-  'own_goal',
-  'penalty_scored',
-  'penalty_missed',
-  'yellow_card',
-  'red_card',
-  'injury',
-  'substitution',
-];
-
-const MATCH_PHASE_EVENTS: MatchEvent['type'][] = [
-  'kickoff',
-  'half_time',
-  'full_time',
-];
-
-export function isSignificantEvent(type: MatchEvent['type']): boolean {
-  return SIGNIFICANT_EVENT_TYPES.includes(type);
-}
-
-interface EventIconProps {
-  type: MatchEvent['type'];
-  variant?: 'default' | 'colored';
-}
-
-export function EventIcon({ type, variant = 'default' }: EventIconProps) {
-  switch (type) {
-    case 'goal':
-      return (
-        <span className={variant === 'colored' ? 'text-yellow-400' : ''}>
-          ⚽
-        </span>
-      );
-    case 'own_goal':
-      return (
-        <span className={variant === 'colored' ? 'text-red-400' : ''}>⚽</span>
-      );
-    case 'penalty_scored':
-      return (
-        <span className={variant === 'colored' ? 'text-green-400' : ''}>
-          ⚽
-        </span>
-      );
-    case 'penalty_missed':
-      return (
-        <span className={variant === 'colored' ? 'text-red-400' : ''}>❌</span>
-      );
-    case 'yellow_card':
-      return (
-        <span className={variant === 'colored' ? 'text-yellow-400' : ''}>
-          🟨
-        </span>
-      );
-    case 'red_card':
-      return (
-        <span className={variant === 'colored' ? 'text-red-600' : ''}>🟥</span>
-      );
-    case 'substitution':
-      return <span>🔄</span>;
-    case 'injury':
-      return <span>🏥</span>;
-    default:
-      return null;
-  }
-}
+const MATCH_PHASE_EVENTS: MatchEvent['type'][] = ['kickoff', 'half_time', 'full_time'];
 
 interface MatchEventsModalProps {
   match: LiveMatchState;

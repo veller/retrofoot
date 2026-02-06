@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
-import {
-  MatchEventsModal,
-  EventIcon,
-  isSignificantEvent,
-} from './MatchEventsModal';
+import { MatchEventsModal } from './MatchEventsModal';
+import { EventIcon } from './EventIcon';
+import { isSignificantEvent } from './matchEventUtils';
 
 interface MatchLiveViewProps {
   matches: LiveMatchState[];
@@ -117,7 +115,7 @@ function MatchRow({ match, isPlayerMatch, onClick }: MatchRowProps) {
   return (
     <div
       onClick={onClick}
-      className={`hidden md:grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors cursor-pointer ${rowClassName}`}
+      className={`hidden md:grid grid-cols-[160px_1.2fr_80px_1.2fr_minmax(220px,1fr)] items-center gap-2 px-4 py-3 border-b border-slate-700 transition-colors cursor-pointer ${rowClassName}`}
     >
       <div className="text-slate-400 text-xs">
         <div className="font-mono text-white">
@@ -127,7 +125,7 @@ function MatchRow({ match, isPlayerMatch, onClick }: MatchRowProps) {
       </div>
 
       <div className="flex items-center gap-2 justify-end">
-        <span className="text-white font-medium truncate">{homeTeam.name}</span>
+        <span className="text-white font-medium">{homeTeam.name}</span>
         <TeamShield team={homeTeam} />
       </div>
 
@@ -139,7 +137,7 @@ function MatchRow({ match, isPlayerMatch, onClick }: MatchRowProps) {
 
       <div className="flex items-center gap-2">
         <TeamShield team={awayTeam} />
-        <span className="text-white font-medium truncate">{awayTeam.name}</span>
+        <span className="text-white font-medium">{awayTeam.name}</span>
       </div>
 
       <div className="text-sm">
@@ -198,7 +196,7 @@ function MobileMatchCard({ match, isPlayerMatch, onClick }: MobileMatchCardProps
       {/* Home Team */}
       <div className="flex items-center gap-1.5 flex-1 min-w-0">
         <TeamShield team={homeTeam} />
-        <span className="text-white font-medium text-xs truncate">
+        <span className="text-white font-medium text-xs">
           {homeTeam.shortName}
         </span>
       </div>
@@ -211,15 +209,33 @@ function MobileMatchCard({ match, isPlayerMatch, onClick }: MobileMatchCardProps
         {latestEvent && (
           <div className="flex items-center gap-1 text-[10px] text-slate-400 leading-tight">
             <span className="font-mono">{latestEvent.minute}'</span>
+            <span
+              className="w-1.5 h-1.5 rounded-full shrink-0"
+              style={{
+                backgroundColor:
+                  latestEvent.team === 'home'
+                    ? homeTeam.primaryColor
+                    : awayTeam.primaryColor,
+              }}
+            />
             <EventIcon type={latestEvent.type} variant="colored" />
-            <span>{getEventLabel(latestEvent.type)}</span>
+            {latestEvent.type === 'own_goal' && (
+              <span className="text-red-400 font-bold">OG</span>
+            )}
+            <span
+              className={
+                latestEvent.type === 'own_goal' ? 'text-red-300' : undefined
+              }
+            >
+              {getEventLabel(latestEvent.type)}
+            </span>
           </div>
         )}
       </div>
 
       {/* Away Team */}
       <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-        <span className="text-white font-medium text-xs truncate">
+        <span className="text-white font-medium text-xs">
           {awayTeam.shortName}
         </span>
         <TeamShield team={awayTeam} />
@@ -444,7 +460,7 @@ export function MatchLiveView({
       <main className="flex-1 overflow-auto pb-20 md:pb-0">
         <div className="border border-slate-700 rounded-lg m-4 overflow-hidden">
           {/* Desktop Column Headers */}
-          <div className="hidden md:grid grid-cols-[160px_1fr_80px_1fr_minmax(280px,1fr)] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
+          <div className="hidden md:grid grid-cols-[160px_1.2fr_80px_1.2fr_minmax(220px,1fr)] gap-2 px-4 py-2 bg-slate-700/50 text-slate-400 text-xs uppercase font-medium">
             <div>Attendance</div>
             <div className="text-right">Home</div>
             <div className="text-center">Score</div>

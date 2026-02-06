@@ -1091,7 +1091,7 @@ function TablePanel({
                       {entry.position}
                     </td>
                     <td className="py-2">
-                      <span className="block truncate max-w-[90px] sm:max-w-[140px] md:max-w-none">
+                      <span className="block max-w-[140px] sm:max-w-none">
                         {entry.teamName}
                       </span>
                     </td>

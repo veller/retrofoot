@@ -15,6 +15,11 @@ interface OfferListRowProps {
 }
 
 function getStatusBadge(status: string): { label: string; className: string } {
+  const fallbackLabel = status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
   switch (status) {
     case 'pending':
       return {
@@ -33,7 +38,7 @@ function getStatusBadge(status: string): { label: string; className: string } {
       };
     default:
       return {
-        label: status,
+        label: fallbackLabel,
         className: 'bg-slate-500/20 text-slate-400 border-slate-500/50',
       };
   }
@@ -69,29 +74,62 @@ export function OfferListRow({
 
   return (
     <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
-      {/* Main row */}
-      <div className="flex items-center gap-3">
-        {/* Position */}
+      {/* Mobile layout */}
+      <div className="md:hidden space-y-2">
+        <div className="flex items-start gap-2">
+          <PositionBadge position={offer.playerPosition as Position} />
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-medium text-sm truncate">
+              {offer.playerName}
+            </div>
+            <div className="text-xs text-slate-400 truncate">
+              {counterpartyLabel}: {counterpartyName}
+            </div>
+          </div>
+          <span
+            className={`px-1.5 py-0.5 text-[10px] font-medium rounded border shrink-0 ${statusBadge.className}`}
+          >
+            {statusBadge.label}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div className="text-pitch-400 font-bold text-xs">
+              {formatCurrency(offer.offerAmount)}
+            </div>
+            <div className="text-[10px] text-slate-500">Fee</div>
+          </div>
+          <div>
+            <div className="text-amber-400 font-bold text-xs">
+              {formatCurrency(offer.offeredWage)}/wk
+            </div>
+            <div className="text-[10px] text-slate-500">Wage</div>
+          </div>
+          <div>
+            <div className="text-white font-bold text-xs">{offer.contractYears}y</div>
+            <div className="text-[10px] text-slate-500">Term</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop layout */}
+      <div className="hidden md:flex items-center gap-3">
         <PositionBadge position={offer.playerPosition as Position} />
 
-        {/* Player Name & Counterparty */}
         <div className="flex-1 min-w-0">
-          <div className="text-white font-medium truncate">
-            {offer.playerName}
-          </div>
+          <div className="text-white font-medium truncate">{offer.playerName}</div>
           <div className="text-sm text-slate-400">
             {counterpartyLabel}: {counterpartyName}
           </div>
         </div>
 
-        {/* Status Badge */}
         <span
           className={`px-2 py-1 text-xs font-medium rounded border ${statusBadge.className}`}
         >
           {statusBadge.label}
         </span>
 
-        {/* Offer Amount */}
         <div className="text-right">
           <div className="text-pitch-400 font-bold text-sm">
             {formatCurrency(offer.offerAmount)}
@@ -99,7 +137,6 @@ export function OfferListRow({
           <div className="text-xs text-slate-500">Fee</div>
         </div>
 
-        {/* Wage */}
         <div className="text-right">
           <div className="text-amber-400 font-bold text-sm">
             {formatCurrency(offer.offeredWage)}/wk
@@ -107,11 +144,8 @@ export function OfferListRow({
           <div className="text-xs text-slate-500">Wage</div>
         </div>
 
-        {/* Contract */}
         <div className="text-right w-12">
-          <div className="text-white font-bold text-sm">
-            {offer.contractYears}y
-          </div>
+          <div className="text-white font-bold text-sm">{offer.contractYears}y</div>
           <div className="text-xs text-slate-500">Term</div>
         </div>
       </div>

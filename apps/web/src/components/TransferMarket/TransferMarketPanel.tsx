@@ -14,11 +14,8 @@ import { PlayerListRow, PlayerListHeader } from './PlayerListRow';
 import { OfferListRow } from './OfferListRow';
 import { CounterOfferModal } from './CounterOfferModal';
 import { NegotiationModal } from './NegotiationModal';
-import {
-  TransferFilters,
-  DEFAULT_FILTERS,
-  type FilterState,
-} from './TransferFilters';
+import { TransferFilters } from './TransferFilters';
+import { DEFAULT_FILTERS, type FilterState } from './transferFilterState';
 import { PositionBadge } from '../PositionBadge';
 
 type TransferTab = 'search' | 'my_transfers';
@@ -333,25 +330,51 @@ export function TransferMarketPanel({
                   {myListings.map((listing) => (
                     <div
                       key={listing.id}
-                      className="flex items-center gap-3 px-3 py-2 bg-slate-700/30 border border-slate-600/50 rounded-lg"
+                      className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3"
                     >
-                      <PositionBadge position={listing.position} />
-                      <span className="text-white font-medium flex-1">
-                        {listing.playerName}
-                      </span>
-                      <span className="text-slate-400 text-sm">
-                        OVR {listing.overall}
-                      </span>
-                      <span className="text-pitch-400 text-sm">
-                        {formatCurrency(listing.askingPrice)}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveListing(listing.playerId)}
-                        disabled={isSubmitting}
-                        className="px-3 py-1 text-red-400 hover:text-red-300 text-sm border border-red-500/50 rounded hover:border-red-400 transition-colors disabled:opacity-50"
-                      >
-                        Unlist
-                      </button>
+                      <div className="md:hidden space-y-2">
+                        <div className="flex items-center gap-2">
+                          <PositionBadge position={listing.position} />
+                          <span className="text-white font-medium text-sm flex-1 min-w-0 truncate">
+                            {listing.playerName}
+                          </span>
+                          <span className="text-slate-400 text-xs shrink-0">
+                            OVR {listing.overall}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-pitch-400 text-xs">
+                            {formatCurrency(listing.askingPrice)}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveListing(listing.playerId)}
+                            disabled={isSubmitting}
+                            className="px-2.5 py-1 text-red-400 hover:text-red-300 text-xs border border-red-500/50 rounded hover:border-red-400 transition-colors disabled:opacity-50"
+                          >
+                            Unlist
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="hidden md:flex items-center gap-3">
+                        <PositionBadge position={listing.position} />
+                        <span className="text-white font-medium flex-1 min-w-0 truncate">
+                          {listing.playerName}
+                        </span>
+                        <span className="text-slate-400 text-sm">
+                          OVR {listing.overall}
+                        </span>
+                        <span className="text-pitch-400 text-sm">
+                          {formatCurrency(listing.askingPrice)}
+                        </span>
+                        <button
+                          onClick={() => handleRemoveListing(listing.playerId)}
+                          disabled={isSubmitting}
+                          className="px-3 py-1 text-red-400 hover:text-red-300 text-sm border border-red-500/50 rounded hover:border-red-400 transition-colors disabled:opacity-50"
+                        >
+                          Unlist
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -372,25 +395,49 @@ export function TransferMarketPanel({
                   .map((player) => (
                     <div
                       key={player.id}
-                      className="flex items-center gap-3 px-3 py-2 bg-slate-700/30 border border-slate-600/50 rounded-lg"
+                      className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3"
                     >
-                      <PositionBadge position={player.position} />
-                      <span className="text-white flex-1">
-                        {player.nickname || player.name}
-                      </span>
-                      <span className="text-slate-400 text-sm">
-                        {player.age}y
-                      </span>
-                      <span className="text-pitch-400 font-medium">
-                        OVR {calculateOverall(player)}
-                      </span>
-                      <button
-                        onClick={() => handleListPlayer(player.id)}
-                        disabled={isSubmitting}
-                        className="px-3 py-1 bg-pitch-600 hover:bg-pitch-500 text-white text-sm rounded disabled:opacity-50"
-                      >
-                        List
-                      </button>
+                      <div className="md:hidden space-y-2">
+                        <div className="flex items-center gap-2">
+                          <PositionBadge position={player.position} />
+                          <span className="text-white text-sm flex-1 min-w-0 truncate">
+                            {player.nickname || player.name}
+                          </span>
+                          <span className="text-slate-400 text-xs shrink-0">
+                            {player.age}y
+                          </span>
+                          <span className="text-pitch-400 text-xs font-medium shrink-0">
+                            OVR {calculateOverall(player)}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleListPlayer(player.id)}
+                          disabled={isSubmitting}
+                          className="w-full py-1.5 bg-pitch-600 hover:bg-pitch-500 text-white text-xs rounded disabled:opacity-50"
+                        >
+                          List
+                        </button>
+                      </div>
+
+                      <div className="hidden md:flex items-center gap-3">
+                        <PositionBadge position={player.position} />
+                        <span className="text-white flex-1 min-w-0 truncate">
+                          {player.nickname || player.name}
+                        </span>
+                        <span className="text-slate-400 text-sm">
+                          {player.age}y
+                        </span>
+                        <span className="text-pitch-400 font-medium">
+                          OVR {calculateOverall(player)}
+                        </span>
+                        <button
+                          onClick={() => handleListPlayer(player.id)}
+                          disabled={isSubmitting}
+                          className="px-3 py-1 bg-pitch-600 hover:bg-pitch-500 text-white text-sm rounded disabled:opacity-50"
+                        >
+                          List
+                        </button>
+                      </div>
                     </div>
                   ))}
               </div>

@@ -1,12 +1,5 @@
 import type { Position } from '@retrofoot/core';
-
-export interface FilterState {
-  position: Position | 'ALL';
-  minOverall: number;
-  maxOverall: number;
-  maxPrice: number;
-  maxAge: number;
-}
+import type { FilterState } from './transferFilterState';
 
 interface TransferFiltersProps {
   filters: FilterState;
@@ -117,11 +110,3 @@ export function TransferFilters({ filters, onChange }: TransferFiltersProps) {
     </div>
   );
 }
-
-export const DEFAULT_FILTERS: FilterState = {
-  position: 'ALL',
-  minOverall: 1,
-  maxOverall: 99,
-  maxPrice: 0,
-  maxAge: 99,
-};

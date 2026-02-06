@@ -109,7 +109,7 @@ export function PlayerListRow({
           </div>
         </div>
 
-        <div className="w-28 text-sm text-slate-400 truncate">
+        <div className="w-40 text-sm text-slate-400">
           {player.teamName || (
             <span className="italic text-slate-500">No Club</span>
           )}
@@ -169,7 +169,7 @@ export function PlayerListHeader() {
     <div className="flex items-center gap-3 px-3 py-2 text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700">
       <div className="w-10">Pos</div>
       <div className="flex-1">Player</div>
-      <div className="w-28 hidden sm:block">Team</div>
+      <div className="w-40 hidden sm:block">Team</div>
       <div className="w-10 text-center">Age</div>
       <div className="w-10 text-center">OVR</div>
       <div className="w-10 text-center">POT</div>
