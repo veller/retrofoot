@@ -200,16 +200,16 @@ function MobileComparisonView({
   );
 
   return (
-    <div className="md:hidden flex flex-col flex-1 overflow-hidden">
+    <div className="md:hidden flex flex-col flex-1 min-h-0 overflow-hidden pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
       {/* Match Header - Both teams side by side */}
-      <div className="bg-slate-800 border-b border-slate-700 px-3 py-3">
+      <div className="bg-slate-800 border-b border-slate-700 px-3 py-3 shrink-0">
         <div className="flex items-center justify-between">
           {/* Home Team */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <TeamShield team={homeTeam} />
             <div className="min-w-0">
               <p className="text-white font-bold text-sm truncate">
-                {homeTeam.shortName}
+                {homeTeam.name}
               </p>
               {isPlayerHome && (
                 <p className="text-pitch-400 text-[10px] uppercase">You</p>
@@ -224,7 +224,7 @@ function MobileComparisonView({
           <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
             <div className="min-w-0 text-right">
               <p className="text-white font-bold text-sm truncate">
-                {awayTeam.shortName}
+                {awayTeam.name}
               </p>
               {!isPlayerHome && (
                 <p className="text-pitch-400 text-[10px] uppercase">You</p>
@@ -239,7 +239,7 @@ function MobileComparisonView({
       </div>
 
       {/* Stats Comparison Row */}
-      <div className="bg-slate-800/50 border-b border-slate-700 px-3 py-2">
+      <div className="bg-slate-800/50 border-b border-slate-700 px-3 py-2 shrink-0">
         <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center text-center">
           {/* Formation */}
           <span className="text-pitch-400 text-xs font-medium">
@@ -279,7 +279,7 @@ function MobileComparisonView({
       </div>
 
       {/* Lineups Side by Side */}
-      <div className="flex-1 overflow-auto px-2 py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2">
         <div className="grid grid-cols-2 gap-2">
           {/* Home Lineup */}
           <div className="bg-slate-800 rounded-lg border border-slate-700 p-2">
@@ -349,7 +349,7 @@ function MobileControlBar({
   onConfirm: () => void;
 }) {
   return (
-    <div className="md:hidden bg-slate-800 border-t border-slate-700 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 bg-slate-800 border-t border-slate-700 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <div className="flex items-center gap-3">
         <button
           onClick={onBack}
@@ -386,7 +386,7 @@ export function PreMatchOverview({
   }, [homeTeam.capacity]);
 
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col">
+    <div className="min-h-dvh md:min-h-screen bg-slate-900 flex flex-col">
       {/* Mobile Header */}
       <header className="md:hidden bg-slate-800 border-b border-slate-700 px-4 py-2">
         <div className="flex items-center justify-between">

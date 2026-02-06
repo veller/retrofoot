@@ -46,6 +46,29 @@ function getPhaseLabel(phase: MatchLiveViewProps['phase']): string {
   }
 }
 
+function getEventLabel(type: MatchEvent['type']): string {
+  switch (type) {
+    case 'goal':
+      return 'Goal';
+    case 'own_goal':
+      return 'Own Goal';
+    case 'yellow_card':
+      return 'Yellow Card';
+    case 'red_card':
+      return 'Red Card';
+    case 'penalty_scored':
+      return 'Penalty';
+    case 'penalty_missed':
+      return 'Penalty Missed';
+    case 'injury':
+      return 'Injury';
+    case 'substitution':
+      return 'Substitution';
+    default:
+      return '';
+  }
+}
+
 // Icon Components for Mobile
 function PauseIcon({ className }: { className?: string }) {
   return (
@@ -181,14 +204,15 @@ function MobileMatchCard({ match, isPlayerMatch, onClick }: MobileMatchCardProps
       </div>
 
       {/* Score + Event */}
-      <div className="flex flex-col items-center px-2 shrink-0">
+      <div className="flex flex-col items-center px-2 min-w-[116px] shrink-0">
         <span className="text-white font-bold text-base font-mono leading-tight">
           {state.homeScore} - {state.awayScore}
         </span>
         {latestEvent && (
-          <div className="flex items-center gap-0.5 text-[10px] text-slate-400">
+          <div className="flex items-center gap-1 text-[10px] text-slate-400 leading-tight">
             <span className="font-mono">{latestEvent.minute}'</span>
             <EventIcon type={latestEvent.type} variant="colored" />
+            <span>{getEventLabel(latestEvent.type)}</span>
           </div>
         )}
       </div>

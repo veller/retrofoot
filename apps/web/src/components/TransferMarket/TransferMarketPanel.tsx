@@ -273,7 +273,9 @@ export function TransferMarketPanel({
               <p className="text-slate-500">No players match your filters.</p>
             ) : (
               <div className="space-y-1">
-                <PlayerListHeader />
+                <div className="hidden md:block">
+                  <PlayerListHeader />
+                </div>
                 {searchResults.map((player) => (
                   <PlayerListRow
                     key={player.id}
