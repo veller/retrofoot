@@ -7,6 +7,7 @@ import {
   DEFAULT_FORMATION,
   evaluateFormationEligibility,
   getEligibleFormations,
+  getRequiredPositionForSlot,
   normalizeFormation,
   calculateRoundSponsorship,
   calculateStadiumMaintenance,
@@ -21,7 +22,7 @@ import {
   type Tactics,
   type Player,
 } from '@retrofoot/core';
-import { PitchView, type PitchSlot } from '../components/PitchView';
+import { PitchView } from '../components/PitchView';
 import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
 import { TransferMarketPanel } from '../components/TransferMarket';
@@ -78,7 +79,12 @@ function formatGoalDifference(gd: number): string {
 export function GamePage() {
   const { saveId } = useParams<{ saveId: string }>();
   const navigate = useNavigate();
-  const { data, isLoading, error, refetch: refetchSaveData } = useSaveData(saveId);
+  const {
+    data,
+    isLoading,
+    error,
+    refetch: refetchSaveData,
+  } = useSaveData(saveId);
 
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -158,7 +164,10 @@ export function GamePage() {
         const fallbackFormation = eligibleFormations[0] ?? DEFAULT_FORMATION;
 
         if (!persisted) {
-          const fallbackLineup = selectBestLineup(playerTeam, fallbackFormation);
+          const fallbackLineup = selectBestLineup(
+            playerTeam,
+            fallbackFormation,
+          );
           const defaults: Tactics = {
             formation: fallbackFormation,
             posture: 'balanced',
@@ -182,7 +191,9 @@ export function GamePage() {
         const selectedFormation = formationEligibility.eligible
           ? normalizedFormation
           : fallbackFormation;
-        const playerIds = new Set(playerTeam.players.map((player) => player.id));
+        const playerIds = new Set(
+          playerTeam.players.map((player) => player.id),
+        );
         const lineup = persisted.lineup.filter((id) => playerIds.has(id));
         const substitutes = persisted.substitutes.filter((id) =>
           playerIds.has(id),
@@ -192,7 +203,8 @@ export function GamePage() {
           formation: selectedFormation,
           posture: persisted.posture,
           lineup: lineup.length >= 11 ? lineup : rebuilt.lineup,
-          substitutes: substitutes.length > 0 ? substitutes : rebuilt.substitutes,
+          substitutes:
+            substitutes.length > 0 ? substitutes : rebuilt.substitutes,
         };
         if (!cancelled) {
           setTactics(hydrated);
@@ -556,7 +568,6 @@ function SquadPanel({
   setTactics,
   saveId,
 }: SquadPanelProps) {
-  const [selectedSlot, setSelectedSlot] = useState<PitchSlot | null>(null);
   const [mobileView, setMobileView] = useState<MobileSquadView>('squad');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -574,6 +585,10 @@ function SquadPanel({
   const lineup = tactics.lineup;
   const substitutes = tactics.substitutes;
   const formation = tactics.formation;
+  const playersById = useMemo(
+    () => new Map(playerTeam.players.map((p) => [p.id, p])),
+    [playerTeam.players],
+  );
   const formationEligibility = useMemo(
     () =>
       FORMATION_OPTIONS.map((candidate) => ({
@@ -623,27 +638,6 @@ function SquadPanel({
     [setTactics],
   );
 
-  const swapLineupWithBench = useCallback(
-    (lineupIndex: number, benchIndex: number) => {
-      setTactics((prev) => {
-        if (!prev) return null;
-        if (lineupIndex < 0 || lineupIndex >= prev.lineup.length) return prev;
-        if (benchIndex < 0 || benchIndex >= prev.substitutes.length)
-          return prev;
-
-        const newLineup = [...prev.lineup];
-        const newSubs = [...prev.substitutes];
-        [newLineup[lineupIndex], newSubs[benchIndex]] = [
-          newSubs[benchIndex],
-          newLineup[lineupIndex],
-        ];
-
-        return { ...prev, lineup: newLineup, substitutes: newSubs };
-      });
-    },
-    [setTactics],
-  );
-
   const addToBench = useCallback(
     (playerId: string) => {
       setTactics((prev) => {
@@ -656,12 +650,22 @@ function SquadPanel({
         const newSubs = [...prev.substitutes];
 
         if (lineupIndex >= 0) {
+          const required = getRequiredPositionForSlot(
+            prev.formation,
+            lineupIndex,
+          );
+          const replacementIndex = prev.substitutes.findIndex((candidateId) => {
+            const candidate = playersById.get(candidateId);
+            return !!candidate && candidate.position === required;
+          });
+          if (!required || replacementIndex < 0) {
+            return prev;
+          }
+
           newLineup.splice(lineupIndex, 1);
           newSubs.push(playerId);
-          if (newSubs.length > 1) {
-            const firstBench = newSubs.shift()!;
-            newLineup.splice(lineupIndex, 0, firstBench);
-          }
+          const [replacement] = newSubs.splice(replacementIndex, 1);
+          newLineup.splice(lineupIndex, 0, replacement);
         } else {
           newSubs.push(playerId);
         }
@@ -669,7 +673,7 @@ function SquadPanel({
         return { ...prev, lineup: newLineup, substitutes: newSubs };
       });
     },
-    [setTactics],
+    [playersById, setTactics],
   );
 
   const removeFromBench = useCallback(
@@ -683,10 +687,6 @@ function SquadPanel({
     [setTactics],
   );
 
-  const playersById = useMemo(
-    () => new Map(playerTeam.players.map((p) => [p.id, p])),
-    [playerTeam.players],
-  );
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
@@ -712,34 +712,6 @@ function SquadPanel({
       return calculateOverall(b) - calculateOverall(a);
     });
   }, [playerTeam.players, lineup, substitutes, lineupSet, substitutesSet]);
-
-  const highlightPositions = useMemo((): Position[] | null => {
-    if (!selectedSlot) return null;
-    const playerId =
-      selectedSlot.type === 'lineup'
-        ? lineup[selectedSlot.index]
-        : substitutes[selectedSlot.index];
-    const player = playerId ? playersById.get(playerId) : undefined;
-    if (!player) return null;
-    return [player.position];
-  }, [selectedSlot, lineup, substitutes, playersById]);
-
-  function handlePlayerClick(slot: PitchSlot) {
-    if (!selectedSlot) {
-      setSelectedSlot(slot);
-      return;
-    }
-    if (selectedSlot.type === slot.type && selectedSlot.index === slot.index) {
-      setSelectedSlot(null);
-      return;
-    }
-    if (selectedSlot.type === 'lineup' && slot.type === 'bench') {
-      swapLineupWithBench(selectedSlot.index, slot.index);
-    } else if (selectedSlot.type === 'bench' && slot.type === 'lineup') {
-      swapLineupWithBench(slot.index, selectedSlot.index);
-    }
-    setSelectedSlot(null);
-  }
 
   // Get the selected player for the modal
   const selectedPlayer = selectedPlayerId
@@ -934,11 +906,6 @@ function SquadPanel({
               </div>
             </div>
           </div>
-          {selectedSlot && (
-            <p className="text-xs text-yellow-400 mb-2">
-              Click another player to swap
-            </p>
-          )}
           {(() => {
             const selected = formationEligibility.find(
               (entry) => entry.formation === formation,
@@ -965,9 +932,6 @@ function SquadPanel({
             playersById={playersById}
             formation={formation}
             posture={tactics.posture}
-            onPlayerClick={(slot) => handlePlayerClick(slot)}
-            selectedSlot={selectedSlot}
-            highlightPositions={highlightPositions}
             onRemoveFromBench={removeFromBench}
             benchLimit={BENCH_LIMIT}
           />
