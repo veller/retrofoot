@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
+  swapPlayersInTactics,
   FORMATION_OPTIONS,
   DEFAULT_FORMATION,
   evaluateFormationEligibility,
@@ -23,7 +24,7 @@ import {
   type Player,
 } from '@retrofoot/core';
 import { FormStatusBadge } from '../components/FormStatusBadge';
-import { PitchView } from '../components/PitchView';
+import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
 import { TransferMarketPanel } from '../components/TransferMarket';
@@ -39,6 +40,7 @@ import {
   saveTeamTactics,
   listPlayerForSale,
   removePlayerListing,
+  useTouchDrag,
   type LeaderboardEntry,
   type SeasonHistoryEntry,
 } from '../hooks';
@@ -530,6 +532,86 @@ function getSquadRowStyle(inLineup: boolean, onBench: boolean): string {
   return 'bg-slate-700';
 }
 
+function slotsEqual(a: PitchSlot, b: PitchSlot): boolean {
+  return a.type === b.type && a.index === b.index;
+}
+
+function parseSourceSlotFromDrop(
+  e: React.DragEvent | undefined,
+  fallback: PitchSlot | null,
+): PitchSlot | null {
+  if (!e?.dataTransfer) return fallback;
+  const raw = e.dataTransfer.getData('application/json');
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) as PitchSlot;
+    if (
+      (parsed.type === 'lineup' || parsed.type === 'bench') &&
+      typeof parsed.index === 'number'
+    ) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function applySwap(
+  prev: Tactics,
+  source: PitchSlot,
+  target: PitchSlot,
+): Tactics {
+  if (source.type === 'lineup' && target.type === 'bench') {
+    return swapPlayersInTactics(prev, source.index, target.index);
+  }
+  if (source.type === 'bench' && target.type === 'lineup') {
+    return swapPlayersInTactics(prev, target.index, source.index);
+  }
+  if (source.type === 'lineup' && target.type === 'lineup') {
+    const newLineup = [...prev.lineup];
+    [newLineup[source.index], newLineup[target.index]] = [
+      newLineup[target.index],
+      newLineup[source.index],
+    ];
+    return { ...prev, lineup: newLineup };
+  }
+  if (source.type === 'bench' && target.type === 'bench') {
+    const newSubs = [...prev.substitutes];
+    [newSubs[source.index], newSubs[target.index]] = [
+      newSubs[target.index],
+      newSubs[source.index],
+    ];
+    return { ...prev, substitutes: newSubs };
+  }
+  return prev;
+}
+
+function isLeavingDragTarget(e: React.DragEvent): boolean {
+  const related = e.relatedTarget as Node | null;
+  return !e.currentTarget.contains(related);
+}
+
+function SquadListReplaceIcon(): React.ReactElement {
+  return (
+    <span className="flex-shrink-0 text-amber-400" aria-hidden>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-4 h-4"
+      >
+        <path d="M7 16V4M7 4L3 8M7 4L11 8" />
+        <path d="M17 8v12M17 20l4-4M17 20l-4-4" />
+      </svg>
+    </span>
+  );
+}
+
 interface SquadPanelProps {
   playerTeam: Team;
   tactics: Tactics;
@@ -546,6 +628,8 @@ function SquadPanel({
   const [mobileView, setMobileView] = useState<MobileSquadView>('squad');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draggedSlot, setDraggedSlot] = useState<PitchSlot | null>(null);
+  const [dropTargetSlot, setDropTargetSlot] = useState<PitchSlot | null>(null);
 
   // Fetch team's current listings to know which players are already listed
   const { listings, refetch: refetchListings } = useTeamListings(
@@ -653,6 +737,41 @@ function SquadPanel({
 
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
+
+  const handleDrop = useCallback(
+    (targetSlot: PitchSlot, e?: React.DragEvent) => {
+      const sourceSlot = parseSourceSlotFromDrop(e, draggedSlot);
+      if (!sourceSlot || !sourceSlot.type) {
+        setDraggedSlot(null);
+        setDropTargetSlot(null);
+        return;
+      }
+      if (slotsEqual(sourceSlot, targetSlot)) {
+        setDraggedSlot(null);
+        setDropTargetSlot(null);
+        return;
+      }
+      setTactics((prev) => {
+        if (!prev) return null;
+        return applySwap(prev, sourceSlot, targetSlot);
+      });
+      setDraggedSlot(null);
+      setDropTargetSlot(null);
+    },
+    [draggedSlot, setTactics],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedSlot(null);
+    setDropTargetSlot(null);
+  }, []);
+
+  const touchDrag = useTouchDrag({
+    onDragStart: setDraggedSlot,
+    onDrop: (targetSlot) => handleDrop(targetSlot),
+    onDragEnd: handleDragEnd,
+    setDropTargetSlot,
+  });
 
   const sortedPlayers = useMemo(() => {
     const players = [...playerTeam.players];
@@ -775,15 +894,63 @@ function SquadPanel({
             const rowStyle = getSquadRowStyle(inLineup, onBench);
             const playerDisplayName = player.nickname ?? player.name;
             const isListed = listedPlayerIds.has(player.id);
+            const canDrag = inLineup || onBench;
+            const slot: PitchSlot = inLineup
+              ? { type: 'lineup', index: lineup.indexOf(player.id) }
+              : { type: 'bench', index: substitutes.indexOf(player.id) };
+            const isDropTarget =
+              canDrag && dropTargetSlot != null && slotsEqual(dropTargetSlot, slot);
+            const isDraggingThisSlot =
+              draggedSlot != null && slotsEqual(draggedSlot, slot);
+            const rowDragClass = canDrag
+              ? 'cursor-grab active:cursor-grabbing'
+              : 'cursor-pointer';
+            const rowOpacityClass = isDraggingThisSlot ? 'opacity-50' : '';
+            const rowDropTargetClass = isDropTarget
+              ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-800'
+              : '';
 
             return (
               <div
                 key={player.id}
-                className={`${rowStyle} group relative px-3 lg:px-4 py-2 lg:py-3 flex justify-between items-center cursor-pointer hover:bg-slate-600/50`}
+                data-pitch-slot={canDrag ? JSON.stringify(slot) : undefined}
+                className={`${rowStyle} group relative px-3 lg:px-4 py-2 lg:py-3 flex justify-between items-center ${rowDragClass} hover:bg-slate-600/50 ${rowOpacityClass} ${rowDropTargetClass}`}
                 onClick={() => setSelectedPlayerId(player.id)}
                 role="button"
+                draggable={canDrag}
+                onDragStart={(e) => {
+                  if (!canDrag) return;
+                  e.dataTransfer.setData(
+                    'application/json',
+                    JSON.stringify(slot),
+                  );
+                  e.dataTransfer.effectAllowed = 'move';
+                  setDraggedSlot(slot);
+                }}
+                onDragEnd={() => {
+                  handleDragEnd();
+                }}
+                onDragOver={(e) => {
+                  if (!canDrag || !draggedSlot) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDropTargetSlot(slot);
+                }}
+                onDragLeave={(e) => {
+                  if (isLeavingDragTarget(e)) setDropTargetSlot(null);
+                }}
+                onDrop={(e) => {
+                  if (!canDrag) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDrop(slot, e);
+                }}
+                onPointerDown={canDrag ? touchDrag.getPointerDown(slot) : undefined}
+                onPointerUp={canDrag ? touchDrag.getPointerUp() : undefined}
+                onPointerMove={canDrag ? touchDrag.getPointerMove() : undefined}
               >
                 <div className="flex items-center gap-2 min-w-0">
+                  {isDropTarget && <SquadListReplaceIcon />}
                   <PositionBadge position={player.position} />
                   <span
                     className={`text-white ${getNameSizeClass(playerDisplayName)} truncate`}
@@ -805,7 +972,6 @@ function SquadPanel({
                       Tap for actions
                     </span>
                   )}
-                  {/* Form trend indicator */}
                   <FormTrendIcon player={player} />
                   <span className="text-amber-400 text-xs lg:text-sm hidden sm:inline">
                     {formatCurrency(player.wage)}
@@ -885,6 +1051,14 @@ function SquadPanel({
             formation={formation}
             posture={tactics.posture}
             benchLimit={BENCH_LIMIT}
+            draggedSlot={draggedSlot}
+            dropTargetSlot={dropTargetSlot}
+            onDragStart={(slot) => setDraggedSlot(slot)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(slot) => setDropTargetSlot(slot)}
+            onDragLeave={() => setDropTargetSlot(null)}
+            onDrop={(targetSlot, e) => handleDrop(targetSlot, e)}
+            touchDragHandlers={touchDrag}
           />
         </div>
       </div>

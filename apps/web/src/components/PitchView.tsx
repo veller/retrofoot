@@ -1,3 +1,4 @@
+import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import type {
   Player,
   FormationType,
@@ -40,6 +41,43 @@ function getBenchSlotStyle(
   return 'bg-slate-700/80';
 }
 
+function getPitchSlotCursorClass(
+  hasDnD: boolean,
+  onPlayerClick: ((slot: PitchSlot, playerId: string | undefined) => void) | undefined,
+): string {
+  if (hasDnD) return 'cursor-grab active:cursor-grabbing';
+  if (onPlayerClick) return 'cursor-pointer hover:border-pitch-300';
+  return 'cursor-default';
+}
+
+function getBenchSlotCursorClass(
+  hasDnD: boolean,
+  onPlayerClick: ((slot: PitchSlot, playerId: string | undefined) => void) | undefined,
+): string {
+  if (hasDnD) return 'cursor-grab active:cursor-grabbing';
+  if (onPlayerClick) return 'cursor-pointer hover:bg-slate-600/80';
+  return '';
+}
+
+function ReplaceIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M7 16V4M7 4L3 8M7 4L11 8" />
+      <path d="M17 8v12M17 20l4-4M17 20l-4-4" />
+    </svg>
+  );
+}
+
 interface PitchViewProps {
   lineup: string[];
   substitutes: string[];
@@ -51,6 +89,21 @@ interface PitchViewProps {
   /** When set, players with these positions get a highlight (e.g. same defensive/mid/attack group) */
   highlightPositions?: Position[] | null;
   benchLimit?: number;
+  /** Drag-and-drop: source slot when dragging */
+  draggedSlot?: PitchSlot | null;
+  /** Drag-and-drop: slot under pointer when dragging (drop target) */
+  dropTargetSlot?: PitchSlot | null;
+  onDragStart?: (slot: PitchSlot) => void;
+  onDragEnd?: () => void;
+  onDragOver?: (slot: PitchSlot) => void;
+  onDragLeave?: () => void;
+  onDrop?: (slot: PitchSlot, e: DragEvent) => void;
+  /** Touch drag: long-press handlers for mobile */
+  touchDragHandlers?: {
+    getPointerDown: (slot: PitchSlot) => (e: ReactPointerEvent) => void;
+    getPointerUp: () => (e: ReactPointerEvent) => void;
+    getPointerMove: () => (e: ReactPointerEvent) => void;
+  };
 }
 
 export function PitchView({
@@ -63,7 +116,16 @@ export function PitchView({
   selectedSlot,
   highlightPositions,
   benchLimit = 7,
+  draggedSlot = null,
+  dropTargetSlot = null,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  touchDragHandlers,
 }: PitchViewProps) {
+  const hasDnD = Boolean(onDrop && onDragStart);
   const benchCount = substitutes.length;
   const coordinates = getFormationSlotCoordinates(formation);
 
@@ -188,6 +250,7 @@ export function PitchView({
             const displayName =
               player.nickname ?? player.name.split(' ').pop() ?? '?';
             const overall = calculateOverall(player);
+            const slot: PitchSlot = { type: 'lineup', index };
 
             const isSelected =
               selectedSlot?.type === 'lineup' && selectedSlot.index === index;
@@ -195,6 +258,11 @@ export function PitchView({
               !isSelected &&
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
+            const isDropTarget =
+              dropTargetSlot?.type === 'lineup' &&
+              dropTargetSlot.index === index;
+            const isDragging =
+              draggedSlot?.type === 'lineup' && draggedSlot.index === index;
 
             return (
               <div
@@ -208,6 +276,35 @@ export function PitchView({
                 <div
                   role="button"
                   tabIndex={0}
+                  data-pitch-slot={JSON.stringify(slot)}
+                  draggable={hasDnD}
+                  onDragStart={(e) => {
+                    if (!hasDnD) return;
+                    e.dataTransfer.setData(
+                      'application/json',
+                      JSON.stringify(slot),
+                    );
+                    e.dataTransfer.effectAllowed = 'move';
+                    onDragStart?.(slot);
+                  }}
+                  onDragEnd={() => onDragEnd?.()}
+                  onDragOver={(e) => {
+                    if (hasDnD && draggedSlot) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      onDragOver?.(slot);
+                    }
+                  }}
+                  onDragLeave={() => onDragLeave?.()}
+                  onDrop={(e) => {
+                    if (hasDnD) {
+                      e.preventDefault();
+                      onDrop?.(slot, e);
+                    }
+                  }}
+                  onPointerDown={touchDragHandlers?.getPointerDown(slot)}
+                  onPointerUp={touchDragHandlers?.getPointerUp()}
+                  onPointerMove={touchDragHandlers?.getPointerMove()}
                   onClick={() =>
                     onPlayerClick?.({ type: 'lineup', index }, playerId)
                   }
@@ -215,10 +312,14 @@ export function PitchView({
                     (e.key === 'Enter' || e.key === ' ') &&
                     onPlayerClick?.({ type: 'lineup', index }, playerId)
                   }
-                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${onPlayerClick ? 'cursor-pointer hover:border-pitch-300' : 'cursor-default'}`}
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getPitchSlotCursorClass(hasDnD, onPlayerClick)}`}
                   title={`${player.name} - OVR ${overall}`}
                 >
-                  {player.position}
+                  {isDropTarget ? (
+                    <ReplaceIcon className="w-3 h-3 md:w-4 md:h-4 text-amber-400" />
+                  ) : (
+                    player.position
+                  )}
                 </div>
                 <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1 hidden group-hover:block z-10 px-2 py-1 bg-slate-900/95 border border-slate-600 rounded text-xs whitespace-nowrap">
                   {displayName} ({overall})
@@ -239,6 +340,7 @@ export function PitchView({
         <div className="flex flex-wrap gap-1.5 md:gap-2">
           {substitutes.map((playerId, i) => {
             const player = playersById.get(playerId);
+            const slot: PitchSlot = { type: 'bench', index: i };
             const isSelected =
               selectedSlot?.type === 'bench' && selectedSlot.index === i;
             const isHighlighted =
@@ -246,13 +348,46 @@ export function PitchView({
               !!player &&
               highlightPositions?.length &&
               highlightPositions.includes(player.position);
+            const isDropTarget =
+              dropTargetSlot?.type === 'bench' && dropTargetSlot.index === i;
+            const isDragging =
+              draggedSlot?.type === 'bench' && draggedSlot.index === i;
 
             return (
               <div
                 key={playerId}
-                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${onPlayerClick ? 'cursor-pointer hover:bg-slate-600/80' : ''}`}
+                data-pitch-slot={JSON.stringify(slot)}
+                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-800 border-2 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getBenchSlotCursorClass(hasDnD, onPlayerClick)}`}
                 role="button"
                 tabIndex={0}
+                draggable={hasDnD}
+                onPointerDown={touchDragHandlers?.getPointerDown(slot)}
+                onPointerUp={touchDragHandlers?.getPointerUp()}
+                onPointerMove={touchDragHandlers?.getPointerMove()}
+                onDragStart={(e) => {
+                  if (!hasDnD) return;
+                  e.dataTransfer.setData(
+                    'application/json',
+                    JSON.stringify(slot),
+                  );
+                  e.dataTransfer.effectAllowed = 'move';
+                  onDragStart?.(slot);
+                }}
+                onDragEnd={() => onDragEnd?.()}
+                onDragOver={(e) => {
+                  if (hasDnD && draggedSlot) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    onDragOver?.(slot);
+                  }
+                }}
+                onDragLeave={() => onDragLeave?.()}
+                onDrop={(e) => {
+                  if (hasDnD) {
+                    e.preventDefault();
+                    onDrop?.(slot, e);
+                  }
+                }}
                 onClick={() =>
                   onPlayerClick?.({ type: 'bench', index: i }, playerId)
                 }
@@ -261,7 +396,9 @@ export function PitchView({
                     onPlayerClick?.({ type: 'bench', index: i }, playerId);
                 }}
               >
-                {player ? (
+                {isDropTarget ? (
+                  <ReplaceIcon className="w-4 h-4 md:w-5 md:h-5 text-amber-400 shrink-0" />
+                ) : player ? (
                   <>
                     <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold text-pitch-400 shrink-0">
                       {player.position}

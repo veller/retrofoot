@@ -1,5 +1,7 @@
 // Hooks barrel export
 export { useAuth } from './useAuth';
+export { useTouchDrag } from './useTouchDrag';
+export type { PitchSlot } from './useTouchDrag';
 export { useSaves, useCreateSave } from './useSaves';
 export type { SaveSummary } from './useSaves';
 export {
