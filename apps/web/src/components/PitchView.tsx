@@ -71,9 +71,20 @@ export function PitchView({
   const excessCount = overLimit ? benchCount - benchLimit : 0;
   const coordinates = getFormationSlotCoordinates(formation);
 
-  function getPostureYOffset(position: Position): number {
-    if (!posture || posture === 'balanced') return 0;
-    const direction = posture === 'attacking' ? -1 : 1;
+  function getPostureXOffset(position: Position): number {
+    if (position === 'GK') return 0;
+    if (!posture) return 0;
+    if (posture === 'balanced') {
+      if (position === 'MID' || position === 'ATT') return 3;
+      return 5; // DEF
+    }
+    if (posture === 'attacking') {
+      if (position === 'MID') return 6;
+      if (position === 'ATT') return 4;
+      return 5; // DEF
+    }
+    // defensive
+    const direction = -1;
     if (position === 'DEF') return 2.4 * direction;
     if (position === 'MID') return 1.4 * direction;
     if (position === 'ATT') return 0.8 * direction;
@@ -194,8 +205,8 @@ export function PitchView({
                 key={playerId}
                 className="absolute -translate-x-1/2 -translate-y-1/2 group"
                 style={{
-                  left: `${coord.y}%`,
-                  top: `${coord.x + getPostureYOffset(player.position)}%`,
+                  left: `${coord.y + getPostureXOffset(player.position)}%`,
+                  top: `${coord.x}%`,
                 }}
               >
                 <div

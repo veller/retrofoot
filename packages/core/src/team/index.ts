@@ -165,6 +165,15 @@ export function getFormationRequirements(
   return toAvailabilityCounts(FORMATION_POSITIONS[formation]);
 }
 
+export function getRequiredPositionForSlot(
+  formation: FormationType,
+  slotIndex: number,
+): Position | null {
+  const positions = FORMATION_POSITIONS[formation];
+  if (slotIndex < 0 || slotIndex >= positions.length) return null;
+  return positions[slotIndex];
+}
+
 export function getAvailablePlayerCounts(
   players: Pick<Player, 'position' | 'injured' | 'fitness'>[],
 ): FormationAvailabilityCounts {
@@ -190,14 +199,18 @@ export function evaluateFormationEligibility(
     ATT: Math.max(0, required.ATT - available.ATT),
   };
   const eligible =
-    missing.GK === 0 && missing.DEF === 0 && missing.MID === 0 && missing.ATT === 0;
+    missing.GK === 0 &&
+    missing.DEF === 0 &&
+    missing.MID === 0 &&
+    missing.ATT === 0;
 
   return { eligible, required, available, missing };
 }
 
 export function getEligibleFormations(team: Team): FormationType[] {
   return FORMATION_OPTIONS.filter(
-    (formation) => evaluateFormationEligibility(formation, team.players).eligible,
+    (formation) =>
+      evaluateFormationEligibility(formation, team.players).eligible,
   );
 }
 
