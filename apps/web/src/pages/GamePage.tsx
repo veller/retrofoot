@@ -51,6 +51,33 @@ type MobileSquadView = 'squad' | 'pitch' | 'info';
 
 const BENCH_LIMIT = 7;
 
+function getSquadEnergyBarColor(energy: number): string {
+  if (energy >= 70) return 'bg-emerald-500';
+  if (energy >= 40) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+function SquadEnergyDisplay({ energy }: { energy: number }) {
+  const value = Math.max(0, Math.min(100, energy));
+  return (
+    <div
+      className="flex items-center gap-1.5 flex-shrink-0"
+      title={`Energy ${Math.round(value)}%`}
+    >
+      <div className="w-10 h-1.5 rounded-full bg-slate-700 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${getSquadEnergyBarColor(value)}`}
+          style={{ width: `${value}%` }}
+          aria-hidden
+        />
+      </div>
+      <span className="text-slate-400 text-xs tabular-nums w-7">
+        {Math.round(value)}%
+      </span>
+    </div>
+  );
+}
+
 const POSTURE_OPTIONS: { value: TacticalPosture; label: string }[] = [
   { value: 'defensive', label: 'Defensive' },
   { value: 'balanced', label: 'Balanced' },
@@ -973,29 +1000,7 @@ function SquadPanel({
                     </span>
                   )}
                   <FormTrendIcon player={player} />
-                  <div
-                    className="flex items-center gap-1.5 flex-shrink-0"
-                    title={`Energy ${Math.round(player.energy ?? 100)}%`}
-                  >
-                    <div className="w-10 h-1.5 rounded-full bg-slate-700 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          (player.energy ?? 100) >= 70
-                            ? 'bg-emerald-500'
-                            : (player.energy ?? 100) >= 40
-                              ? 'bg-amber-500'
-                              : 'bg-red-500'
-                        }`}
-                        style={{
-                          width: `${Math.max(0, Math.min(100, player.energy ?? 100))}%`,
-                        }}
-                        aria-hidden
-                      />
-                    </div>
-                    <span className="text-slate-400 text-xs tabular-nums w-7">
-                      {Math.round(player.energy ?? 100)}%
-                    </span>
-                  </div>
+                  <SquadEnergyDisplay energy={player.energy ?? 100} />
                   <span className="text-amber-400 text-xs lg:text-sm hidden sm:inline">
                     {formatCurrency(player.wage)}
                   </span>
