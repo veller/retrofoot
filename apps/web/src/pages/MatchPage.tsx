@@ -254,7 +254,24 @@ export function MatchPage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [playerTactics, setPlayerTactics] = useState<Tactics | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 3>(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 3>(() => {
+    try {
+      const stored = localStorage.getItem('retrofoot/matchPlaybackSpeed');
+      const n = stored ? parseInt(stored, 10) : 1;
+      return n === 1 || n === 2 || n === 3 ? n : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  // Persist playback speed to localStorage for next match
+  useEffect(() => {
+    try {
+      localStorage.setItem('retrofoot/matchPlaybackSpeed', String(playbackSpeed));
+    } catch {
+      // Ignore quota/private mode errors
+    }
+  }, [playbackSpeed]);
 
   const intervalRef = useRef<number | null>(null);
   const tickIntervalMs = 100 / playbackSpeed;
