@@ -84,3 +84,329 @@ body {
 .h-safe-area-inset-bottom {
   height: env(safe-area-inset-bottom, 0px);
 }
+
+/* ---------------------------------------------------------------------------
+   Form Status Badge – Pixel-art HOT / COLD (Balatro / roguelike vibe)
+   Chunky pixels, hard edges, CRT/arcade, bold and readable.
+   --------------------------------------------------------------------------- */
+
+/* Transition flash when switching HOT ↔ COLD */
+@keyframes form-badge-flash {
+  0% {
+    filter: brightness(3) contrast(0.9);
+    opacity: 1;
+  }
+  15% {
+    filter: brightness(2.5) contrast(0.85);
+  }
+  40% {
+    filter: brightness(1.2) contrast(1);
+  }
+  100% {
+    filter: brightness(1) contrast(1);
+  }
+}
+
+/* HOT: flame flicker (jitter) */
+@keyframes form-badge-flame {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: translateY(0) scaleY(1);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(-1px) scaleY(1.05);
+  }
+  50% {
+    opacity: 0.9;
+    transform: translateY(-2px) scaleY(0.98);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-1px) scaleY(1.02);
+  }
+}
+
+/* HOT: pixel glow bloom (stepped) */
+@keyframes form-badge-hot-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(180, 50, 30, 0.9),
+      0 0 0 2px rgba(220, 80, 40, 0.5),
+      0 2px 0 0 rgba(200, 60, 30, 0.8),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.4),
+      inset 1px 1px 0 rgba(255, 200, 100, 0.25);
+    filter: brightness(1.05);
+  }
+  33% {
+    box-shadow:
+      0 0 0 1px rgba(200, 60, 35, 0.95),
+      0 0 0 2px rgba(240, 100, 50, 0.6),
+      0 2px 0 0 rgba(220, 70, 35, 0.85),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.35),
+      inset 1px 1px 0 rgba(255, 220, 120, 0.3);
+    filter: brightness(1.15);
+  }
+  66% {
+    box-shadow:
+      0 0 0 1px rgba(190, 55, 32, 0.9),
+      0 0 0 2px rgba(230, 90, 45, 0.55),
+      0 2px 0 0 rgba(210, 65, 32, 0.82),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.38),
+      inset 1px 1px 0 rgba(255, 210, 110, 0.28);
+    filter: brightness(1.1);
+  }
+}
+
+/* HOT: heat wobble (vertical pixel jitter) */
+@keyframes form-badge-wobble {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  20% {
+    transform: translateY(-0.5px);
+  }
+  40% {
+    transform: translateY(0.5px);
+  }
+  60% {
+    transform: translateY(-0.5px);
+  }
+  80% {
+    transform: translateY(0);
+  }
+}
+
+/* HOT: slot-machine pulse */
+@keyframes form-badge-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+/* COLD: frost shimmer */
+@keyframes form-badge-frost-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* COLD: freeze pulse (brief brightness drop) */
+@keyframes form-badge-freeze-pulse {
+  0%,
+  88%,
+  100% {
+    filter: brightness(1);
+  }
+  92% {
+    filter: brightness(0.75);
+  }
+  94% {
+    filter: brightness(1.05);
+  }
+}
+
+/* COLD: pixel sparkle on edges */
+@keyframes form-badge-sparkle {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* COLD: slow glow */
+@keyframes form-badge-cold-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(30, 120, 180, 0.8),
+      0 0 0 2px rgba(80, 180, 220, 0.4),
+      0 2px 0 0 rgba(40, 140, 200, 0.6),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+      inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(50, 160, 210, 0.85),
+      0 0 0 2px rgba(100, 200, 240, 0.5),
+      0 2px 0 0 rgba(60, 170, 220, 0.7),
+      inset -1px -1px 0 rgba(0, 0, 0, 0.25),
+      inset 1px 1px 0 rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Base badge – pixel font, hard edges */
+.form-status-badge {
+  position: relative;
+  overflow: visible;
+  border-radius: 0;
+  border: none;
+  font-family: 'Press Start 2P', monospace;
+  -webkit-font-smoothing: none;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.form-status-badge[data-size='sm'] {
+  padding: 3px 6px 4px;
+  font-size: 6px;
+  min-width: 32px;
+  line-height: 1.4;
+}
+
+.form-status-badge[data-size='md'] {
+  padding: 4px 8px 5px;
+  font-size: 8px;
+  min-width: 40px;
+  line-height: 1.4;
+}
+
+/* Transition flash */
+.form-status-badge[data-flash='true'] {
+  animation: form-badge-flash 0.22s steps(4) forwards;
+}
+
+/* Background block (stepped, no smooth gradient) */
+.form-status-badge__bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.form-status-badge__text {
+  position: relative;
+  z-index: 2;
+}
+
+/* HOT state */
+.form-status-badge[data-status='hot'] .form-status-badge__bg {
+  /* Chunky stepped gradient: deep red → dark red → orange-black */
+  background: linear-gradient(
+    180deg,
+    #8b2222 0%,
+    #8b2222 25%,
+    #6b1515 25%,
+    #6b1515 50%,
+    #5c0f0f 50%,
+    #5c0f0f 75%,
+    #4a0a0a 100%
+  );
+}
+
+.form-status-badge[data-status='hot'] {
+  color: #ffcc88;
+  text-shadow:
+    -1px -1px 0 #4a0a0a,
+    1px -1px 0 #4a0a0a,
+    -1px 1px 0 #4a0a0a,
+    1px 1px 0 #4a0a0a,
+    0 0 4px rgba(255, 180, 80, 0.9),
+    0 0 8px rgba(255, 120, 40, 0.5);
+  animation: form-badge-hot-glow 1.2s steps(3) infinite;
+}
+
+.form-status-badge[data-status='hot'] .form-status-badge__text {
+  animation:
+    form-badge-wobble 0.4s steps(2) infinite,
+    form-badge-pulse 1.5s ease-in-out infinite;
+  animation-delay: 0s, 0.1s;
+}
+
+/* Pixel flames (HOT) – upward licking overlay */
+.form-status-badge__flames {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 70%;
+  background: linear-gradient(
+    0deg,
+    transparent 0%,
+    rgba(255, 100, 40, 0.25) 30%,
+    rgba(255, 180, 60, 0.2) 60%,
+    transparent 100%
+  );
+  background-size: 8px 8px;
+  image-rendering: pixelated;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.9;
+  animation: form-badge-flame 0.6s steps(3) infinite;
+}
+
+.form-status-badge[data-status='cold'] .form-status-badge__flames {
+  display: none;
+}
+
+/* COLD state */
+.form-status-badge[data-status='cold'] .form-status-badge__bg {
+  background: linear-gradient(
+    180deg,
+    #1a3a5c 0%,
+    #1a3a5c 25%,
+    #0f2840 25%,
+    #0f2840 50%,
+    #0a2035 50%,
+    #0a2035 75%,
+    #061828 100%
+  );
+}
+
+.form-status-badge[data-status='cold'] {
+  color: #a8e6ff;
+  text-shadow:
+    -1px -1px 0 #061828,
+    1px -1px 0 #061828,
+    -1px 1px 0 #061828,
+    1px 1px 0 #061828,
+    0 0 4px rgba(150, 220, 255, 0.8),
+    0 0 6px rgba(100, 200, 255, 0.4);
+  animation:
+    form-badge-cold-glow 2.5s steps(2) infinite,
+    form-badge-freeze-pulse 4s steps(1) infinite;
+  animation-delay: 0s, 0s;
+}
+
+/* Pixel frost overlay (COLD) – jagged crystalline */
+.form-status-badge__frost {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 25%,
+    transparent 50%,
+    rgba(200, 240, 255, 0.06) 75%,
+    transparent 100%
+  );
+  background-size: 8px 8px;
+  image-rendering: pixelated;
+  pointer-events: none;
+  z-index: 1;
+  animation: form-badge-frost-shimmer 2s steps(2) infinite;
+}
+
+.form-status-badge[data-status='hot'] .form-status-badge__frost {
+  display: none;
+}
+
+/* Cold text: subtle edge sparkle (no wobble/pulse) */
+.form-status-badge[data-status='cold'] .form-status-badge__text {
+  animation: form-badge-sparkle 2.5s steps(2) infinite;
+}

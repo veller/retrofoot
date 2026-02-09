@@ -13,7 +13,7 @@ import {
   calculateStadiumMaintenance,
   calculateOperatingCosts,
   formatCurrency,
-  calculateFormTrend,
+  getFormDisplayStatus,
   type FormationType,
   type TacticalPosture,
   type Position,
@@ -22,6 +22,7 @@ import {
   type Tactics,
   type Player,
 } from '@retrofoot/core';
+import { FormStatusBadge } from '../components/FormStatusBadge';
 import { PitchView } from '../components/PitchView';
 import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
@@ -511,32 +512,10 @@ export function GamePage() {
   );
 }
 
-const FORM_TREND_CONFIG = {
-  up: {
-    className: 'bg-red-500/20 text-red-400 border-red-500/50',
-    label: 'HOT',
-    title: 'Form improving',
-  },
-  down: {
-    className: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
-    label: 'COLD',
-    title: 'Form declining',
-  },
-} as const;
-
 function FormTrendIcon({ player }: { player: Player }) {
-  const trend = calculateFormTrend(player.form.lastFiveRatings);
-  if (trend === 'stable') return null;
-
-  const config = FORM_TREND_CONFIG[trend];
-  return (
-    <span
-      className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${config.className}`}
-      title={config.title}
-    >
-      {config.label}
-    </span>
-  );
+  const status = getFormDisplayStatus(player.form.lastFiveRatings ?? []);
+  if (status !== 'hot') return null;
+  return <FormStatusBadge status="hot" title="Form improving" size="sm" />;
 }
 
 function getNameSizeClass(name: string): string {

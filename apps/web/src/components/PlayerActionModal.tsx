@@ -2,21 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   formatCurrency,
   calculateOverall,
-  calculateFormTrend,
+  getFormDisplayStatus,
   type Player,
 } from '@retrofoot/core';
+import { FormStatusBadge } from './FormStatusBadge';
 import { PositionBadge } from './PositionBadge';
-
-const FORM_TREND_CONFIG = {
-  up: {
-    className: 'bg-red-500/20 text-red-400 border-red-500/50',
-    label: 'HOT',
-  },
-  down: {
-    className: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
-    label: 'COLD',
-  },
-} as const;
 
 interface PlayerActionModalProps {
   player: Player;
@@ -60,10 +50,9 @@ export function PlayerActionModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Form trend for explanation
+  // Form display: HOT only; no COLD badge
   const ratings = player.form.lastFiveRatings ?? [];
-  const trend = calculateFormTrend(ratings);
-  const config = trend === 'stable' ? null : FORM_TREND_CONFIG[trend];
+  const formStatus = getFormDisplayStatus(ratings);
   const recentAvg =
     ratings.length >= 2
       ? ratings.slice(-2).reduce((a, b) => a + b, 0) / 2
@@ -78,12 +67,10 @@ export function PlayerActionModal({
   if (ratings.length < 3) {
     formExplanation =
       'Based on match ratings. Need at least 3 games to show form trend.';
-  } else if (trend === 'up') {
-    formExplanation = `Form improving — last 2 match ratings (${formatRating(recentAvg!)} avg) are better than earlier games (${formatRating(olderAvg!)} avg).`;
-  } else if (trend === 'down') {
-    formExplanation = `Form declining — last 2 match ratings (${formatRating(recentAvg!)} avg) are below earlier games (${formatRating(olderAvg!)} avg).`;
+  } else if (formStatus === 'hot') {
+    formExplanation = `Form improving — last 2 match ratings (${formatRating(recentAvg!)} avg) are better than earlier games (${formatRating(olderAvg!)} avg). HOT is lost if the latest game rating drops.`;
   } else {
-    formExplanation = `Form stable — recent match ratings in line with earlier games (${formatRating(recentAvg!)} vs ${formatRating(olderAvg!)} avg).`;
+    formExplanation = `Form: recent match ratings in line with earlier games (${formatRating(recentAvg!)} vs ${formatRating(olderAvg!)} avg).`;
   }
 
   const handleListForSale = async () => {
@@ -205,12 +192,12 @@ export function PlayerActionModal({
           <div className="mt-4 pt-4 border-t border-slate-700">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-slate-500 text-xs uppercase">Form</span>
-              {config && (
-                <span
-                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${config.className}`}
-                >
-                  {config.label}
-                </span>
+              {formStatus === 'hot' && (
+                <FormStatusBadge
+                  status="hot"
+                  size="md"
+                  title="Form improving"
+                />
               )}
             </div>
             <p className="text-slate-400 text-xs leading-snug">

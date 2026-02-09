@@ -155,6 +155,13 @@ Players improve or decline each season based on:
 - Physical attributes decline faster than mental
 - Rate increases with age (30=slight, 35+=significant)
 
+### Form (match ratings)
+
+Match ratings (0–10) from the last five games are shown as a simple form indicator:
+
+- **HOT** — Shown only when form is improving (last 2 games’ average is better than earlier games) **and** the latest game rating did not drop versus the previous one. One bad last game removes HOT so the rule is easy to understand.
+- **No badge** — All other cases (not enough games, stable, or declining). There is no separate "cold" or "declining" badge; the UI is HOT or neutral only.
+
 ### Retirement
 
 Players may retire based on:

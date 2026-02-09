@@ -1,4 +1,5 @@
 // Components barrel export
+export { FormStatusBadge } from './FormStatusBadge';
 export { MatchLiveView } from './MatchLiveView';
 export { PlayerActionModal } from './PlayerActionModal';
 export { PositionBadge } from './PositionBadge';

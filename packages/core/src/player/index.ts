@@ -827,3 +827,23 @@ export function calculateFormTrend(
   if (recent < older - 0.5) return 'down';
   return 'stable';
 }
+
+/**
+ * Display-only form status: HOT or nothing.
+ * HOT only when form is improving (last 2 avg > older) AND the latest game
+ * rating did not drop vs the previous one (one bad game removes HOT).
+ */
+export function getFormDisplayStatus(ratings: number[]): 'hot' | null {
+  if (ratings.length < 3) return null;
+
+  const recent = ratings.slice(-2).reduce((a, b) => a + b, 0) / 2;
+  const older =
+    ratings.slice(0, -2).reduce((a, b) => a + b, 0) / (ratings.length - 2);
+  if (recent <= older + 0.5) return null;
+
+  const last = ratings[ratings.length - 1];
+  const prev = ratings[ratings.length - 2];
+  if (last < prev) return null;
+
+  return 'hot';
+}
