@@ -513,26 +513,22 @@ export function GamePage() {
 
 const FORM_TREND_CONFIG = {
   up: {
-    className: 'bg-green-500/20 text-green-400 border-green-500/50',
+    className: 'bg-red-500/20 text-red-400 border-red-500/50',
     label: 'HOT',
     title: 'Form improving',
   },
   down: {
-    className: 'bg-red-500/20 text-red-400 border-red-500/50',
+    className: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
     label: 'COLD',
     title: 'Form declining',
-  },
-  stable: {
-    className: 'bg-slate-500/20 text-slate-400 border-slate-500/50',
-    label: 'OK',
-    title: 'Form stable',
   },
 } as const;
 
 function FormTrendIcon({ player }: { player: Player }) {
   const trend = calculateFormTrend(player.form.lastFiveRatings);
-  const config = FORM_TREND_CONFIG[trend];
+  if (trend === 'stable') return null;
 
+  const config = FORM_TREND_CONFIG[trend];
   return (
     <span
       className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${config.className}`}

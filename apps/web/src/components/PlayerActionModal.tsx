@@ -1,6 +1,22 @@
-import { useState } from 'react';
-import { formatCurrency, calculateOverall, type Player } from '@retrofoot/core';
+import { useState, useEffect } from 'react';
+import {
+  formatCurrency,
+  calculateOverall,
+  calculateFormTrend,
+  type Player,
+} from '@retrofoot/core';
 import { PositionBadge } from './PositionBadge';
+
+const FORM_TREND_CONFIG = {
+  up: {
+    className: 'bg-red-500/20 text-red-400 border-red-500/50',
+    label: 'HOT',
+  },
+  down: {
+    className: 'bg-blue-500/20 text-blue-400 border-blue-500/50',
+    label: 'COLD',
+  },
+} as const;
 
 interface PlayerActionModalProps {
   player: Player;
@@ -34,6 +50,41 @@ export function PlayerActionModal({
   const overall = calculateOverall(player);
   const suggestedPrice = player.marketValue;
   const playerDisplayName = player.nickname ?? player.name;
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Form trend for explanation
+  const ratings = player.form.lastFiveRatings ?? [];
+  const trend = calculateFormTrend(ratings);
+  const config = trend === 'stable' ? null : FORM_TREND_CONFIG[trend];
+  const recentAvg =
+    ratings.length >= 2
+      ? ratings.slice(-2).reduce((a, b) => a + b, 0) / 2
+      : null;
+  const olderAvg =
+    ratings.length >= 3
+      ? ratings.slice(0, -2).reduce((a, b) => a + b, 0) / (ratings.length - 2)
+      : null;
+  const formatRating = (n: number) => n.toFixed(1);
+
+  let formExplanation: string;
+  if (ratings.length < 3) {
+    formExplanation =
+      'Based on match ratings. Need at least 3 games to show form trend.';
+  } else if (trend === 'up') {
+    formExplanation = `Form improving — last 2 match ratings (${formatRating(recentAvg!)} avg) are better than earlier games (${formatRating(olderAvg!)} avg).`;
+  } else if (trend === 'down') {
+    formExplanation = `Form declining — last 2 match ratings (${formatRating(recentAvg!)} avg) are below earlier games (${formatRating(olderAvg!)} avg).`;
+  } else {
+    formExplanation = `Form stable — recent match ratings in line with earlier games (${formatRating(recentAvg!)} vs ${formatRating(olderAvg!)} avg).`;
+  }
 
   const handleListForSale = async () => {
     setError(null);
@@ -149,28 +200,31 @@ export function PlayerActionModal({
               </span>
             </span>
           </div>
-        </div>
 
-        {/* Status Badge */}
-        {(isListed || isInLineup || isOnBench) && (
-          <div className="px-5 py-3 border-b border-slate-700">
-            <div className="flex gap-2 flex-wrap">
-              {isInLineup && (
-                <span className="px-2 py-1 bg-pitch-600/30 text-pitch-400 text-xs font-bold rounded border border-pitch-500/50">
-                  IN LINEUP
-                </span>
-              )}
-              {isOnBench && (
-                <span className="px-2 py-1 bg-slate-600/50 text-slate-300 text-xs font-bold rounded border border-slate-500/50">
-                  ON BENCH
-                </span>
-              )}
-              {isListed && (
-                <span className="px-2 py-1 bg-amber-600/30 text-amber-400 text-xs font-bold rounded border border-amber-500/50">
-                  LISTED FOR SALE
+          {/* Form trend */}
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-slate-500 text-xs uppercase">Form</span>
+              {config && (
+                <span
+                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${config.className}`}
+                >
+                  {config.label}
                 </span>
               )}
             </div>
+            <p className="text-slate-400 text-xs leading-snug">
+              {formExplanation}
+            </p>
+          </div>
+        </div>
+
+        {/* Status Badge - only when listed for sale */}
+        {isListed && (
+          <div className="px-5 py-3 border-b border-slate-700">
+            <span className="px-2 py-1 bg-amber-600/30 text-amber-400 text-xs font-bold rounded border border-amber-500/50">
+              LISTED FOR SALE
+            </span>
           </div>
         )}
 

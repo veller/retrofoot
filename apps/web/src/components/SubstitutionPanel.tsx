@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type {
   MatchState,
   Team,
@@ -60,7 +60,8 @@ export function SubstitutionPanel({
   const selectedFormationInfo = formationAvailability.find(
     (item) => item.formation === selectedFormation,
   );
-  const selectedFormationEligible = selectedFormationInfo?.info.eligible ?? false;
+  const selectedFormationEligible =
+    selectedFormationInfo?.info.eligible ?? false;
 
   const handleLineupClick = (playerId: string) => {
     if (subsRemaining <= 0) return;
@@ -75,6 +76,14 @@ export function SubstitutionPanel({
     onSubstitute(selectedLineupPlayer, playerInId);
     setSelectedLineupPlayer(null);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
@@ -131,7 +140,11 @@ export function SubstitutionPanel({
                 className="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
               >
                 {formationAvailability.map(({ formation, info }) => (
-                  <option key={formation} value={formation} disabled={!info.eligible}>
+                  <option
+                    key={formation}
+                    value={formation}
+                    disabled={!info.eligible}
+                  >
                     {formation}
                   </option>
                 ))}
@@ -142,7 +155,8 @@ export function SubstitutionPanel({
                   {Object.entries(selectedFormationInfo.info.missing)
                     .filter(([, value]) => value > 0)
                     .map(([pos]) => {
-                      const key = pos as keyof typeof selectedFormationInfo.info.required;
+                      const key =
+                        pos as keyof typeof selectedFormationInfo.info.required;
                       return `need ${selectedFormationInfo.info.required[key]}, have ${selectedFormationInfo.info.available[key]} ${pos}`;
                     })
                     .join(' · ')}
@@ -153,19 +167,21 @@ export function SubstitutionPanel({
             <div className="mb-6">
               <p className="text-slate-400 text-xs uppercase mb-2">Posture</p>
               <div className="flex flex-wrap gap-2">
-                {(['defensive', 'balanced', 'attacking'] as const).map((posture) => (
-                  <button
-                    key={posture}
-                    onClick={() => setSelectedPosture(posture)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium ${
-                      selectedPosture === posture
-                        ? 'bg-pitch-600 text-white'
-                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                    }`}
-                  >
-                    {posture.charAt(0).toUpperCase() + posture.slice(1)}
-                  </button>
-                ))}
+                {(['defensive', 'balanced', 'attacking'] as const).map(
+                  (posture) => (
+                    <button
+                      key={posture}
+                      onClick={() => setSelectedPosture(posture)}
+                      className={`px-3 py-1.5 rounded text-sm font-medium ${
+                        selectedPosture === posture
+                          ? 'bg-pitch-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                    >
+                      {posture.charAt(0).toUpperCase() + posture.slice(1)}
+                    </button>
+                  ),
+                )}
               </div>
             </div>
 
@@ -234,7 +250,9 @@ export function SubstitutionPanel({
                 </h2>
                 <div className="space-y-2">
                   {benchPlayers.length === 0 ? (
-                    <p className="text-slate-500 text-sm">No players on bench</p>
+                    <p className="text-slate-500 text-sm">
+                      No players on bench
+                    </p>
                   ) : (
                     benchPlayers.map((player) => (
                       <button

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatCurrency } from '@retrofoot/core';
 import { PositionBadge } from '../PositionBadge';
 import type { MarketPlayer } from '../../hooks/useTransfers';
@@ -26,6 +26,14 @@ export function PlayerDetailModal({
   isSubmitting,
 }: PlayerDetailModalProps) {
   const isFreeAgent = player.status === 'free_agent';
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   // Initial offer values
   const [offerAmount, setOfferAmount] = useState(

@@ -44,6 +44,58 @@ const PERSISTENT_EVENT_TYPES = new Set([
 const SECONDS_PER_TICK = 6; // 6 seconds per tick
 // Base interval 100ms at 1x; 50ms at 2x; 33ms at 3x. Result: 1 game min ≈ 1/2/3 sec real time
 
+/**
+ * Compute lineupPlayerIds and substitutionMinutes for the API from match state.
+ * Used to update player form/ratings after a match.
+ */
+function computeLineupForResult(
+  match: LiveMatchState,
+  playerTeamId: string,
+): { lineupPlayerIds: string[]; substitutionMinutes: Record<string, number> } {
+  const isHome = match.homeTeam.id === playerTeamId;
+  const team: 'home' | 'away' = isHome ? 'home' : 'away';
+  const lineup =
+    team === 'home' ? match.state.homeLineup : match.state.awayLineup;
+
+  // Final lineup (player IDs at full time)
+  const finalLineupIds = lineup.map((p) => p.id);
+
+  // Substitution events for this team
+  const subs = match.state.events.filter(
+    (e): e is MatchEvent & { playerId: string; assistPlayerId: string } =>
+      e.type === 'substitution' &&
+      e.team === team &&
+      !!e.playerId &&
+      !!e.assistPlayerId,
+  );
+
+  // Reconstruct initial lineup by undoing subs in reverse order
+  let initialLineupIds = [...finalLineupIds];
+  for (let i = subs.length - 1; i >= 0; i--) {
+    const s = subs[i];
+    const idx = initialLineupIds.indexOf(s.playerId);
+    if (idx !== -1) {
+      initialLineupIds = [
+        ...initialLineupIds.slice(0, idx),
+        s.assistPlayerId,
+        ...initialLineupIds.slice(idx + 1),
+      ];
+    }
+  }
+
+  // Build substitutionMinutes: starter subbed off -> minute; sub who came on -> minute
+  const substitutionMinutes: Record<string, number> = {};
+  for (const s of subs) {
+    substitutionMinutes[s.assistPlayerId] = s.minute; // starter came off
+    substitutionMinutes[s.playerId] = s.minute; // sub came on
+  }
+
+  return {
+    lineupPlayerIds: initialLineupIds,
+    substitutionMinutes,
+  };
+}
+
 function toCoreFigure(f: MatchFixture): Fixture {
   return {
     id: f.id,
@@ -267,7 +319,10 @@ export function MatchPage() {
   // Persist playback speed to localStorage for next match
   useEffect(() => {
     try {
-      localStorage.setItem('retrofoot/matchPlaybackSpeed', String(playbackSpeed));
+      localStorage.setItem(
+        'retrofoot/matchPlaybackSpeed',
+        String(playbackSpeed),
+      );
     } catch {
       // Ignore quota/private mode errors
     }
@@ -429,8 +484,21 @@ export function MatchPage() {
                 intervalRef.current = null;
               }
 
-              // Convert to results
-              const matchResults = prevMatches.map(matchStateToResult);
+              // Convert to results, with lineup data for player's match (for form/ratings)
+              const matchResults = prevMatches.map((m, i) => {
+                const result = matchStateToResult(m);
+                if (
+                  i === playerMatchIndex &&
+                  matchData?.playerTeamId &&
+                  (m.homeTeam.id === matchData.playerTeamId ||
+                    m.awayTeam.id === matchData.playerTeamId)
+                ) {
+                  const { lineupPlayerIds, substitutionMinutes } =
+                    computeLineupForResult(m, matchData.playerTeamId);
+                  return { ...result, lineupPlayerIds, substitutionMinutes };
+                }
+                return result;
+              });
               setResults(matchResults);
               setPhase('post_match');
             }
@@ -455,7 +523,7 @@ export function MatchPage() {
 
       return newSeconds;
     });
-  }, [playerMatchIndex]);
+  }, [playerMatchIndex, matchData?.playerTeamId]);
 
   // Start/stop simulation
   useEffect(() => {
@@ -631,24 +699,37 @@ export function MatchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          results: results.map((r) => ({
-            fixtureId: r.id,
-            homeScore: r.homeScore,
-            awayScore: r.awayScore,
-            attendance: r.attendance,
-            events: r.events
-              .filter((e) => PERSISTENT_EVENT_TYPES.has(e.type))
-              .map((e) => ({
-                minute: e.minute,
-                type: e.type,
-                team: e.team,
-                playerId: e.playerId,
-                playerName: e.playerName,
-                assistPlayerId: e.assistPlayerId,
-                assistPlayerName: e.assistPlayerName,
-                description: e.description,
-              })),
-          })),
+          results: results.map((r) => {
+            const payload: Record<string, unknown> = {
+              fixtureId: r.id,
+              homeScore: r.homeScore,
+              awayScore: r.awayScore,
+              attendance: r.attendance,
+              events: r.events
+                .filter((e) => PERSISTENT_EVENT_TYPES.has(e.type))
+                .map((e) => ({
+                  minute: e.minute,
+                  type: e.type,
+                  team: e.team,
+                  playerId: e.playerId,
+                  playerName: e.playerName,
+                  assistPlayerId: e.assistPlayerId,
+                  assistPlayerName: e.assistPlayerName,
+                  description: e.description,
+                })),
+            };
+            if ('lineupPlayerIds' in r && Array.isArray(r.lineupPlayerIds)) {
+              payload.lineupPlayerIds = r.lineupPlayerIds;
+            }
+            if (
+              'substitutionMinutes' in r &&
+              r.substitutionMinutes &&
+              typeof r.substitutionMinutes === 'object'
+            ) {
+              payload.substitutionMinutes = r.substitutionMinutes;
+            }
+            return payload;
+          }),
         }),
       });
 

@@ -1,10 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
 import { EventIcon } from './EventIcon';
 import { isSignificantEvent } from './matchEventUtils';
 
-const MATCH_PHASE_EVENTS: MatchEvent['type'][] = ['kickoff', 'half_time', 'full_time'];
+const MATCH_PHASE_EVENTS: MatchEvent['type'][] = [
+  'kickoff',
+  'half_time',
+  'full_time',
+];
 
 interface MatchEventsModalProps {
   match: LiveMatchState;
@@ -94,6 +98,15 @@ function getPhaseLabel(phase: string, minute: number): string {
 
 export function MatchEventsModal({ match, onClose }: MatchEventsModalProps) {
   const { homeTeam, awayTeam, state, attendance } = match;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const sortedEvents = useMemo(
     () => [...state.events].sort((a, b) => b.minute - a.minute),
     [state.events],

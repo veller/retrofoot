@@ -75,6 +75,14 @@ export function CounterOfferModal({
     }
   }, [history]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleNegotiate = useCallback(
     async (action: 'accept' | 'reject' | 'counter') => {
       setError(null);
@@ -125,9 +133,11 @@ export function CounterOfferModal({
           },
         ]);
 
-        if (neg.aiResponse.action === 'counter' &&
-            neg.aiResponse.counterFee !== undefined &&
-            neg.aiResponse.counterWage !== undefined) {
+        if (
+          neg.aiResponse.action === 'counter' &&
+          neg.aiResponse.counterFee !== undefined &&
+          neg.aiResponse.counterWage !== undefined
+        ) {
           setAiCounter({
             fee: neg.aiResponse.counterFee,
             wage: neg.aiResponse.counterWage,
@@ -158,7 +168,15 @@ export function CounterOfferModal({
         setIsNegotiating(false);
       }
     },
-    [saveId, offer.id, counterFee, counterWage, negotiationId, onComplete, onRejected],
+    [
+      saveId,
+      offer.id,
+      counterFee,
+      counterWage,
+      negotiationId,
+      onComplete,
+      onRejected,
+    ],
   );
 
   const handleSubmitCounter = () => {
@@ -196,7 +214,12 @@ export function CounterOfferModal({
         {/* Header */}
         <div className="p-4 border-b border-slate-700">
           <div className="flex items-center justify-between">
-            <h3 id="counter-offer-modal-title" className="text-lg font-bold text-white">{getTitle()}</h3>
+            <h3
+              id="counter-offer-modal-title"
+              className="text-lg font-bold text-white"
+            >
+              {getTitle()}
+            </h3>
             <button
               onClick={onClose}
               disabled={isNegotiating}
@@ -426,7 +449,9 @@ export function CounterOfferModal({
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-400 uppercase">
-                {history.length > 0 ? 'Your Counter Offer' : 'Make Counter Offer'}
+                {history.length > 0
+                  ? 'Your Counter Offer'
+                  : 'Make Counter Offer'}
               </h3>
               {round > 0 && (
                 <span className="text-xs text-slate-500">Round {round}/2</span>

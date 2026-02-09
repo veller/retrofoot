@@ -482,6 +482,8 @@ export function makeSubstitution(
     team,
     playerId: playerInId,
     playerName: playerIn.nickname || playerIn.name,
+    assistPlayerId: playerOutId,
+    assistPlayerName: playerOut.nickname || playerOut.name,
     description: `Substitution: ${playerIn.nickname || playerIn.name} replaces ${playerOut.nickname || playerOut.name}`,
   };
 

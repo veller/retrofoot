@@ -2,10 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { formatCurrency } from '@retrofoot/core';
 import { PositionBadge } from '../PositionBadge';
-import {
-  type MarketPlayer,
-  negotiateTransfer,
-} from '../../hooks/useTransfers';
+import { type MarketPlayer, negotiateTransfer } from '../../hooks/useTransfers';
 import { getOverallColor } from '../../lib/ui-utils';
 import {
   getSmartIncrement,
@@ -19,7 +16,11 @@ interface NegotiationModalProps {
   teamWageBudget: number;
   saveId: string;
   onClose: () => void;
-  onComplete: (result: { transferId: string; finalFee: number; finalWage: number }) => void;
+  onComplete: (result: {
+    transferId: string;
+    finalFee: number;
+    finalWage: number;
+  }) => void;
 }
 
 interface NegotiationRound {
@@ -53,7 +54,10 @@ export function NegotiationModal({
   // Negotiation state
   const [history, setHistory] = useState<NegotiationRound[]>([]);
   const [negotiationId, setNegotiationId] = useState<string | null>(null);
-  const [aiCounter, setAiCounter] = useState<{ fee: number; wage: number } | null>(null);
+  const [aiCounter, setAiCounter] = useState<{
+    fee: number;
+    wage: number;
+  } | null>(null);
   const [canCounter, setCanCounter] = useState(true);
   const [round, setRound] = useState(0);
   const [completed, setCompleted] = useState<{
@@ -74,91 +78,103 @@ export function NegotiationModal({
     }
   }, [history]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const canAffordFee = offerFee <= teamBudget;
   const canAffordWage = offerWage <= teamWageBudget * 0.1;
   const canSubmit = canAffordFee && !isNegotiating && !completed && !rejected;
 
-  const handleNegotiate = useCallback(async (
-    fee: number,
-    wage: number,
-    years: number,
-    action?: 'counter' | 'accept' | 'walkaway',
-  ) => {
-    setError(null);
-    setIsNegotiating(true);
+  const handleNegotiate = useCallback(
+    async (
+      fee: number,
+      wage: number,
+      years: number,
+      action?: 'counter' | 'accept' | 'walkaway',
+    ) => {
+      setError(null);
+      setIsNegotiating(true);
 
-    try {
-      // Add our offer to history (unless accepting)
-      if (action !== 'accept') {
+      try {
+        // Add our offer to history (unless accepting)
+        if (action !== 'accept') {
+          setHistory((prev) => [...prev, { type: 'offer', fee, wage }]);
+        }
+
+        const result = await negotiateTransfer(
+          saveId,
+          player.playerId,
+          player.teamId,
+          { fee, wage, years },
+          negotiationId ?? undefined,
+          action,
+        );
+
+        if (!result.success || !result.result) {
+          setError(result.error || 'Negotiation failed');
+          // Remove the offer we just added
+          if (action !== 'accept') {
+            setHistory((prev) => prev.slice(0, -1));
+          }
+          return;
+        }
+
+        const neg = result.result;
+        setNegotiationId(neg.negotiationId);
+        setRound(neg.round);
+        setCanCounter(neg.canCounter);
+
+        // Add AI response to history
         setHistory((prev) => [
           ...prev,
-          { type: 'offer', fee, wage },
+          {
+            type: 'response',
+            fee: neg.aiResponse.counterFee ?? fee,
+            wage: neg.aiResponse.counterWage ?? wage,
+            action: neg.aiResponse.action,
+            reason: neg.aiResponse.reason,
+          },
         ]);
-      }
 
-      const result = await negotiateTransfer(
-        saveId,
-        player.playerId,
-        player.teamId,
-        { fee, wage, years },
-        negotiationId ?? undefined,
-        action,
-      );
-
-      if (!result.success || !result.result) {
-        setError(result.error || 'Negotiation failed');
-        // Remove the offer we just added
-        if (action !== 'accept') {
-          setHistory((prev) => prev.slice(0, -1));
-        }
-        return;
-      }
-
-      const neg = result.result;
-      setNegotiationId(neg.negotiationId);
-      setRound(neg.round);
-      setCanCounter(neg.canCounter);
-
-      // Add AI response to history
-      setHistory((prev) => [
-        ...prev,
-        {
-          type: 'response',
-          fee: neg.aiResponse.counterFee ?? fee,
-          wage: neg.aiResponse.counterWage ?? wage,
-          action: neg.aiResponse.action,
-          reason: neg.aiResponse.reason,
-        },
-      ]);
-
-      if (neg.aiResponse.action === 'counter' &&
+        if (
+          neg.aiResponse.action === 'counter' &&
           neg.aiResponse.counterFee !== undefined &&
-          neg.aiResponse.counterWage !== undefined) {
-        setAiCounter({
-          fee: neg.aiResponse.counterFee,
-          wage: neg.aiResponse.counterWage,
-        });
-        // Pre-fill with midpoint for next counter (rounded to nearest thousand)
-        setOfferFee(roundToThousand((fee + neg.aiResponse.counterFee) / 2));
-        setOfferWage(roundToThousand((wage + neg.aiResponse.counterWage) / 2));
-      } else if (neg.aiResponse.action === 'reject') {
-        // Seller walked away - negotiation is OVER
-        setRejected(true);
-        setAiCounter(null);
-      } else {
-        setAiCounter(null);
-      }
+          neg.aiResponse.counterWage !== undefined
+        ) {
+          setAiCounter({
+            fee: neg.aiResponse.counterFee,
+            wage: neg.aiResponse.counterWage,
+          });
+          // Pre-fill with midpoint for next counter (rounded to nearest thousand)
+          setOfferFee(roundToThousand((fee + neg.aiResponse.counterFee) / 2));
+          setOfferWage(
+            roundToThousand((wage + neg.aiResponse.counterWage) / 2),
+          );
+        } else if (neg.aiResponse.action === 'reject') {
+          // Seller walked away - negotiation is OVER
+          setRejected(true);
+          setAiCounter(null);
+        } else {
+          setAiCounter(null);
+        }
 
-      if (neg.completed) {
-        setCompleted(neg.completed);
-        onComplete(neg.completed);
+        if (neg.completed) {
+          setCompleted(neg.completed);
+          onComplete(neg.completed);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Negotiation failed');
+      } finally {
+        setIsNegotiating(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Negotiation failed');
-    } finally {
-      setIsNegotiating(false);
-    }
-  }, [saveId, player.playerId, player.teamId, negotiationId, onComplete]);
+    },
+    [saveId, player.playerId, player.teamId, negotiationId, onComplete],
+  );
 
   const handleSubmitOffer = () => {
     handleNegotiate(offerFee, offerWage, contractYears);
@@ -198,7 +214,10 @@ export function NegotiationModal({
           <div className="flex items-center gap-3">
             <PositionBadge position={player.position} />
             <div>
-              <h2 id="negotiation-modal-title" className="text-lg font-bold text-white">
+              <h2
+                id="negotiation-modal-title"
+                className="text-lg font-bold text-white"
+              >
                 {player.playerName}
               </h2>
               <p className="text-sm text-slate-400">
@@ -309,10 +328,14 @@ export function NegotiationModal({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-4 mb-2">
-                        <span className={`text-xs font-medium ${isUserOffer ? 'text-pitch-400' : 'text-slate-300'}`}>
+                        <span
+                          className={`text-xs font-medium ${isUserOffer ? 'text-pitch-400' : 'text-slate-300'}`}
+                        >
                           {isUserOffer ? 'You' : player.teamName || 'Player'}
                         </span>
-                        <span className="text-xs text-slate-500">R{roundNum}</span>
+                        <span className="text-xs text-slate-500">
+                          R{roundNum}
+                        </span>
                       </div>
                       {entry.action && (
                         <div
@@ -400,8 +423,9 @@ export function NegotiationModal({
               Seller Walked Away
             </h3>
             <p className="text-slate-400 mb-4">
-              {player.teamName || 'The player'} has ended negotiations for {player.playerName}.
-              They won't entertain offers for this player for a while.
+              {player.teamName || 'The player'} has ended negotiations for{' '}
+              {player.playerName}. They won't entertain offers for this player
+              for a while.
             </p>
             <button
               onClick={onClose}
@@ -463,9 +487,7 @@ export function NegotiationModal({
                     : 'Transfer Offer'}
               </h3>
               {round > 0 && (
-                <span className="text-xs text-slate-500">
-                  Round {round}/2
-                </span>
+                <span className="text-xs text-slate-500">Round {round}/2</span>
               )}
             </div>
 
@@ -478,7 +500,11 @@ export function NegotiationModal({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setOfferFee(Math.max(0, offerFee - getSmartIncrement(offerFee)))}
+                    onClick={() =>
+                      setOfferFee(
+                        Math.max(0, offerFee - getSmartIncrement(offerFee)),
+                      )
+                    }
                     className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
                   >
                     −
@@ -486,12 +512,16 @@ export function NegotiationModal({
                   <input
                     type="text"
                     value={formatCurrency(offerFee)}
-                    onChange={(e) => setOfferFee(parseMonetaryInput(e.target.value))}
+                    onChange={(e) =>
+                      setOfferFee(parseMonetaryInput(e.target.value))
+                    }
                     className="flex-1 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-pitch-500 focus:outline-none text-center"
                   />
                   <button
                     type="button"
-                    onClick={() => setOfferFee(offerFee + getSmartIncrement(offerFee))}
+                    onClick={() =>
+                      setOfferFee(offerFee + getSmartIncrement(offerFee))
+                    }
                     className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
                   >
                     +
@@ -513,7 +543,11 @@ export function NegotiationModal({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setOfferWage(Math.max(0, offerWage - getSmartIncrement(offerWage)))}
+                  onClick={() =>
+                    setOfferWage(
+                      Math.max(0, offerWage - getSmartIncrement(offerWage)),
+                    )
+                  }
                   className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
                 >
                   −
@@ -521,12 +555,16 @@ export function NegotiationModal({
                 <input
                   type="text"
                   value={formatCurrency(offerWage)}
-                  onChange={(e) => setOfferWage(parseMonetaryInput(e.target.value))}
+                  onChange={(e) =>
+                    setOfferWage(parseMonetaryInput(e.target.value))
+                  }
                   className="flex-1 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-pitch-500 focus:outline-none text-center"
                 />
                 <button
                   type="button"
-                  onClick={() => setOfferWage(offerWage + getSmartIncrement(offerWage))}
+                  onClick={() =>
+                    setOfferWage(offerWage + getSmartIncrement(offerWage))
+                  }
                   className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
                 >
                   +
