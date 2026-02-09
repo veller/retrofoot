@@ -50,7 +50,6 @@ interface PitchViewProps {
   selectedSlot?: PitchSlot | null;
   /** When set, players with these positions get a highlight (e.g. same defensive/mid/attack group) */
   highlightPositions?: Position[] | null;
-  onRemoveFromBench?: (playerId: string) => void;
   benchLimit?: number;
 }
 
@@ -63,12 +62,9 @@ export function PitchView({
   onPlayerClick,
   selectedSlot,
   highlightPositions,
-  onRemoveFromBench,
   benchLimit = 7,
 }: PitchViewProps) {
   const benchCount = substitutes.length;
-  const overLimit = benchCount > benchLimit;
-  const excessCount = overLimit ? benchCount - benchLimit : 0;
   const coordinates = getFormationSlotCoordinates(formation);
 
   function getPostureXOffset(position: Position): number {
@@ -239,11 +235,6 @@ export function PitchView({
           <h3 className="text-xs md:text-sm font-bold text-slate-400 uppercase">
             Bench ({benchCount}/{benchLimit})
           </h3>
-          {overLimit && (
-            <p className="text-xs text-amber-400 mt-1">
-              You must remove {excessCount} player{excessCount !== 1 ? 's' : ''}
-            </p>
-          )}
         </div>
         <div className="flex flex-wrap gap-1.5 md:gap-2">
           {substitutes.map((playerId, i) => {
@@ -262,17 +253,12 @@ export function PitchView({
                 className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${onPlayerClick ? 'cursor-pointer hover:bg-slate-600/80' : ''}`}
                 role="button"
                 tabIndex={0}
-                onClick={(e) => {
-                  if ((e.target as HTMLElement).closest('[data-remove]'))
-                    return;
-                  onPlayerClick?.({ type: 'bench', index: i }, playerId);
-                }}
+                onClick={() =>
+                  onPlayerClick?.({ type: 'bench', index: i }, playerId)
+                }
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    if ((e.target as HTMLElement).closest('[data-remove]'))
-                      return;
+                  if (e.key === 'Enter' || e.key === ' ')
                     onPlayerClick?.({ type: 'bench', index: i }, playerId);
-                  }
                 }}
               >
                 {player ? (
@@ -288,21 +274,6 @@ export function PitchView({
                         OVR {calculateOverall(player)}
                       </p>
                     </div>
-                    {onRemoveFromBench && (
-                      <button
-                        data-remove
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRemoveFromBench(playerId);
-                        }}
-                        className="text-slate-400 hover:text-white shrink-0 p-0.5 md:p-1 rounded min-w-[24px] min-h-[24px] flex items-center justify-center"
-                        title="Remove from bench"
-                        aria-label="Remove from bench"
-                      >
-                        &times;
-                      </button>
-                    )}
                   </>
                 ) : (
                   <span className="text-slate-500 text-xs">—</span>

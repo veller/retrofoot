@@ -676,17 +676,6 @@ function SquadPanel({
     [playersById, setTactics],
   );
 
-  const removeFromBench = useCallback(
-    (playerId: string) => {
-      setTactics((prev) => {
-        if (!prev) return null;
-        const newSubs = prev.substitutes.filter((id) => id !== playerId);
-        return { ...prev, substitutes: newSubs };
-      });
-    },
-    [setTactics],
-  );
-
   const lineupSet = useMemo(() => new Set(lineup), [lineup]);
   const substitutesSet = useMemo(() => new Set(substitutes), [substitutes]);
 
@@ -768,7 +757,6 @@ function SquadPanel({
           onListForSale={handleListForSale}
           onRemoveListing={handleRemoveListing}
           onAddToBench={() => addToBench(selectedPlayer.id)}
-          onRemoveFromBench={() => removeFromBench(selectedPlayer.id)}
           isSubmitting={isSubmitting}
         />
       )}
@@ -810,8 +798,6 @@ function SquadPanel({
             const canSendToBench =
               !inLineup && !onBench && substitutes.length < BENCH_LIMIT;
             const rowStyle = getSquadRowStyle(inLineup, onBench);
-            const hasStats =
-              player.form.seasonGoals > 0 || player.form.seasonAssists > 0;
             const playerDisplayName = player.nickname ?? player.name;
             const isListed = listedPlayerIds.has(player.id);
 
@@ -846,15 +832,6 @@ function SquadPanel({
                   )}
                   {/* Form trend indicator */}
                   <FormTrendIcon player={player} />
-                  {/* Goals/Assists */}
-                  {hasStats && (
-                    <span
-                      className="text-slate-300 text-xs hidden md:inline"
-                      title={`${player.form.seasonGoals} goals, ${player.form.seasonAssists} assists`}
-                    >
-                      {player.form.seasonGoals}G/{player.form.seasonAssists}A
-                    </span>
-                  )}
                   <span className="text-amber-400 text-xs lg:text-sm hidden sm:inline">
                     {formatCurrency(player.wage)}
                   </span>
@@ -932,7 +909,6 @@ function SquadPanel({
             playersById={playersById}
             formation={formation}
             posture={tactics.posture}
-            onRemoveFromBench={removeFromBench}
             benchLimit={BENCH_LIMIT}
           />
         </div>

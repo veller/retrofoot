@@ -99,13 +99,25 @@ function TeamOverview({
 
   return (
     <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-      <div className="flex items-center gap-3 mb-4">
-        <TeamShield team={team} />
-        <div>
-          <h3 className="text-white font-bold text-lg">{team.name}</h3>
-          <p className="text-slate-400 text-sm">
-            {isOpponent ? 'Opponent' : 'Your Team'}
-          </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <TeamShield team={team} />
+          <div>
+            <h3 className="text-white font-bold text-lg">{team.name}</h3>
+            <p className="text-slate-400 text-sm">
+              {isOpponent ? 'Opponent' : 'Your Team'}
+            </p>
+          </div>
+        </div>
+        <div className="shrink-0 flex flex-col items-end">
+          <span className="text-slate-500 text-[10px] uppercase font-medium mb-1">
+            Avg overall
+          </span>
+          <div className="bg-pitch-900/60 border-2 border-pitch-500/50 rounded-lg px-3 py-1.5 min-w-[56px] text-center">
+            <span className="text-pitch-400 font-bold text-2xl">
+              {avgOverall}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -119,20 +131,6 @@ function TeamOverview({
             <span className="text-slate-500 text-sm">No matches yet</span>
           )}
         </div>
-      </div>
-
-      {/* Stadium */}
-      <div className="mb-4 text-sm">
-        <p className="text-slate-500">Stadium</p>
-        <p className="text-white">
-          {team.stadium} ({team.capacity.toLocaleString()})
-        </p>
-      </div>
-
-      {/* Average Overall */}
-      <div className="mb-4 text-sm">
-        <p className="text-slate-500">Avg. Overall</p>
-        <p className="text-pitch-400 font-bold text-xl">{avgOverall}</p>
       </div>
 
       {/* Lineup Preview */}
@@ -252,28 +250,23 @@ function MobileComparisonView({
             {awayData.displayFormation}
           </span>
 
-          {/* Avg Overall */}
-          <span className="text-white font-bold text-sm">
-            {homeData.avgOverall}
-          </span>
-          <span className="text-slate-500 text-[10px] uppercase px-2">
-            Avg OVR
-          </span>
-          <span className="text-white font-bold text-sm">
-            {awayData.avgOverall}
-          </span>
-
           {/* Form */}
           <div className="flex gap-0.5 justify-center">
-            {homeTeam.lastFiveResults?.slice(0, 5).map((r, i) => (
-              <FormBadgeSmall key={i} result={r} />
-            )) || <span className="text-slate-500 text-[10px]">-</span>}
+            {homeTeam.lastFiveResults
+              ?.slice(0, 5)
+              .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
+              <span className="text-slate-500 text-[10px]">-</span>
+            )}
           </div>
-          <span className="text-slate-500 text-[10px] uppercase px-2">Form</span>
+          <span className="text-slate-500 text-[10px] uppercase px-2">
+            Form
+          </span>
           <div className="flex gap-0.5 justify-center">
-            {awayTeam.lastFiveResults?.slice(0, 5).map((r, i) => (
-              <FormBadgeSmall key={i} result={r} />
-            )) || <span className="text-slate-500 text-[10px]">-</span>}
+            {awayTeam.lastFiveResults
+              ?.slice(0, 5)
+              .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
+              <span className="text-slate-500 text-[10px]">-</span>
+            )}
           </div>
         </div>
       </div>
@@ -283,9 +276,16 @@ function MobileComparisonView({
         <div className="grid grid-cols-2 gap-2">
           {/* Home Lineup */}
           <div className="bg-slate-800 rounded-lg border border-slate-700 p-2">
-            <p className="text-slate-500 text-[10px] uppercase mb-2 text-center">
-              {isPlayerHome ? 'Your Lineup' : 'Predicted'}
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-slate-500 text-[10px] uppercase">
+                {isPlayerHome ? 'Your Lineup' : 'Predicted'}
+              </p>
+              <div className="bg-pitch-900/60 border border-pitch-500/50 rounded px-1.5 py-0.5">
+                <span className="text-pitch-400 font-bold text-sm">
+                  {homeData.avgOverall}
+                </span>
+              </div>
+            </div>
             <div className="space-y-1">
               {homeData.lineup.slice(0, 11).map((player) => (
                 <div
@@ -310,9 +310,16 @@ function MobileComparisonView({
 
           {/* Away Lineup */}
           <div className="bg-slate-800 rounded-lg border border-slate-700 p-2">
-            <p className="text-slate-500 text-[10px] uppercase mb-2 text-center">
-              {!isPlayerHome ? 'Your Lineup' : 'Predicted'}
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-slate-500 text-[10px] uppercase">
+                {!isPlayerHome ? 'Your Lineup' : 'Predicted'}
+              </p>
+              <div className="bg-pitch-900/60 border border-pitch-500/50 rounded px-1.5 py-0.5">
+                <span className="text-pitch-400 font-bold text-sm">
+                  {awayData.avgOverall}
+                </span>
+              </div>
+            </div>
             <div className="space-y-1">
               {awayData.lineup.slice(0, 11).map((player) => (
                 <div

@@ -26,11 +26,7 @@ import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
 import { useGameStore } from '../stores/gameStore';
 
-type MatchPhase =
-  | 'pre_match'
-  | 'live'
-  | 'substitutions'
-  | 'post_match';
+type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
 
 // Event types that should be persisted to the database
 const PERSISTENT_EVENT_TYPES = new Set([
@@ -44,10 +40,9 @@ const PERSISTENT_EVENT_TYPES = new Set([
   'injury',
 ]);
 
-// Tick interval in ms - each tick advances some seconds, 10 ticks = 1 game minute
+// Tick interval - each tick advances some seconds, 10 ticks = 1 game minute
 const SECONDS_PER_TICK = 6; // 6 seconds per tick
-const TICK_INTERVAL_MS = 100; // 100ms between ticks = 10 ticks per second real time
-// Result: 1 game minute = ~1 second real time (10 ticks * 100ms, each tick = 6s)
+// Base interval 100ms at 1x; 50ms at 2x; 33ms at 3x. Result: 1 game min ≈ 1/2/3 sec real time
 
 function toCoreFigure(f: MatchFixture): Fixture {
   return {
@@ -259,8 +254,10 @@ export function MatchPage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [playerTactics, setPlayerTactics] = useState<Tactics | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 3>(1);
 
   const intervalRef = useRef<number | null>(null);
+  const tickIntervalMs = 100 / playbackSpeed;
 
   // Find the player's fixture and teams
   const { playerFixture, playerHomeTeam, playerAwayTeam } = useMemo(() => {
@@ -327,7 +324,10 @@ export function MatchPage() {
 
       if (saveId) {
         try {
-          const persisted = await fetchTeamTactics(saveId, matchData.playerTeamId);
+          const persisted = await fetchTeamTactics(
+            saveId,
+            matchData.playerTeamId,
+          );
           if (persisted && persisted.lineup.length >= 11 && !cancelled) {
             setPlayerTactics(persisted);
             return;
@@ -443,7 +443,7 @@ export function MatchPage() {
   // Start/stop simulation
   useEffect(() => {
     if (phase === 'live' && !isPaused) {
-      intervalRef.current = window.setInterval(tick, TICK_INTERVAL_MS);
+      intervalRef.current = window.setInterval(tick, tickIntervalMs);
     }
 
     return () => {
@@ -452,7 +452,7 @@ export function MatchPage() {
         intervalRef.current = null;
       }
     };
-  }, [phase, isPaused, tick]);
+  }, [phase, isPaused, tick, tickIntervalMs]);
 
   const handlePause = () => {
     setIsPaused(true);
@@ -555,18 +555,26 @@ export function MatchPage() {
         if (isHome) {
           match.state.homeTactics = { ...updatedTactics };
           match.state.homeLineup = updatedTactics.lineup
-            .map((id) => match.homeTeam.players.find((player) => player.id === id))
+            .map((id) =>
+              match.homeTeam.players.find((player) => player.id === id),
+            )
             .filter((player) => player !== undefined);
           match.state.homeSubs = updatedTactics.substitutes
-            .map((id) => match.homeTeam.players.find((player) => player.id === id))
+            .map((id) =>
+              match.homeTeam.players.find((player) => player.id === id),
+            )
             .filter((player) => player !== undefined);
         } else {
           match.state.awayTactics = { ...updatedTactics };
           match.state.awayLineup = updatedTactics.lineup
-            .map((id) => match.awayTeam.players.find((player) => player.id === id))
+            .map((id) =>
+              match.awayTeam.players.find((player) => player.id === id),
+            )
             .filter((player) => player !== undefined);
           match.state.awaySubs = updatedTactics.substitutes
-            .map((id) => match.awayTeam.players.find((player) => player.id === id))
+            .map((id) =>
+              match.awayTeam.players.find((player) => player.id === id),
+            )
             .filter((player) => player !== undefined);
         }
 
@@ -583,11 +591,13 @@ export function MatchPage() {
       });
 
       if (saveId) {
-        void saveTeamTactics(saveId, matchData.playerTeamId, updatedTactics).catch(
-          (error) => {
-            console.error('Failed to persist live tactics:', error);
-          },
-        );
+        void saveTeamTactics(
+          saveId,
+          matchData.playerTeamId,
+          updatedTactics,
+        ).catch((error) => {
+          console.error('Failed to persist live tactics:', error);
+        });
       }
       setPhase('live');
     },
@@ -717,7 +727,8 @@ export function MatchPage() {
     const playerMatch = matches[playerMatchIndex];
     const isHome = playerMatch.homeTeam.id === matchData.playerTeamId;
     const playerTeam =
-      matchData.teams.find((team) => team.id === matchData.playerTeamId) ?? null;
+      matchData.teams.find((team) => team.id === matchData.playerTeamId) ??
+      null;
 
     if (playerTeam && playerTactics) {
       return (
@@ -816,6 +827,8 @@ export function MatchPage() {
       onPause={handlePause}
       onResume={handleResume}
       onSubstitutions={handleOpenSubstitutions}
+      playbackSpeed={playbackSpeed}
+      onSpeedChange={setPlaybackSpeed}
       round={matchData.currentRound}
     />
   );

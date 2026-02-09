@@ -5,6 +5,8 @@ import { MatchEventsModal } from './MatchEventsModal';
 import { EventIcon } from './EventIcon';
 import { isSignificantEvent } from './matchEventUtils';
 
+export type PlaybackSpeed = 1 | 2 | 3;
+
 interface MatchLiveViewProps {
   matches: LiveMatchState[];
   playerMatchIndex: number;
@@ -15,6 +17,8 @@ interface MatchLiveViewProps {
   onPause: () => void;
   onResume: () => void;
   onSubstitutions: () => void;
+  playbackSpeed: PlaybackSpeed;
+  onSpeedChange: (speed: PlaybackSpeed) => void;
   round: number;
 }
 
@@ -176,7 +180,11 @@ interface MobileMatchCardProps {
   onClick: () => void;
 }
 
-function MobileMatchCard({ match, isPlayerMatch, onClick }: MobileMatchCardProps) {
+function MobileMatchCard({
+  match,
+  isPlayerMatch,
+  onClick,
+}: MobileMatchCardProps) {
   const { homeTeam, awayTeam, state } = match;
 
   const latestEvent = useMemo(
@@ -271,6 +279,8 @@ interface ControlButtonsProps {
   onPause: () => void;
   onResume: () => void;
   onSubstitutions: () => void;
+  playbackSpeed: PlaybackSpeed;
+  onSpeedChange: (speed: PlaybackSpeed) => void;
 }
 
 function ControlButtons({
@@ -279,12 +289,24 @@ function ControlButtons({
   onPause,
   onResume,
   onSubstitutions,
+  playbackSpeed,
+  onSpeedChange,
 }: ControlButtonsProps) {
   const isLive = phase === 'first_half' || phase === 'second_half';
   const canSubstitute = phase === 'half_time' || isPaused;
 
   return (
     <div className="flex items-center gap-3">
+      {isLive && (
+        <button
+          onClick={() =>
+            onSpeedChange(playbackSpeed === 1 ? 2 : playbackSpeed === 2 ? 3 : 1)
+          }
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
+        >
+          Game speed: {playbackSpeed}x
+        </button>
+      )}
       {isLive && !isPaused && (
         <button
           onClick={onPause}
@@ -331,6 +353,8 @@ interface MobileControlBarProps {
   onPause: () => void;
   onResume: () => void;
   onSubstitutions: () => void;
+  playbackSpeed: PlaybackSpeed;
+  onSpeedChange: (speed: PlaybackSpeed) => void;
 }
 
 function MobileControlBar({
@@ -339,6 +363,8 @@ function MobileControlBar({
   onPause,
   onResume,
   onSubstitutions,
+  playbackSpeed,
+  onSpeedChange,
 }: MobileControlBarProps) {
   const isLive = phase === 'first_half' || phase === 'second_half';
   const canSubstitute = phase === 'half_time' || isPaused;
@@ -346,6 +372,18 @@ function MobileControlBar({
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
       <div className="flex items-center justify-center gap-3">
+        {isLive && (
+          <button
+            onClick={() =>
+              onSpeedChange(
+                playbackSpeed === 1 ? 2 : playbackSpeed === 2 ? 3 : 1,
+              )
+            }
+            className="shrink-0 px-4 py-2 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
+          >
+            Game speed: {playbackSpeed}x
+          </button>
+        )}
         {isLive && !isPaused && (
           <button
             onClick={onPause}
@@ -400,6 +438,8 @@ export function MatchLiveView({
   onPause,
   onResume,
   onSubstitutions,
+  playbackSpeed,
+  onSpeedChange,
   round,
 }: MatchLiveViewProps) {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -454,6 +494,8 @@ export function MatchLiveView({
           onPause={onPause}
           onResume={onResume}
           onSubstitutions={onSubstitutions}
+          playbackSpeed={playbackSpeed}
+          onSpeedChange={onSpeedChange}
         />
       </header>
 
@@ -494,6 +536,8 @@ export function MatchLiveView({
         onPause={onPause}
         onResume={onResume}
         onSubstitutions={onSubstitutions}
+        playbackSpeed={playbackSpeed}
+        onSpeedChange={onSpeedChange}
       />
 
       {selectedMatch && (

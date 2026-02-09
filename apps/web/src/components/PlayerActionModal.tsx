@@ -12,7 +12,6 @@ interface PlayerActionModalProps {
   onListForSale: (askingPrice?: number) => Promise<void>;
   onRemoveListing: () => Promise<void>;
   onAddToBench?: () => void;
-  onRemoveFromBench?: () => void;
   isSubmitting: boolean;
 }
 
@@ -26,7 +25,6 @@ export function PlayerActionModal({
   onListForSale,
   onRemoveListing,
   onAddToBench,
-  onRemoveFromBench,
   isSubmitting,
 }: PlayerActionModalProps) {
   const [useCustomPrice, setUseCustomPrice] = useState(false);
@@ -67,11 +65,6 @@ export function PlayerActionModal({
 
   const handleAddToBench = () => {
     onAddToBench?.();
-    onClose();
-  };
-
-  const handleRemoveFromBench = () => {
-    onRemoveFromBench?.();
     onClose();
   };
 
@@ -142,6 +135,20 @@ export function PlayerActionModal({
               <div className="text-slate-500 text-xs uppercase">Contract</div>
             </div>
           </div>
+          <div className="mt-4 pt-4 border-t border-slate-700 flex justify-center gap-6 text-sm">
+            <span className="text-slate-400">
+              Goals:{' '}
+              <span className="text-white font-medium">
+                {player.form.seasonGoals}
+              </span>
+            </span>
+            <span className="text-slate-400">
+              Assists:{' '}
+              <span className="text-white font-medium">
+                {player.form.seasonAssists}
+              </span>
+            </span>
+          </div>
         </div>
 
         {/* Status Badge */}
@@ -183,16 +190,6 @@ export function PlayerActionModal({
               className="w-full py-3 px-4 bg-pitch-600 hover:bg-pitch-500 disabled:bg-pitch-600/50 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2 min-h-[48px]"
             >
               <span>Send to Bench</span>
-            </button>
-          )}
-
-          {isOnBench && (
-            <button
-              onClick={handleRemoveFromBench}
-              disabled={isSubmitting}
-              className="w-full py-3 px-4 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-600/50 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-2 min-h-[48px]"
-            >
-              <span>Remove from Bench</span>
             </button>
           )}
 
