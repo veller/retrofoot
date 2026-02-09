@@ -141,6 +141,7 @@ export const players = sqliteTable('players', {
   potential: integer('potential').notNull(),
   morale: integer('morale').default(70),
   fitness: integer('fitness').default(100),
+  energy: integer('energy').default(100),
   injured: integer('injured', { mode: 'boolean' }).default(false),
   injuryWeeks: integer('injury_weeks').default(0),
   contractEndSeason: integer('contract_end_season').notNull(),

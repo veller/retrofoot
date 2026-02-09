@@ -22,6 +22,7 @@ interface Player {
   developmentRate: number; // 0.5-1.5, how fast they develop
   morale: number; // 1-100
   fitness: number; // 1-100
+  energy: number; // 1-100, match fatigue; drains when playing, recovers between rounds
   injured: boolean;
   injuryWeeks: number;
   contractEndSeason: number; // e.g., 2026

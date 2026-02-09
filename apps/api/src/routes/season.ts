@@ -97,6 +97,7 @@ seasonRoutes.get('/:saveId/summary', async (c) => {
       potential: p.potential,
       morale: p.morale ?? 70,
       fitness: p.fitness ?? 100,
+      energy: p.energy ?? 100,
       injured: p.injured ?? false,
       injuryWeeks: p.injuryWeeks ?? 0,
       contractEndSeason: p.contractEndSeason,
@@ -321,6 +322,7 @@ seasonRoutes.post('/:saveId/advance', async (c) => {
       potential: p.potential,
       morale: p.morale ?? 70,
       fitness: p.fitness ?? 100,
+      energy: p.energy ?? 100,
       injured: p.injured ?? false,
       injuryWeeks: p.injuryWeeks ?? 0,
       contractEndSeason: p.contractEndSeason,
@@ -522,6 +524,7 @@ seasonRoutes.post('/:saveId/advance', async (c) => {
           season_minutes = 0,
           season_avg_rating = 0,
           fitness = 100,
+          energy = 100,
           injured = 0,
           injury_weeks = 0
       WHERE save_id = ? AND status != 'retired'
@@ -548,6 +551,7 @@ seasonRoutes.post('/:saveId/advance', async (c) => {
         potential: player.potential,
         morale: player.morale,
         fitness: player.fitness,
+        energy: player.energy ?? 100,
         injured: player.injured,
         injuryWeeks: player.injuryWeeks,
         contractEndSeason: player.contractEndSeason,

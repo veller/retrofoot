@@ -66,6 +66,7 @@ export interface Player {
   potential: number; // 1-99, max possible overall
   morale: number; // 1-100
   fitness: number; // 1-100
+  energy: number; // 1-100, match fatigue, recovers between rounds
   injured: boolean;
   injuryWeeks: number;
   contractEndSeason: number;
@@ -402,6 +403,7 @@ export function createPlayerForCalc(data: {
     potential: data.potential ?? 70,
     morale: 70,
     fitness: 100,
+    energy: 100,
     injured: false,
     injuryWeeks: 0,
     contractEndSeason: data.contractEndSeason ?? 2028,

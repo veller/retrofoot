@@ -440,6 +440,8 @@ export function MatchPage() {
         teams: matchData.teams,
         playerTeamId: matchData.playerTeamId,
         playerTactics,
+        currentRound: matchData.currentRound ?? 1,
+        totalRounds: 38,
       });
 
     setMatches(matchStates);

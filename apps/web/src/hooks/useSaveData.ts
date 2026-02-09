@@ -61,6 +61,7 @@ interface ApiPlayerResponse {
   potential: number;
   morale: number;
   fitness: number;
+  energy?: number;
   injured: boolean;
   form: number;
   wage: number;
@@ -131,6 +132,7 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
     potential: apiPlayer.potential,
     morale: apiPlayer.morale ?? 70,
     fitness: apiPlayer.fitness ?? 100,
+    energy: apiPlayer.energy ?? 100,
     injured: apiPlayer.injured ?? false,
     injuryWeeks: 0,
     contractEndSeason: 2028, // Default - API doesn't return this in squad endpoint
@@ -194,6 +196,7 @@ interface ApiMatchPlayerResponse {
   potential: number;
   morale: number;
   fitness: number;
+  energy?: number;
   injured: boolean;
   injuryWeeks: number;
   contractEndSeason: number;
@@ -262,6 +265,7 @@ function transformMatchPlayer(apiPlayer: ApiMatchPlayerResponse): Player {
     potential: apiPlayer.potential,
     morale: apiPlayer.morale ?? 70,
     fitness: apiPlayer.fitness ?? 100,
+    energy: apiPlayer.energy ?? 100,
     injured: apiPlayer.injured ?? false,
     injuryWeeks: apiPlayer.injuryWeeks ?? 0,
     contractEndSeason: apiPlayer.contractEndSeason ?? 2028,

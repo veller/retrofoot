@@ -155,6 +155,18 @@ Players improve or decline each season based on:
 - Physical attributes decline faster than mental
 - Rate increases with age (30=slight, 35+=significant)
 
+### Player energy
+
+Each player has **energy** (1–100) representing match fatigue:
+
+- **Start**: New game or season start sets energy to 100.
+- **Drain**: Playing matches reduces energy. Drain scales with minutes played, tactical posture (attacking > balanced > defensive), age (older players drain faster), and position (goalkeepers drain less). Substitutes and partial minutes drain proportionally.
+- **Recovery**: Between rounds, all players in the squad recover a fixed amount of energy (e.g. +12 per round), so one match per week roughly offsets one match’s drain.
+- **Performance**: In-match performance is scaled by energy: 100 = full strength; lower energy applies a penalty to effective overall (e.g. 60 energy ≈ 10–15% off, very low energy = barely perform).
+- **Opponents**: AI teams use a round-based effective energy (no per-team persistence): mid-season opponents are moderately fatigued, end-of-season more so, so the player doesn’t face “infinite energy” opponents every match.
+
+Energy is shown on the lineup view (pitch and bench) so the manager can rotate the squad.
+
 ### Form (match ratings)
 
 Match ratings (0–10) from the last five games are shown as a simple form indicator:

@@ -3,7 +3,12 @@
 // ============================================================================
 // Player creation, development, aging, retirement
 
-import type { Player, PlayerAttributes, Position } from '../types';
+import type {
+  Player,
+  PlayerAttributes,
+  Position,
+  TacticalPosture,
+} from '../types';
 import { calculateOverall, createDefaultForm } from '../types';
 
 // Random helpers
@@ -300,6 +305,7 @@ export function generatePlayer(options: {
     potential,
     morale: randomInt(60, 90),
     fitness: randomInt(80, 100),
+    energy: 100,
     injured: false,
     injuryWeeks: 0,
     contractEndSeason: 2026 + randomInt(1, 4),
@@ -531,6 +537,7 @@ export function generateYouthPlayer(options: {
     potential,
     morale: randomInt(70, 90), // Youth tend to be enthusiastic
     fitness: randomInt(90, 100), // Youth are fit
+    energy: 100,
     injured: false,
     injuryWeeks: 0,
     contractEndSeason: 2026 + randomInt(2, 4), // Longer contracts for youth
@@ -776,6 +783,44 @@ function applyAttributeDeclinePoints(
         : randomFromArray(allAttrs);
     attributes[attr] = Math.max(1, attributes[attr] - 1);
   }
+}
+
+// ============================================================================
+// ENERGY (match fatigue)
+// ============================================================================
+
+const ENERGY_BASE_DRAIN_PER_90 = 12;
+const ENERGY_POSTURE: Record<TacticalPosture, number> = {
+  defensive: 0.85,
+  balanced: 1.0,
+  attacking: 1.2,
+};
+
+/**
+ * Calculate energy drain from playing a match.
+ * Used post-match to subtract from player.energy (caller clamps to 0-100).
+ */
+export function calculateEnergyDrain(options: {
+  minutesPlayed: number;
+  posture: TacticalPosture;
+  age: number;
+  position: Position;
+}): number {
+  const { minutesPlayed, posture, age, position } = options;
+  const minutesFactor = Math.min(1, Math.max(0, minutesPlayed / 90));
+  const postureMult = ENERGY_POSTURE[posture] ?? 1;
+  // Age: 1.0 at 24, linear up to 1.25 at 33, cap 1.35 for 35+
+  let ageMult = 1.0;
+  if (age >= 33) {
+    ageMult = 1.0 + (age - 24) * (0.25 / 9);
+    ageMult = Math.min(1.35, Math.max(1, ageMult));
+  } else if (age > 24) {
+    ageMult = 1.0 + (age - 24) * (0.25 / 9);
+  }
+  const positionMult = position === 'GK' ? 0.6 : 1.0;
+  const drain =
+    ENERGY_BASE_DRAIN_PER_90 * minutesFactor * postureMult * ageMult * positionMult;
+  return Math.max(0, Math.min(100, Math.round(drain * 10) / 10));
 }
 
 // Calculate a match rating for a player based on their performance

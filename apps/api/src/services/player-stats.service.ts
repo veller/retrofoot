@@ -12,10 +12,11 @@ const FORM_HISTORY_LENGTH = 5;
 const AVG_MINUTES_PER_APPEARANCE = 60; // Accounting for substitutions
 import type { drizzle } from 'drizzle-orm/d1';
 import { eq, and, inArray } from 'drizzle-orm';
-import { players, fixtures } from '@retrofoot/db/schema';
+import { players, fixtures, tactics } from '@retrofoot/db/schema';
 import {
   calculateMatchRating,
   applyMatchGrowth,
+  calculateEnergyDrain,
   type Player,
   type PlayerAttributes,
 } from '@retrofoot/core';
@@ -45,6 +46,7 @@ export async function processPlayerStatsAndGrowth(
       potential: players.potential,
       morale: players.morale,
       fitness: players.fitness,
+      energy: players.energy,
       injured: players.injured,
       injuryWeeks: players.injuryWeeks,
       contractEndSeason: players.contractEndSeason,
@@ -88,6 +90,20 @@ export async function processPlayerStatsAndGrowth(
 
   const fixture = playerFixtures.find((f) => f.id === playerMatch.fixtureId);
   if (!fixture) return;
+
+  // Get tactical posture for energy drain (saved tactics for this team)
+  let posture: 'defensive' | 'balanced' | 'attacking' = 'balanced';
+  const tacticsRows = await db
+    .select({ posture: tactics.posture })
+    .from(tactics)
+    .where(
+      and(eq(tactics.saveId, saveId), eq(tactics.teamId, playerTeamId)),
+    )
+    .limit(1);
+  if (tacticsRows.length > 0 && tacticsRows[0].posture) {
+    const p = tacticsRows[0].posture as string;
+    if (p === 'defensive' || p === 'attacking') posture = p;
+  }
 
   const isHome = fixture.homeTeamId === playerTeamId;
   const opponentScore = isHome ? playerMatch.awayScore : playerMatch.homeScore;
@@ -163,6 +179,7 @@ export async function processPlayerStatsAndGrowth(
       potential: dbPlayer.potential,
       morale: dbPlayer.morale ?? 70,
       fitness: dbPlayer.fitness ?? 100,
+      energy: dbPlayer.energy ?? 100,
       injured: dbPlayer.injured ?? false,
       injuryWeeks: dbPlayer.injuryWeeks ?? 0,
       contractEndSeason: dbPlayer.contractEndSeason,
@@ -222,6 +239,19 @@ export async function processPlayerStatsAndGrowth(
     const prevTotal = player.form.seasonAvgRating * previousMatches;
     const newAvg = (prevTotal + matchRating) / totalMatches;
 
+    // Energy drain from this match
+    const drain = calculateEnergyDrain({
+      minutesPlayed,
+      posture,
+      age: dbPlayer.age,
+      position: dbPlayer.position as 'GK' | 'DEF' | 'MID' | 'ATT',
+    });
+    const currentEnergy = dbPlayer.energy ?? 100;
+    const newEnergy = Math.max(
+      0,
+      Math.min(100, Math.round((currentEnergy - drain) * 10) / 10),
+    );
+
     // Collect update for batch operation
     playerUpdates.push({
       playerId: dbPlayer.id,
@@ -230,6 +260,7 @@ export async function processPlayerStatsAndGrowth(
       lastFiveRatings: JSON.stringify(newLastFiveRatings),
       seasonMinutes: newSeasonMinutes,
       seasonAvgRating: Math.round(newAvg * 10) / 10,
+      energy: newEnergy,
     });
   }
 
@@ -238,7 +269,7 @@ export async function processPlayerStatsAndGrowth(
     const playerStatements = playerUpdates.map((update) =>
       d1
         .prepare(
-          'UPDATE players SET attributes = ?, form = ?, last_five_ratings = ?, season_minutes = ?, season_avg_rating = ? WHERE id = ?',
+          'UPDATE players SET attributes = ?, form = ?, last_five_ratings = ?, season_minutes = ?, season_avg_rating = ?, energy = ? WHERE id = ?',
         )
         .bind(
           update.attributes,
@@ -246,6 +277,7 @@ export async function processPlayerStatsAndGrowth(
           update.lastFiveRatings,
           update.seasonMinutes,
           update.seasonAvgRating,
+          update.energy,
           update.playerId,
         ),
     );

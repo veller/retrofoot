@@ -33,6 +33,7 @@ import { batchInsertChunked } from '../lib/db/batch';
 // Constants
 const FORM_HISTORY_LENGTH = 5;
 const DEFAULT_ROUND = 1;
+const RECOVERY_PER_ROUND = 12;
 const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
 
 export const matchRoutes = new Hono<{ Bindings: Env }>();
@@ -117,6 +118,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
         potential: players.potential,
         morale: players.morale,
         fitness: players.fitness,
+        energy: players.energy,
         injured: players.injured,
         injuryWeeks: players.injuryWeeks,
         contractEndSeason: players.contractEndSeason,
@@ -160,6 +162,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
       potential: p.potential,
       morale: p.morale ?? 70,
       fitness: p.fitness ?? 100,
+      energy: p.energy ?? 100,
       injured: p.injured ?? false,
       injuryWeeks: p.injuryWeeks ?? 0,
       contractEndSeason: p.contractEndSeason,
@@ -471,6 +474,13 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         body.results,
       ),
     ]);
+
+    // Energy recovery for player's team (all players gain back some energy each round)
+    await c.env.DB.prepare(
+      'UPDATE players SET energy = MIN(100, COALESCE(energy, 100) + ?) WHERE save_id = ? AND team_id = ?',
+    )
+      .bind(RECOVERY_PER_ROUND, saveId, save.playerTeamId)
+      .run();
 
     const newRound = currentRound + 1;
     await db

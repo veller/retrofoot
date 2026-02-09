@@ -121,6 +121,7 @@ export async function processAIListings(
       },
       morale: 70,
       fitness: 100,
+      energy: 100,
       injured: false,
       injuryWeeks: 0,
       nickname: undefined,

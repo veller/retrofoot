@@ -30,6 +30,11 @@ export const FITNESS_THRESHOLD = 80;
 export const FITNESS_PENALTY_FACTOR = 0.01;
 export const LATE_GAME_FITNESS_MINUTE = 60;
 
+// Energy (match fatigue): 0-60% penalty cap, so 100=full, 0=60% penalty
+export const ENERGY_PENALTY_CAP = 0.6;
+// Opponent round-based fatigue: end-of-season effective energy ≈ 100 - SEASON_FATIGUE
+export const SEASON_FATIGUE = 30;
+
 // Set pieces
 export const CORNER_GOAL_RATE = 0.03;
 export const FREE_KICK_GOAL_RATE = 0.05;

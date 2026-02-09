@@ -10,7 +10,7 @@ import type { Player } from '../../types';
 export interface PlayerSeed
   extends Omit<
     Player,
-    'id' | 'morale' | 'fitness' | 'injured' | 'injuryWeeks'
+    'id' | 'morale' | 'fitness' | 'energy' | 'injured' | 'injuryWeeks'
   > {
   templateId: string;
   realInspiration: string;

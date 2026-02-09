@@ -43,6 +43,13 @@
       "when": 1770149945442,
       "tag": "0005_confused_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1770200000000,
+      "tag": "0007_energy",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,8 @@ import {
   FITNESS_THRESHOLD,
   FITNESS_PENALTY_FACTOR,
   LATE_GAME_FITNESS_MINUTE,
+  ENERGY_PENALTY_CAP,
+  SEASON_FATIGUE,
   CORNER_GOAL_RATE,
   FREE_KICK_GOAL_RATE,
   RED_CARD_STRENGTH_PENALTY,
@@ -200,6 +202,23 @@ function calculateFitnessModifier(fitness: number, minute: number): number {
   return Math.min(0.3, penalty);
 }
 
+// Energy modifier: 0% penalty at 100 energy, up to ENERGY_PENALTY_CAP at 0 energy
+export function calculateEnergyModifier(energy: number): number {
+  const e = Math.max(0, Math.min(100, energy));
+  return ((100 - e) / 100) * ENERGY_PENALTY_CAP;
+}
+
+// Round-based effective energy for opponent (AI) teams; no DB persistence
+export function getOpponentEffectiveEnergy(
+  round: number,
+  totalRounds: number,
+): number {
+  if (totalRounds <= 0) return 100;
+  const progress = Math.max(0, Math.min(1, round / totalRounds));
+  const effective = 100 - SEASON_FATIGUE * progress;
+  return Math.max(1, Math.min(100, Math.round(effective)));
+}
+
 // Calculate striker streak modifier based on recent performance
 function calculateStrikerStreakModifier(player: Player): number {
   const ratings = player.form?.lastFiveRatings || [];
@@ -280,6 +299,10 @@ function calculateTeamStrength(
       minute,
     );
     playerStrength *= 1 - fitnessPenalty;
+
+    // Apply energy penalty (0-60%): low energy = exhausted
+    const energyPenalty = calculateEnergyModifier(player.energy ?? 100);
+    playerStrength *= 1 - energyPenalty;
 
     totalStrength += playerStrength;
   }
@@ -1012,6 +1035,10 @@ export interface MultiMatchConfig {
   teams: Team[];
   playerTeamId: string;
   playerTactics: Tactics;
+  /** Current round (1-based); used for opponent effective energy. If omitted, opponents use 100. */
+  currentRound?: number;
+  /** Total rounds in season (e.g. 38); used with currentRound for opponent fatigue. */
+  totalRounds?: number;
 }
 
 // Create live match states for all fixtures in a round
@@ -1019,15 +1046,26 @@ export function createMultiMatchState(config: MultiMatchConfig): {
   matches: LiveMatchState[];
   playerMatchIndex: number;
 } {
-  const { fixtures, teams, playerTeamId, playerTactics } = config;
+  const {
+    fixtures,
+    teams,
+    playerTeamId,
+    playerTactics,
+    currentRound = 1,
+    totalRounds = 38,
+  } = config;
 
   const matches: LiveMatchState[] = [];
   let playerMatchIndex = -1;
+  const opponentEnergy =
+    totalRounds > 0
+      ? getOpponentEffectiveEnergy(currentRound, totalRounds)
+      : 100;
 
   for (let i = 0; i < fixtures.length; i++) {
     const fixture = fixtures[i];
-    const homeTeam = teams.find((t) => t.id === fixture.homeTeamId);
-    const awayTeam = teams.find((t) => t.id === fixture.awayTeamId);
+    let homeTeam = teams.find((t) => t.id === fixture.homeTeamId);
+    let awayTeam = teams.find((t) => t.id === fixture.awayTeamId);
 
     if (!homeTeam || !awayTeam) continue;
 
@@ -1035,8 +1073,21 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       fixture.homeTeamId === playerTeamId ||
       fixture.awayTeamId === playerTeamId;
 
+    // Apply round-based effective energy to opponent team (so they are not always 100%)
     if (isPlayerMatch) {
       playerMatchIndex = matches.length;
+      if (fixture.homeTeamId !== playerTeamId) {
+        homeTeam = {
+          ...homeTeam,
+          players: homeTeam.players.map((p) => ({ ...p, energy: opponentEnergy })),
+        };
+      }
+      if (fixture.awayTeamId !== playerTeamId) {
+        awayTeam = {
+          ...awayTeam,
+          players: awayTeam.players.map((p) => ({ ...p, energy: opponentEnergy })),
+        };
+      }
     }
 
     // Use player tactics for their match, generate defaults for others

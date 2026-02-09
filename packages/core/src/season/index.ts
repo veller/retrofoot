@@ -522,6 +522,7 @@ export function resetPlayerForNewSeason(player: Player): Player {
       form: player.form.form, // Keep current form level
     },
     fitness: 100, // Full fitness at season start
+    energy: 100, // Full energy at season start
     injured: false,
     injuryWeeks: 0,
   };

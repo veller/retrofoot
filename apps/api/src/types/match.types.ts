@@ -140,4 +140,5 @@ export interface PlayerStatsUpdate {
   lastFiveRatings: string;
   seasonMinutes: number;
   seasonAvgRating: number;
+  energy: number;
 }

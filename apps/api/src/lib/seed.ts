@@ -279,6 +279,7 @@ export async function seedNewGame(
       potential: player.potential,
       morale: 70,
       fitness: 100,
+      energy: 100,
       injured: false,
       injuryWeeks: 0,
       contractEndSeason: player.contractEndSeason,
@@ -312,6 +313,7 @@ export async function seedNewGame(
     potential: fa.potential,
     morale: 50, // Lower morale for free agents
     fitness: 80, // Slightly lower fitness
+    energy: 100,
     injured: false,
     injuryWeeks: 0,
     contractEndSeason: fa.contractEndSeason,
