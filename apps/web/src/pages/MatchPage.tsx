@@ -42,7 +42,10 @@ const PERSISTENT_EVENT_TYPES = new Set([
 
 // Tick interval - each tick advances some seconds, 10 ticks = 1 game minute
 const SECONDS_PER_TICK = 6; // 6 seconds per tick
-// Base interval 100ms at 1x; 50ms at 2x; 33ms at 3x. Result: 1 game min ≈ 1/2/3 sec real time
+// Driver runs every DRIVER_INTERVAL_MS; we run N ticks based on elapsed real time so speed is
+// consistent even when the timer is delayed (e.g. production or background tab).
+const DRIVER_INTERVAL_MS = 50;
+const MAX_CATCHUP_TICKS = 15; // Cap catch-up so we don't freeze after long background
 
 /**
  * Compute lineupPlayerIds and substitutionMinutes for the API from match state.
@@ -329,7 +332,8 @@ export function MatchPage() {
   }, [playbackSpeed]);
 
   const intervalRef = useRef<number | null>(null);
-  const tickIntervalMs = 100 / playbackSpeed;
+  const lastTickTimeRef = useRef<number>(0);
+  const pendingGameSecondsRef = useRef<number>(0);
 
   // Find the player's fixture and teams
   const { playerFixture, playerHomeTeam, playerAwayTeam } = useMemo(() => {
@@ -527,19 +531,50 @@ export function MatchPage() {
     });
   }, [playerMatchIndex, matchData?.playerTeamId]);
 
-  // Start/stop simulation
+  // Start/stop simulation. Driver runs at a fixed rate and runs N ticks based on elapsed real time
+  // so playback speed is consistent even when the timer is delayed (e.g. production or background tab).
   useEffect(() => {
-    if (phase === 'live' && !isPaused) {
-      intervalRef.current = window.setInterval(tick, tickIntervalMs);
+    if (phase !== 'live' || isPaused) {
+      return;
     }
 
+    lastTickTimeRef.current = performance.now();
+    pendingGameSecondsRef.current = 0;
+
+    function driver(): void {
+      const now = performance.now();
+      const elapsed =
+        lastTickTimeRef.current > 0
+          ? now - lastTickTimeRef.current
+          : DRIVER_INTERVAL_MS;
+      lastTickTimeRef.current = now;
+
+      pendingGameSecondsRef.current +=
+        (elapsed / 1000) * 60 * playbackSpeed;
+      const numTicks = Math.min(
+        Math.floor(pendingGameSecondsRef.current / SECONDS_PER_TICK),
+        MAX_CATCHUP_TICKS,
+      );
+      pendingGameSecondsRef.current -=
+        numTicks * SECONDS_PER_TICK;
+
+      for (let i = 0; i < numTicks; i++) {
+        setTimeout(tick, 0);
+      }
+    }
+
+    intervalRef.current = window.setInterval(
+      driver,
+      DRIVER_INTERVAL_MS,
+    );
+
     return () => {
-      if (intervalRef.current) {
+      if (intervalRef.current !== null) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
     };
-  }, [phase, isPaused, tick, tickIntervalMs]);
+  }, [phase, isPaused, tick, playbackSpeed]);
 
   const handlePause = () => {
     setIsPaused(true);
