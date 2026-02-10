@@ -20,7 +20,11 @@ import {
   type Player,
   type PlayerAttributes,
 } from '@retrofoot/core';
-import type { MatchResultInput, PlayerStatsUpdate } from '../types/match.types';
+import type {
+  MatchResultInput,
+  PlayerStatsUpdate,
+  PlayerStatsContext,
+} from '../types/match.types';
 
 /**
  * Process player stats, form updates, and growth after matches
@@ -31,50 +35,78 @@ export async function processPlayerStatsAndGrowth(
   saveId: string,
   playerTeamId: string,
   matchResults: MatchResultInput[],
+  context?: PlayerStatsContext,
 ): Promise<void> {
-  // Get all players for the player's team
-  const teamPlayers = await db
-    .select({
-      id: players.id,
-      name: players.name,
-      nickname: players.nickname,
-      age: players.age,
-      nationality: players.nationality,
-      position: players.position,
-      preferredFoot: players.preferredFoot,
-      attributes: players.attributes,
-      potential: players.potential,
-      morale: players.morale,
-      fitness: players.fitness,
-      energy: players.energy,
-      injured: players.injured,
-      injuryWeeks: players.injuryWeeks,
-      contractEndSeason: players.contractEndSeason,
-      wage: players.wage,
-      marketValue: players.marketValue,
-      status: players.status,
-      form: players.form,
-      lastFiveRatings: players.lastFiveRatings,
-      seasonGoals: players.seasonGoals,
-      seasonAssists: players.seasonAssists,
-      seasonMinutes: players.seasonMinutes,
-      seasonAvgRating: players.seasonAvgRating,
-    })
-    .from(players)
-    .where(and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)));
+  // Get all players for the player's team (or use context)
+  const teamPlayers = context
+    ? context.teamPlayers
+    : await db
+        .select({
+          id: players.id,
+          name: players.name,
+          nickname: players.nickname,
+          age: players.age,
+          nationality: players.nationality,
+          position: players.position,
+          preferredFoot: players.preferredFoot,
+          attributes: players.attributes,
+          potential: players.potential,
+          morale: players.morale,
+          fitness: players.fitness,
+          energy: players.energy,
+          injured: players.injured,
+          injuryWeeks: players.injuryWeeks,
+          contractEndSeason: players.contractEndSeason,
+          wage: players.wage,
+          marketValue: players.marketValue,
+          status: players.status,
+          form: players.form,
+          lastFiveRatings: players.lastFiveRatings,
+          seasonGoals: players.seasonGoals,
+          seasonAssists: players.seasonAssists,
+          seasonMinutes: players.seasonMinutes,
+          seasonAvgRating: players.seasonAvgRating,
+        })
+        .from(players)
+        .where(and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)));
 
-  // Find the player team's match - only fetch fixtures from the match results
-  const fixtureIds = matchResults.map((r) => r.fixtureId);
-  const playerFixtures = await db
-    .select({
-      id: fixtures.id,
-      homeTeamId: fixtures.homeTeamId,
-      awayTeamId: fixtures.awayTeamId,
-      homeScore: fixtures.homeScore,
-      awayScore: fixtures.awayScore,
-    })
-    .from(fixtures)
-    .where(and(eq(fixtures.saveId, saveId), inArray(fixtures.id, fixtureIds)));
+  // Resolve fixture data: from context fixtureMap + matchResults for scores, or fetch
+  type FixtureRow = {
+    id: string;
+    homeTeamId: string;
+    awayTeamId: string;
+    homeScore: number | null;
+    awayScore: number | null;
+  };
+  let playerFixtures: FixtureRow[];
+  if (context?.fixtureMap) {
+    playerFixtures = matchResults
+      .map((r): FixtureRow | null => {
+        const f = context.fixtureMap.get(r.fixtureId);
+        return f
+          ? {
+              id: r.fixtureId,
+              homeTeamId: f.homeTeamId,
+              awayTeamId: f.awayTeamId,
+              homeScore: r.homeScore,
+              awayScore: r.awayScore,
+            }
+          : null;
+      })
+      .filter((x): x is FixtureRow => x !== null);
+  } else {
+    const fixtureIds = matchResults.map((r) => r.fixtureId);
+    playerFixtures = await db
+      .select({
+        id: fixtures.id,
+        homeTeamId: fixtures.homeTeamId,
+        awayTeamId: fixtures.awayTeamId,
+        homeScore: fixtures.homeScore,
+        awayScore: fixtures.awayScore,
+      })
+      .from(fixtures)
+      .where(and(eq(fixtures.saveId, saveId), inArray(fixtures.id, fixtureIds)));
+  }
 
   // Find the match result for player's team
   const playerMatch = matchResults.find((result) => {
@@ -93,16 +125,21 @@ export async function processPlayerStatsAndGrowth(
 
   // Get tactical posture for energy drain (saved tactics for this team)
   let posture: 'defensive' | 'balanced' | 'attacking' = 'balanced';
-  const tacticsRows = await db
-    .select({ posture: tactics.posture })
-    .from(tactics)
-    .where(
-      and(eq(tactics.saveId, saveId), eq(tactics.teamId, playerTeamId)),
-    )
-    .limit(1);
-  if (tacticsRows.length > 0 && tacticsRows[0].posture) {
-    const p = tacticsRows[0].posture as string;
+  if (context?.tactics?.posture) {
+    const p = context.tactics.posture as string;
     if (p === 'defensive' || p === 'attacking') posture = p;
+  } else {
+    const tacticsRows = await db
+      .select({ posture: tactics.posture })
+      .from(tactics)
+      .where(
+        and(eq(tactics.saveId, saveId), eq(tactics.teamId, playerTeamId)),
+      )
+      .limit(1);
+    if (tacticsRows.length > 0 && tacticsRows[0].posture) {
+      const p = tacticsRows[0].posture as string;
+      if (p === 'defensive' || p === 'attacking') posture = p;
+    }
   }
 
   const isHome = fixture.homeTeamId === playerTeamId;
@@ -180,9 +217,9 @@ export async function processPlayerStatsAndGrowth(
       morale: dbPlayer.morale ?? 70,
       fitness: dbPlayer.fitness ?? 100,
       energy: dbPlayer.energy ?? 100,
-      injured: dbPlayer.injured ?? false,
+      injured: Boolean(dbPlayer.injured ?? false),
       injuryWeeks: dbPlayer.injuryWeeks ?? 0,
-      contractEndSeason: dbPlayer.contractEndSeason,
+      contractEndSeason: dbPlayer.contractEndSeason ?? 0,
       wage: dbPlayer.wage,
       marketValue: dbPlayer.marketValue,
       status: (dbPlayer.status ?? 'active') as

@@ -10,9 +10,10 @@ import { nanoid } from 'nanoid';
 import {
   saves,
   fixtures,
-  matchEvents,
   teams,
   players,
+  tactics,
+  standings,
 } from '@retrofoot/db/schema';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
@@ -28,10 +29,10 @@ import {
 import { processRoundFinances } from '../services/finance.service';
 import { processPlayerStatsAndGrowth } from '../services/player-stats.service';
 import { processAITransfers } from '../services/ai-transfer.service';
-import { batchInsertChunked } from '../lib/db/batch';
 
 // Constants
 const FORM_HISTORY_LENGTH = 5;
+const D1_BATCH_STATEMENT_LIMIT = 250;
 const DEFAULT_ROUND = 1;
 const RECOVERY_PER_ROUND = 12;
 const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
@@ -406,6 +407,69 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       save.currentSeason,
     );
 
+    // Prefetch data for finance + player-stats in parallel with first writes
+    const prefetchPromise = Promise.all([
+      db
+        .select({
+          id: teams.id,
+          name: teams.name,
+          reputation: teams.reputation,
+          capacity: teams.capacity,
+          momentum: teams.momentum,
+          balance: teams.balance,
+          seasonRevenue: teams.seasonRevenue,
+          seasonExpenses: teams.seasonExpenses,
+        })
+        .from(teams)
+        .where(eq(teams.saveId, saveId)),
+      db
+        .select({
+          id: players.id,
+          teamId: players.teamId,
+          wage: players.wage,
+        })
+        .from(players)
+        .where(eq(players.saveId, saveId)),
+      db
+        .select({
+          id: players.id,
+          name: players.name,
+          nickname: players.nickname,
+          age: players.age,
+          nationality: players.nationality,
+          position: players.position,
+          preferredFoot: players.preferredFoot,
+          attributes: players.attributes,
+          potential: players.potential,
+          morale: players.morale,
+          fitness: players.fitness,
+          energy: players.energy,
+          injured: players.injured,
+          injuryWeeks: players.injuryWeeks,
+          contractEndSeason: players.contractEndSeason,
+          wage: players.wage,
+          marketValue: players.marketValue,
+          status: players.status,
+          form: players.form,
+          lastFiveRatings: players.lastFiveRatings,
+          seasonGoals: players.seasonGoals,
+          seasonAssists: players.seasonAssists,
+          seasonMinutes: players.seasonMinutes,
+          seasonAvgRating: players.seasonAvgRating,
+        })
+        .from(players)
+        .where(
+          and(eq(players.saveId, saveId), eq(players.teamId, save.playerTeamId)),
+        ),
+      db
+        .select({ posture: tactics.posture })
+        .from(tactics)
+        .where(
+          and(eq(tactics.saveId, saveId), eq(tactics.teamId, save.playerTeamId)),
+        )
+        .limit(1),
+    ]);
+
     const fixtureStatements = body.results.map((result) =>
       c.env.DB.prepare(
         'UPDATE fixtures SET played = 1, home_score = ?, away_score = ? WHERE id = ?',
@@ -433,8 +497,30 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         ).bind(JSON.stringify(form), teamId),
     );
 
-    const insertMatchEventsChunked = () =>
-      batchInsertChunked(db, matchEvents, allMatchEvents);
+    const matchEventStatements = allMatchEvents.map((ev) =>
+      c.env.DB.prepare(
+        'INSERT INTO match_events (id, fixture_id, minute, type, team, player_id, player_name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).bind(
+        ev.id,
+        ev.fixtureId,
+        ev.minute,
+        ev.type,
+        ev.team,
+        ev.playerId ?? null,
+        ev.playerName ?? null,
+        ev.description ?? null,
+      ),
+    );
+
+    const runMatchEventsBatch = async () => {
+      for (let i = 0; i < matchEventStatements.length; i += D1_BATCH_STATEMENT_LIMIT) {
+        const chunk = matchEventStatements.slice(
+          i,
+          i + D1_BATCH_STATEMENT_LIMIT,
+        );
+        if (chunk.length > 0) await c.env.DB.batch(chunk);
+      }
+    };
 
     await Promise.all([
       standingsStatements.length > 0
@@ -443,7 +529,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       fixtureStatements.length > 0
         ? c.env.DB.batch(fixtureStatements)
         : Promise.resolve(),
-      insertMatchEventsChunked(),
+      runMatchEventsBatch(),
       goalStatements.length > 0
         ? c.env.DB.batch(goalStatements)
         : Promise.resolve(),
@@ -457,6 +543,26 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
     await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason);
 
+    const [prefetchedTeams, prefetchedPlayers, teamPlayers, tacticsRows] =
+      await prefetchPromise;
+
+    const standingsResult = await db
+      .select({
+        teamId: standings.teamId,
+        position: standings.position,
+      })
+      .from(standings)
+      .where(
+        and(eq(standings.saveId, saveId), eq(standings.season, save.currentSeason)),
+      );
+
+    const fixtureMap = new Map(
+      roundFixturesData.map((f) => [
+        f.id,
+        { homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId },
+      ]),
+    );
+
     await Promise.all([
       processPlayerStatsAndGrowth(
         db,
@@ -464,6 +570,11 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         saveId,
         save.playerTeamId,
         body.results,
+        {
+          teamPlayers,
+          tactics: tacticsRows.length > 0 ? { posture: tacticsRows[0].posture } : null,
+          fixtureMap,
+        },
       ),
       processRoundFinances(
         db,
@@ -472,6 +583,12 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         save.currentSeason,
         currentRound,
         body.results,
+        {
+          teams: prefetchedTeams,
+          players: prefetchedPlayers,
+          standings: standingsResult,
+          roundFixtures: roundFixturesData,
+        },
       ),
     ]);
 

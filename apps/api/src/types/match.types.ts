@@ -142,3 +142,60 @@ export interface PlayerStatsUpdate {
   seasonAvgRating: number;
   energy: number;
 }
+
+/**
+ * Optional context for processRoundFinances to skip internal fetches (round complete flow)
+ */
+export interface RoundFinancesContext {
+  teams: Array<{
+    id: string;
+    name: string;
+    reputation: number;
+    capacity: number;
+    momentum: number | null;
+    balance: number | null;
+    seasonRevenue: number | null;
+    seasonExpenses: number | null;
+  }>;
+  players: Array<{ id: string; teamId: string | null; wage: number }>;
+  standings: Array<{ teamId: string; position: number | null }>;
+  roundFixtures: Array<{
+    id: string;
+    homeTeamId: string;
+    awayTeamId: string;
+  }>;
+}
+
+/**
+ * Optional context for processPlayerStatsAndGrowth to skip internal fetches (round complete flow)
+ */
+export interface PlayerStatsContext {
+  teamPlayers: Array<{
+    id: string;
+    name: string;
+    nickname: string | null;
+    age: number;
+    nationality: string;
+    position: string;
+    preferredFoot: string;
+    attributes: unknown;
+    potential: number;
+    morale: number | null;
+    fitness: number | null;
+    energy: number | null;
+    injured: number | boolean | null;
+    injuryWeeks: number | null;
+    contractEndSeason: number | null;
+    wage: number;
+    marketValue: number;
+    status: string | null;
+    form: number | null;
+    lastFiveRatings: unknown;
+    seasonGoals: number | null;
+    seasonAssists: number | null;
+    seasonMinutes: number | null;
+    seasonAvgRating: number | null;
+  }>;
+  tactics: { posture: string } | null;
+  fixtureMap: Map<string, { homeTeamId: string; awayTeamId: string }>;
+}

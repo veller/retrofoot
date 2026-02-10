@@ -16,7 +16,6 @@ import {
   players,
   standings,
   fixtures,
-  transactions,
 } from '@retrofoot/db/schema';
 import {
   calculateAttendance,
@@ -32,8 +31,10 @@ import type {
   MatchResultInput,
   TeamFinanceUpdate,
   TransactionRecord,
+  RoundFinancesContext,
 } from '../types/match.types';
-import { batchInsertChunked } from '../lib/db/batch';
+
+const D1_BATCH_STATEMENT_LIMIT = 250;
 
 export async function processRoundFinances(
   db: ReturnType<typeof drizzle>,
@@ -42,29 +43,34 @@ export async function processRoundFinances(
   season: string,
   currentRound: number,
   matchResults: MatchResultInput[],
+  context?: RoundFinancesContext,
 ): Promise<void> {
-  const allTeams = await db
-    .select({
-      id: teams.id,
-      name: teams.name,
-      reputation: teams.reputation,
-      capacity: teams.capacity,
-      momentum: teams.momentum,
-      balance: teams.balance,
-      seasonRevenue: teams.seasonRevenue,
-      seasonExpenses: teams.seasonExpenses,
-    })
-    .from(teams)
-    .where(eq(teams.saveId, saveId));
+  const allTeams = context
+    ? context.teams
+    : await db
+        .select({
+          id: teams.id,
+          name: teams.name,
+          reputation: teams.reputation,
+          capacity: teams.capacity,
+          momentum: teams.momentum,
+          balance: teams.balance,
+          seasonRevenue: teams.seasonRevenue,
+          seasonExpenses: teams.seasonExpenses,
+        })
+        .from(teams)
+        .where(eq(teams.saveId, saveId));
 
-  const allPlayers = await db
-    .select({
-      id: players.id,
-      teamId: players.teamId,
-      wage: players.wage,
-    })
-    .from(players)
-    .where(eq(players.saveId, saveId));
+  const allPlayers = context
+    ? context.players
+    : await db
+        .select({
+          id: players.id,
+          teamId: players.teamId,
+          wage: players.wage,
+        })
+        .from(players)
+        .where(eq(players.saveId, saveId));
 
   const playersByTeam = new Map<string, { wage: number }[]>();
   for (const player of allPlayers) {
@@ -77,27 +83,31 @@ export async function processRoundFinances(
     }
   }
 
-  const standingsResult = await db
-    .select({
-      teamId: standings.teamId,
-      position: standings.position,
-    })
-    .from(standings)
-    .where(and(eq(standings.saveId, saveId), eq(standings.season, season)));
+  const standingsResult = context
+    ? context.standings
+    : await db
+        .select({
+          teamId: standings.teamId,
+          position: standings.position,
+        })
+        .from(standings)
+        .where(and(eq(standings.saveId, saveId), eq(standings.season, season)));
 
   const positionByTeam = new Map<string, number>();
   for (const s of standingsResult) {
-    positionByTeam.set(s.teamId, s.position);
+    positionByTeam.set(s.teamId, s.position ?? 0);
   }
 
-  const roundFixtures = await db
-    .select({
-      id: fixtures.id,
-      homeTeamId: fixtures.homeTeamId,
-      awayTeamId: fixtures.awayTeamId,
-    })
-    .from(fixtures)
-    .where(and(eq(fixtures.saveId, saveId), eq(fixtures.round, currentRound)));
+  const roundFixtures = context
+    ? context.roundFixtures
+    : await db
+        .select({
+          id: fixtures.id,
+          homeTeamId: fixtures.homeTeamId,
+          awayTeamId: fixtures.awayTeamId,
+        })
+        .from(fixtures)
+        .where(and(eq(fixtures.saveId, saveId), eq(fixtures.round, currentRound)));
 
   const homeTeamOpponents = new Map<string, string>();
   for (const fixture of roundFixtures) {
@@ -268,5 +278,29 @@ export async function processRoundFinances(
     await d1.batch(teamStatements);
   }
 
-  await batchInsertChunked(db, transactions, allTransactions);
+  const transactionStatements = allTransactions.map((tx) =>
+    d1
+      .prepare(
+        'INSERT INTO transactions (id, save_id, team_id, type, category, amount, description, round, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(
+        tx.id,
+        tx.saveId,
+        tx.teamId,
+        tx.type,
+        tx.category,
+        tx.amount,
+        tx.description ?? null,
+        tx.round,
+        Math.floor(tx.createdAt.getTime() / 1000),
+      ),
+  );
+
+  for (let i = 0; i < transactionStatements.length; i += D1_BATCH_STATEMENT_LIMIT) {
+    const chunk = transactionStatements.slice(
+      i,
+      i + D1_BATCH_STATEMENT_LIMIT,
+    );
+    if (chunk.length > 0) await d1.batch(chunk);
+  }
 }

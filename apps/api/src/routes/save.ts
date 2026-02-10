@@ -418,6 +418,7 @@ saveRoutes.put('/:id/tactics/:teamId', async (c) => {
       potential: players.potential,
       morale: players.morale,
       fitness: players.fitness,
+      energy: players.energy,
       injured: players.injured,
       injuryWeeks: players.injuryWeeks,
       contractEndSeason: players.contractEndSeason,
