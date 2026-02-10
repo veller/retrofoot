@@ -1,4 +1,7 @@
 # RetroFoot API - Cloudflare Workers Configuration
+# Must match your RetroFoot team account (dashboard → Workers & Pages → Account details)
+account_id = "9b3083c4a6b8f195ea446d884a6523e4"
+
 name = "retrofoot-api"
 main = "src/index.ts"
 compatibility_date = "2025-01-13"
