@@ -545,21 +545,26 @@ export function MatchPage() {
     setIsPaused(true);
   };
 
-  const handleResume = () => {
-    // If at half-time, resume all matches from half-time
-    const playerMatch = matches[playerMatchIndex];
-    if (playerMatch && playerMatch.state.phase === 'half_time') {
-      setMatches((prev) => {
-        prev.forEach((m) => resumeFromHalfTime(m.state));
-        // Deep clone
-        return prev.map((m) => ({
-          ...m,
-          state: { ...m.state, events: [...m.state.events] },
-        }));
-      });
-    }
+  function startSecondHalf(): void {
+    setMatches((prev) => {
+      prev.forEach((m) => resumeFromHalfTime(m.state));
+      return prev.map((m) => ({
+        ...m,
+        state: { ...m.state, events: [...m.state.events] },
+      }));
+    });
     setCurrentSeconds(0);
     setIsPaused(false);
+  }
+
+  const handleResume = () => {
+    const playerMatch = matches[playerMatchIndex];
+    if (playerMatch?.state.phase === 'half_time') {
+      startSecondHalf();
+    } else {
+      setCurrentSeconds(0);
+      setIsPaused(false);
+    }
   };
 
   const handleOpenSubstitutions = () => {
@@ -567,6 +572,10 @@ export function MatchPage() {
   };
 
   const handleCloseSubstitutions = () => {
+    const playerMatch = matches[playerMatchIndex];
+    if (playerMatch?.state.phase === 'half_time') {
+      startSecondHalf();
+    }
     setPhase('live');
   };
 
@@ -826,6 +835,7 @@ export function MatchPage() {
   if (phase === 'substitutions' && matches[playerMatchIndex]) {
     const playerMatch = matches[playerMatchIndex];
     const isHome = playerMatch.homeTeam.id === matchData.playerTeamId;
+    const opponentTeam = isHome ? playerMatch.awayTeam : playerMatch.homeTeam;
     const playerTeam =
       matchData.teams.find((team) => team.id === matchData.playerTeamId) ??
       null;
@@ -834,6 +844,7 @@ export function MatchPage() {
       return (
         <SubstitutionPanel
           playerTeam={playerTeam}
+          opponentTeam={opponentTeam}
           currentTactics={playerTactics}
           matchState={playerMatch.state}
           isHome={isHome}

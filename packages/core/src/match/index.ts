@@ -1079,13 +1079,19 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       if (fixture.homeTeamId !== playerTeamId) {
         homeTeam = {
           ...homeTeam,
-          players: homeTeam.players.map((p) => ({ ...p, energy: opponentEnergy })),
+          players: homeTeam.players.map((p) => ({
+            ...p,
+            energy: opponentEnergy,
+          })),
         };
       }
       if (fixture.awayTeamId !== playerTeamId) {
         awayTeam = {
           ...awayTeam,
-          players: awayTeam.players.map((p) => ({ ...p, energy: opponentEnergy })),
+          players: awayTeam.players.map((p) => ({
+            ...p,
+            energy: opponentEnergy,
+          })),
         };
       }
     }
@@ -1198,3 +1204,14 @@ function createDefaultTactics(team: Team): Tactics {
     substitutes,
   };
 }
+
+// Half-time hints (qualitative only)
+export {
+  getHalfTimeHints,
+  getHalfTimeHintsFromState,
+  type HalfTimeHints,
+  type GetHalfTimeHintsParams,
+  type MatchSituation,
+  type PostureHintKey,
+  type FormationMatchupHintKey,
+} from './half-time-hints';
