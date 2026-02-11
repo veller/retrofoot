@@ -909,8 +909,7 @@ function SquadPanel({
           Squad
         </h2>
         <p className="text-slate-400 text-xs lg:text-sm mb-4 lg:mb-6">
-          Your squad. Manage your players, set formations, and prepare for
-          matches.
+          Manage your players, set formations and prepare for matches
         </p>
         <div className="grid gap-2">
           {sortedPlayers.map((player) => {
@@ -926,7 +925,9 @@ function SquadPanel({
               ? { type: 'lineup', index: lineup.indexOf(player.id) }
               : { type: 'bench', index: substitutes.indexOf(player.id) };
             const isDropTarget =
-              canDrag && dropTargetSlot != null && slotsEqual(dropTargetSlot, slot);
+              canDrag &&
+              dropTargetSlot != null &&
+              slotsEqual(dropTargetSlot, slot);
             const isDraggingThisSlot =
               draggedSlot != null && slotsEqual(draggedSlot, slot);
             const rowDragClass = canDrag
@@ -972,7 +973,9 @@ function SquadPanel({
                   e.stopPropagation();
                   handleDrop(slot, e);
                 }}
-                onPointerDown={canDrag ? touchDrag.getPointerDown(slot) : undefined}
+                onPointerDown={
+                  canDrag ? touchDrag.getPointerDown(slot) : undefined
+                }
                 onPointerUp={canDrag ? touchDrag.getPointerUp() : undefined}
                 onPointerMove={canDrag ? touchDrag.getPointerMove() : undefined}
               >

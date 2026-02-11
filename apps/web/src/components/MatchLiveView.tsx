@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import type { MatchEvent, LiveMatchState } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
 import { MatchEventsModal } from './MatchEventsModal';
@@ -17,6 +17,19 @@ function getPlaybackSpeedLabel(speed: PlaybackSpeed): string {
       return 'Turbo';
     default:
       return 'Normal';
+  }
+}
+
+function getNextPlaybackSpeed(speed: PlaybackSpeed): PlaybackSpeed {
+  switch (speed) {
+    case 1:
+      return 3;
+    case 3:
+      return 5;
+    case 5:
+      return 1;
+    default:
+      return 1;
   }
 }
 
@@ -87,9 +100,17 @@ function getEventLabel(type: MatchEvent['type']): string {
 // Icon Components for Mobile
 function PauseIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <rect x="6" y="4" width="4" height="16" />
-      <rect x="14" y="4" width="4" height="16" />
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="9" y1="5" x2="9" y2="19" />
+      <line x1="15" y1="5" x2="15" y2="19" />
     </svg>
   );
 }
@@ -312,10 +333,8 @@ function ControlButtons({
     <div className="flex items-center gap-3">
       {isLive && (
         <button
-          onClick={() =>
-            onSpeedChange(playbackSpeed === 1 ? 3 : playbackSpeed === 3 ? 5 : 1)
-          }
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
+          onClick={() => onSpeedChange(getNextPlaybackSpeed(playbackSpeed))}
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
         >
           Game speed: {getPlaybackSpeedLabel(playbackSpeed)}
         </button>
@@ -326,15 +345,6 @@ function ControlButtons({
           className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
         >
           Pause
-        </button>
-      )}
-
-      {isLive && isPaused && (
-        <button
-          onClick={onResume}
-          className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-        >
-          Resume
         </button>
       )}
 
@@ -353,6 +363,15 @@ function ControlButtons({
           className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
         >
           Team Changes
+        </button>
+      )}
+
+      {isLive && isPaused && (
+        <button
+          onClick={onResume}
+          className="px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+        >
+          Resume
         </button>
       )}
     </div>
@@ -387,12 +406,8 @@ function MobileControlBar({
       <div className="flex items-center justify-center gap-3">
         {isLive && (
           <button
-            onClick={() =>
-              onSpeedChange(
-                playbackSpeed === 1 ? 3 : playbackSpeed === 3 ? 5 : 1,
-              )
-            }
-            className="shrink-0 px-4 py-2 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
+            onClick={() => onSpeedChange(getNextPlaybackSpeed(playbackSpeed))}
+            className="shrink-0 px-4 py-3 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors"
           >
             Game speed: {getPlaybackSpeedLabel(playbackSpeed)}
           </button>
@@ -402,18 +417,8 @@ function MobileControlBar({
             onClick={onPause}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors"
           >
-            <PauseIcon className="w-5 h-5" />
+            <PauseIcon className="w-5 h-5 shrink-0" />
             <span>Pause</span>
-          </button>
-        )}
-
-        {isLive && isPaused && (
-          <button
-            onClick={onResume}
-            className="flex-1 flex items-center justify-center gap-2 py-3 bg-pitch-600 active:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
-          >
-            <PlayIcon className="w-5 h-5" />
-            <span>Resume</span>
           </button>
         )}
 
@@ -436,6 +441,16 @@ function MobileControlBar({
             <span>Team Changes</span>
           </button>
         )}
+
+        {isLive && isPaused && (
+          <button
+            onClick={onResume}
+            className="flex-1 flex items-center justify-center gap-2 py-3 bg-pitch-600 active:bg-pitch-500 text-white font-medium rounded-lg transition-colors"
+          >
+            <PlayIcon className="w-5 h-5" />
+            <span>Resume</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -454,7 +469,7 @@ export function MatchLiveView({
   playbackSpeed,
   onSpeedChange,
   round,
-}: MatchLiveViewProps) {
+}: MatchLiveViewProps): ReactElement {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
   const selectedMatch = selectedMatchId

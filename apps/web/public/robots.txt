@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /login
+Allow: /register
+Disallow: /game/
+Disallow: /api/
+
+Sitemap: https://retrofoot-web.pages.dev/sitemap.xml

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">RetroFoot</title>
+  <desc id="desc">Retro football management game cover image.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#1e293b" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <rect x="40" y="40" width="1120" height="550" rx="24" ry="24" fill="none" stroke="#84cc16" stroke-width="6" />
+  <text x="600" y="275" text-anchor="middle" font-family="Arial, sans-serif" font-size="108" font-weight="700" fill="#84cc16">RETROFOOT</text>
+  <text x="600" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="38" fill="#cbd5e1">Online Football Manager Game</text>
+  <text x="600" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="#94a3b8">Build squads. Play matches. Win titles.</text>
+</svg>
