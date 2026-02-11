@@ -309,11 +309,11 @@ export function MatchPage() {
   const [results, setResults] = useState<MatchResult[]>([]);
   const [playerTactics, setPlayerTactics] = useState<Tactics | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 2 | 3>(() => {
+  const [playbackSpeed, setPlaybackSpeed] = useState<1 | 3 | 5>(() => {
     try {
       const stored = localStorage.getItem('retrofoot/matchPlaybackSpeed');
       const n = stored ? parseInt(stored, 10) : 1;
-      return n === 1 || n === 2 || n === 3 ? n : 1;
+      return n === 1 || n === 3 || n === 5 ? n : 1;
     } catch {
       return 1;
     }

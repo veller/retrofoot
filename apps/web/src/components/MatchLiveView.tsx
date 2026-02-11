@@ -5,7 +5,20 @@ import { MatchEventsModal } from './MatchEventsModal';
 import { EventIcon } from './EventIcon';
 import { isSignificantEvent } from './matchEventUtils';
 
-export type PlaybackSpeed = 1 | 2 | 3;
+export type PlaybackSpeed = 1 | 3 | 5;
+
+function getPlaybackSpeedLabel(speed: PlaybackSpeed): string {
+  switch (speed) {
+    case 1:
+      return 'Normal';
+    case 3:
+      return 'Fast';
+    case 5:
+      return 'Turbo';
+    default:
+      return 'Normal';
+  }
+}
 
 interface MatchLiveViewProps {
   matches: LiveMatchState[];
@@ -300,11 +313,11 @@ function ControlButtons({
       {isLive && (
         <button
           onClick={() =>
-            onSpeedChange(playbackSpeed === 1 ? 2 : playbackSpeed === 2 ? 3 : 1)
+            onSpeedChange(playbackSpeed === 1 ? 3 : playbackSpeed === 3 ? 5 : 1)
           }
           className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
         >
-          Game speed: {playbackSpeed}x
+          Game speed: {getPlaybackSpeedLabel(playbackSpeed)}
         </button>
       )}
       {isLive && !isPaused && (
@@ -376,12 +389,12 @@ function MobileControlBar({
           <button
             onClick={() =>
               onSpeedChange(
-                playbackSpeed === 1 ? 2 : playbackSpeed === 2 ? 3 : 1,
+                playbackSpeed === 1 ? 3 : playbackSpeed === 3 ? 5 : 1,
               )
             }
             className="shrink-0 px-4 py-2 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors text-sm"
           >
-            Game speed: {playbackSpeed}x
+            Game speed: {getPlaybackSpeedLabel(playbackSpeed)}
           </button>
         )}
         {isLive && !isPaused && (
