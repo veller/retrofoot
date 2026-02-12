@@ -36,9 +36,100 @@ import {
   type UnlockedAchievement,
 } from '@retrofoot/core/achievements';
 import type { Player, Position, StandingEntry } from '@retrofoot/core/types';
+import { calculateOverall } from '@retrofoot/core/types';
 import { batchInsertChunked } from '../lib/db/batch';
 
 export const seasonRoutes = new Hono<{ Bindings: Env }>();
+
+function getTeamSuccessBonus(standing?: StandingEntry): number {
+  if (!standing) return 0;
+  if (standing.position === 1) return 2.5;
+  if (standing.position <= 4) return 2.0;
+  if (standing.position <= 8) return 1.2;
+  if (standing.position <= 12) return 0.7;
+  if (standing.position <= 16) return 0.3;
+  return -0.4;
+}
+
+function getDefensiveConcessionBonus(standing?: StandingEntry): number {
+  if (!standing || standing.played <= 0) return 0;
+  const concededPerGame = standing.goalsAgainst / standing.played;
+  if (concededPerGame <= 0.7) return 2.2;
+  if (concededPerGame <= 1.0) return 1.5;
+  if (concededPerGame <= 1.3) return 0.8;
+  if (concededPerGame <= 1.6) return 0.3;
+  return -0.3;
+}
+
+function getSeasonImpactScore(
+  player: Player,
+  standing?: StandingEntry,
+): number {
+  const goals = player.form.seasonGoals;
+  const assists = player.form.seasonAssists;
+  const avgRating = player.form.seasonAvgRating;
+  const ratingScore = Math.max(0, avgRating - 6.5) * 1.8;
+  const teamBonus = getTeamSuccessBonus(standing);
+
+  switch (player.position) {
+    case 'ATT':
+      return goals * 0.65 + assists * 0.35 + ratingScore + teamBonus;
+    case 'MID':
+      return goals * 0.4 + assists * 0.55 + ratingScore + teamBonus;
+    case 'DEF':
+      return (
+        goals * 0.25 +
+        assists * 0.3 +
+        ratingScore * 0.9 +
+        teamBonus +
+        getDefensiveConcessionBonus(standing)
+      );
+    case 'GK':
+      return (
+        ratingScore * 1.1 +
+        teamBonus +
+        getDefensiveConcessionBonus(standing) * 1.3
+      );
+    default:
+      return ratingScore + teamBonus;
+  }
+}
+
+function applySeasonStandoutAttributeBonus(
+  attributes: Player['attributes'],
+  position: Position,
+): Player['attributes'] {
+  const updated = { ...attributes };
+  const priorityByPosition: Record<Position, (keyof Player['attributes'])[]> = {
+    GK: ['reflexes', 'handling', 'diving', 'positioning', 'composure'],
+    DEF: ['tackling', 'positioning', 'heading', 'strength', 'stamina'],
+    MID: ['passing', 'vision', 'composure', 'dribbling', 'stamina'],
+    ATT: ['shooting', 'positioning', 'dribbling', 'speed', 'composure'],
+  };
+  const fallback: (keyof Player['attributes'])[] = [
+    'speed',
+    'strength',
+    'stamina',
+    'shooting',
+    'passing',
+    'dribbling',
+    'heading',
+    'tackling',
+    'positioning',
+    'vision',
+    'composure',
+  ];
+  const order = priorityByPosition[position] ?? fallback;
+
+  for (const attr of order) {
+    if (updated[attr] < 99) {
+      updated[attr] += 1;
+      break;
+    }
+  }
+
+  return updated;
+}
 
 // Get season summary after round 38
 seasonRoutes.get('/:saveId/summary', async (c) => {
@@ -472,6 +563,43 @@ seasonRoutes.post('/:saveId/advance', async (c) => {
   }
 
   await Promise.all(teamUpdates);
+
+  // Season-end standout bonus (+1 attribute point, conservative gate).
+  // Intended for rare breakout seasons from younger players.
+  const standingsByTeamId = new Map(
+    standingsForAwards.map((s) => [s.teamId, s]),
+  );
+  const standoutUpdates: Array<{ playerId: string; attributes: string }> = [];
+  for (const { player, teamId } of playersWithTeam) {
+    if (player.status !== 'active') continue;
+    if (player.age >= 24) continue;
+    if (player.form.seasonMinutes < 900) continue;
+
+    const currentOverall = calculateOverall(player);
+    if (currentOverall >= player.potential) continue;
+
+    const standing = standingsByTeamId.get(teamId);
+    const impactScore = getSeasonImpactScore(player, standing);
+    if (impactScore < 8) continue;
+
+    standoutUpdates.push({
+      playerId: player.id,
+      attributes: JSON.stringify(
+        applySeasonStandoutAttributeBonus(player.attributes, player.position),
+      ),
+    });
+  }
+
+  if (standoutUpdates.length > 0) {
+    await c.env.DB.batch(
+      standoutUpdates.map((update) =>
+        c.env.DB.prepare('UPDATE players SET attributes = ? WHERE id = ?').bind(
+          update.attributes,
+          update.playerId,
+        ),
+      ),
+    );
+  }
 
   // Process player aging and retirements
   const playersByTeam = new Map<string, Player[]>();

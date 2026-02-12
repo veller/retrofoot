@@ -183,8 +183,6 @@ export function PitchView({
   const hasDnD = Boolean(onDrop && onDragStart);
   const benchCount = substitutes.length;
   const coordinates = getFormationSlotCoordinates(formation);
-  const hasOpponentLayer = Boolean(opponentLineup?.length && opponentFormation);
-  const hostTopOffsetPercent = hasOpponentLayer ? 5 : 0;
   const opponentCoordinates = opponentFormation
     ? getFormationSlotCoordinates(opponentFormation)
     : null;
@@ -332,7 +330,12 @@ export function PitchView({
                 className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 group ${hostPinClassName}`}
                 style={{
                   left: `${getHostPinDepthY(player.position, coord)}%`,
-                  top: `${coord.x + hostTopOffsetPercent}%`,
+                  top: `${coord.x}%`,
+                  animationDelay:
+                    staggerStartSeconds !== undefined &&
+                    staggerStepSeconds !== undefined
+                      ? `${staggerStartSeconds + index * staggerStepSeconds}s`
+                      : undefined,
                 }}
               >
                 <div
@@ -378,11 +381,6 @@ export function PitchView({
                   style={{
                     borderColor: hostPinBorderColor,
                     color: hostPinTextColor,
-                    animationDelay:
-                      staggerStartSeconds !== undefined &&
-                      staggerStepSeconds !== undefined
-                        ? `${staggerStartSeconds + index * staggerStepSeconds}s`
-                        : undefined,
                   }}
                   title={`${player.name} - OVR ${overall}`}
                 >

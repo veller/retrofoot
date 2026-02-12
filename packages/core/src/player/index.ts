@@ -675,11 +675,96 @@ export function updatePlayerForm(
 // ============================================================================
 // Players can grow/decline during the season based on match performance
 
+export type MatchGrowthResult = 'win' | 'draw' | 'loss';
+
+export interface MatchGrowthContext {
+  teamResult: MatchGrowthResult;
+  goals?: number;
+  assists?: number;
+  goalsConceded?: number;
+  cleanSheet?: boolean;
+}
+
+const GROWTH_BASE_SCORE = 0.4;
+const GROWTH_SCORE_MAX = 1.8;
+
+function getAgeGrowthMultiplier(age: number): number {
+  if (age >= 40) return 0;
+  if (age <= 21) return 1.0;
+  if (age <= 25) return 0.75;
+  if (age <= 29) return 0.45;
+  if (age <= 34) return 0.2;
+  return 0.05;
+}
+
+function getResultScore(teamResult: MatchGrowthResult): number {
+  switch (teamResult) {
+    case 'win':
+      return 0.15;
+    case 'draw':
+      return 0.03;
+    case 'loss':
+      return -0.1;
+    default:
+      return 0;
+  }
+}
+
+function getRoleScore(player: Player, context: MatchGrowthContext): number {
+  const goals = context.goals ?? 0;
+  const assists = context.assists ?? 0;
+  const conceded = context.goalsConceded ?? 0;
+  const cleanSheet = context.cleanSheet ? 1 : 0;
+  const isWin = context.teamResult === 'win' ? 1 : 0;
+
+  switch (player.position) {
+    case 'ATT':
+      return goals * 0.22 + assists * 0.12;
+    case 'MID':
+      return goals * 0.14 + assists * 0.16 + isWin * 0.03;
+    case 'DEF':
+      return (
+        goals * 0.08 + assists * 0.08 + cleanSheet * 0.14 - conceded * 0.04
+      );
+    case 'GK':
+      return cleanSheet * 0.2 - conceded * 0.06;
+    default:
+      return 0;
+  }
+}
+
+function isMvpLikePerformance(
+  matchRating: number,
+  goals: number,
+  assists: number,
+): boolean {
+  return matchRating >= 8.5 || goals >= 2 || goals + assists >= 3;
+}
+
+function getGrowthPoints(options: {
+  growthScore: number;
+  growthRoom: number;
+  mvpLikeBonus: boolean;
+  age: number;
+}): number {
+  const { growthScore, growthRoom, mvpLikeBonus, age } = options;
+  if (growthRoom <= 0) return 0;
+
+  // Conservative conversion: usually no points unless impact is meaningfully high.
+  let points = 0;
+  if (growthScore >= 0.75) points = 1;
+  if (growthScore >= 1.45 && mvpLikeBonus && age < 24) points = 2;
+
+  if (growthRoom <= 2) return Math.min(points, 1);
+  return points;
+}
+
 // Apply growth/decline after a match based on age, potential, and performance
 export function applyMatchGrowth(
   player: Player,
   minutesPlayed: number,
   matchRating: number,
+  context: MatchGrowthContext = { teamResult: 'draw' },
 ): Player {
   // Only players who played can grow/decline
   if (minutesPlayed === 0) return player;
@@ -689,28 +774,50 @@ export function applyMatchGrowth(
     attributes: { ...player.attributes },
   };
 
-  const minutesFactor = Math.min(1.0, minutesPlayed / 90);
-  const performanceFactor = (matchRating - 5) / 10; // -0.5 to +0.5 based on 0-10 rating
+  const minutesFactor = Math.min(1.0, Math.max(0, minutesPlayed / 90));
+  const currentOvr = calculateOverall(player);
+  const growthRoom = Math.max(0, player.potential - currentOvr);
 
-  if (player.age < 24) {
-    // Young players: grow toward potential
-    const currentOvr = calculateOverall(player);
-    const growthRoom = player.potential - currentOvr;
+  // Growth path: available up to age 39 with sharply decreasing multiplier.
+  // At 40+, growth is hard-disabled.
+  if (player.age < 40 && growthRoom > 0) {
+    const goals = context.goals ?? 0;
+    const assists = context.assists ?? 0;
+    const hasMvpLikePerformance = isMvpLikePerformance(
+      matchRating,
+      goals,
+      assists,
+    );
+    const mvpLikeBonus = hasMvpLikePerformance ? 0.15 : 0;
+    const ageMult = getAgeGrowthMultiplier(player.age);
+    const resultScore = getResultScore(context.teamResult);
+    const roleScore = getRoleScore(player, context);
+    const rawPerformanceScore =
+      GROWTH_BASE_SCORE + resultScore + roleScore + mvpLikeBonus;
+    const clampedPerformanceScore = Math.max(
+      0,
+      Math.min(GROWTH_SCORE_MAX, rawPerformanceScore),
+    );
+    const growthScore = ageMult * minutesFactor * clampedPerformanceScore;
 
-    if (growthRoom > 0) {
-      // Base growth rate adjusted by minutes and performance
-      const growthRate = 0.02 * minutesFactor * (1 + performanceFactor);
-      const pointsToDistribute = growthRoom * growthRate;
+    const pointsToDistribute = getGrowthPoints({
+      growthScore,
+      growthRoom,
+      mvpLikeBonus: hasMvpLikePerformance,
+      age: player.age,
+    });
 
-      if (pointsToDistribute >= 0.5) {
-        // Apply small growth to random attributes
-        applyAttributeGrowthPoints(
-          updated.attributes,
-          Math.floor(pointsToDistribute),
-        );
-      }
+    if (pointsToDistribute > 0) {
+      applyAttributeGrowthPoints(
+        updated.attributes,
+        pointsToDistribute,
+        player.position,
+      );
     }
-  } else if (player.age >= 30) {
+  }
+
+  // Decline path for older players still applies after poor performances.
+  if (player.age >= 30) {
     // Older players: slight decline risk after poor performances
     if (matchRating < 5.5) {
       const declineRate = (0.01 * minutesFactor * (player.age - 29)) / 5;
@@ -721,17 +828,37 @@ export function applyMatchGrowth(
       }
     }
   }
-  // Prime (24-29): no automatic attribute change
 
   return updated;
 }
 
-// Apply growth points to random non-GK attributes (for outfield players)
+// Apply growth points to position-biased attributes.
 function applyAttributeGrowthPoints(
   attributes: PlayerAttributes,
   points: number,
+  position: Position,
 ): void {
-  const growableAttrs: (keyof PlayerAttributes)[] = [
+  const positionPools: Record<Position, (keyof PlayerAttributes)[]> = {
+    GK: ['reflexes', 'handling', 'diving', 'positioning', 'composure'],
+    DEF: ['tackling', 'heading', 'strength', 'positioning', 'stamina', 'speed'],
+    MID: [
+      'passing',
+      'vision',
+      'stamina',
+      'dribbling',
+      'positioning',
+      'composure',
+    ],
+    ATT: [
+      'shooting',
+      'positioning',
+      'dribbling',
+      'speed',
+      'composure',
+      'heading',
+    ],
+  };
+  const fallbackPool: (keyof PlayerAttributes)[] = [
     'speed',
     'strength',
     'stamina',
@@ -744,6 +871,7 @@ function applyAttributeGrowthPoints(
     'vision',
     'composure',
   ];
+  const growableAttrs = positionPools[position] ?? fallbackPool;
 
   for (let i = 0; i < points; i++) {
     const attr = randomFromArray(growableAttrs);
@@ -819,7 +947,11 @@ export function calculateEnergyDrain(options: {
   }
   const positionMult = position === 'GK' ? 0.6 : 1.0;
   const drain =
-    ENERGY_BASE_DRAIN_PER_90 * minutesFactor * postureMult * ageMult * positionMult;
+    ENERGY_BASE_DRAIN_PER_90 *
+    minutesFactor *
+    postureMult *
+    ageMult *
+    positionMult;
   return Math.max(0, Math.min(100, Math.round(drain * 10) / 10));
 }
 

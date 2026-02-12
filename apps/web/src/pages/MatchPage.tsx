@@ -6,6 +6,7 @@ import type {
   Tactics,
   Fixture,
   MatchEvent,
+  Team,
 } from '@retrofoot/core';
 import type { MatchFixture } from '../hooks';
 import {
@@ -375,25 +376,56 @@ export function MatchPage() {
   // Get tactics from game store (set by GamePage)
   const gameStoreTactics = useGameStore((s) => s.tactics);
 
+  function sanitizeTacticsForTeam(
+    team: Team,
+    candidate: Tactics,
+  ): Tactics | null {
+    const playerIds = new Set(team.players.map((player) => player.id));
+    const formationEligible = evaluateFormationEligibility(
+      candidate.formation,
+      team.players,
+    ).eligible;
+    const formation = formationEligible ? candidate.formation : '4-3-3';
+    const rebuilt = selectBestLineup(team, formation);
+    const lineup = candidate.lineup.filter((id) => playerIds.has(id));
+    const substitutes = candidate.substitutes.filter((id) => playerIds.has(id));
+
+    if (lineup.length < 11) {
+      return {
+        formation,
+        posture: candidate.posture ?? 'balanced',
+        lineup: rebuilt.lineup,
+        substitutes: rebuilt.substitutes,
+      };
+    }
+
+    return {
+      formation,
+      posture: candidate.posture ?? 'balanced',
+      lineup,
+      substitutes: substitutes.length > 0 ? substitutes : rebuilt.substitutes,
+    };
+  }
+
   // Initialize player tactics when data loads - prefer gameStore tactics
   useEffect(() => {
     let cancelled = false;
 
     async function hydrateMatchTactics() {
-      if (!matchData || playerTactics) return;
+      if (!matchData) return;
       const playerTeam = matchData.teams.find(
         (team) => team.id === matchData.playerTeamId,
       );
       if (!playerTeam || playerTeam.players.length < 11) return;
-      const playerIds = new Set(playerTeam.players.map((player) => player.id));
 
       // First, try game store tactics.
-      if (gameStoreTactics && gameStoreTactics.lineup.length >= 11) {
-        const lineupValid = gameStoreTactics.lineup.every((id) =>
-          playerIds.has(id),
+      if (gameStoreTactics) {
+        const sanitizedStoreTactics = sanitizeTacticsForTeam(
+          playerTeam,
+          gameStoreTactics,
         );
-        if (lineupValid && !cancelled) {
-          setPlayerTactics(gameStoreTactics);
+        if (sanitizedStoreTactics && !cancelled) {
+          setPlayerTactics(sanitizedStoreTactics);
           return;
         }
       }
@@ -404,8 +436,11 @@ export function MatchPage() {
             saveId,
             matchData.playerTeamId,
           );
-          if (persisted && persisted.lineup.length >= 11 && !cancelled) {
-            setPlayerTactics(persisted);
+          const sanitizedPersistedTactics = persisted
+            ? sanitizeTacticsForTeam(playerTeam, persisted)
+            : null;
+          if (sanitizedPersistedTactics && !cancelled) {
+            setPlayerTactics(sanitizedPersistedTactics);
             return;
           }
         } catch (error) {
@@ -429,7 +464,7 @@ export function MatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [matchData, playerTactics, gameStoreTactics, saveId]);
+  }, [matchData, gameStoreTactics, saveId]);
 
   // Initialize match states when confirmed
   const handleConfirmMatch = useCallback(() => {
@@ -549,24 +584,19 @@ export function MatchPage() {
           : DRIVER_INTERVAL_MS;
       lastTickTimeRef.current = now;
 
-      pendingGameSecondsRef.current +=
-        (elapsed / 1000) * 60 * playbackSpeed;
+      pendingGameSecondsRef.current += (elapsed / 1000) * 60 * playbackSpeed;
       const numTicks = Math.min(
         Math.floor(pendingGameSecondsRef.current / SECONDS_PER_TICK),
         MAX_CATCHUP_TICKS,
       );
-      pendingGameSecondsRef.current -=
-        numTicks * SECONDS_PER_TICK;
+      pendingGameSecondsRef.current -= numTicks * SECONDS_PER_TICK;
 
       for (let i = 0; i < numTicks; i++) {
         setTimeout(tick, 0);
       }
     }
 
-    intervalRef.current = window.setInterval(
-      driver,
-      DRIVER_INTERVAL_MS,
-    );
+    intervalRef.current = window.setInterval(driver, DRIVER_INTERVAL_MS);
 
     return () => {
       if (intervalRef.current !== null) {

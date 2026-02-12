@@ -26,6 +26,15 @@ import type {
   PlayerStatsContext,
 } from '../types/match.types';
 
+function getMatchResult(
+  teamScore: number,
+  opponentScore: number,
+): 'win' | 'draw' | 'loss' {
+  if (teamScore > opponentScore) return 'win';
+  if (teamScore < opponentScore) return 'loss';
+  return 'draw';
+}
+
 /**
  * Process player stats, form updates, and growth after matches
  */
@@ -68,7 +77,9 @@ export async function processPlayerStatsAndGrowth(
           seasonAvgRating: players.seasonAvgRating,
         })
         .from(players)
-        .where(and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)));
+        .where(
+          and(eq(players.saveId, saveId), eq(players.teamId, playerTeamId)),
+        );
 
   // Resolve fixture data: from context fixtureMap + matchResults for scores, or fetch
   type FixtureRow = {
@@ -105,7 +116,9 @@ export async function processPlayerStatsAndGrowth(
         awayScore: fixtures.awayScore,
       })
       .from(fixtures)
-      .where(and(eq(fixtures.saveId, saveId), inArray(fixtures.id, fixtureIds)));
+      .where(
+        and(eq(fixtures.saveId, saveId), inArray(fixtures.id, fixtureIds)),
+      );
   }
 
   // Find the match result for player's team
@@ -132,9 +145,7 @@ export async function processPlayerStatsAndGrowth(
     const tacticsRows = await db
       .select({ posture: tactics.posture })
       .from(tactics)
-      .where(
-        and(eq(tactics.saveId, saveId), eq(tactics.teamId, playerTeamId)),
-      )
+      .where(and(eq(tactics.saveId, saveId), eq(tactics.teamId, playerTeamId)))
       .limit(1);
     if (tacticsRows.length > 0 && tacticsRows[0].posture) {
       const p = tacticsRows[0].posture as string;
@@ -143,8 +154,10 @@ export async function processPlayerStatsAndGrowth(
   }
 
   const isHome = fixture.homeTeamId === playerTeamId;
+  const teamScore = isHome ? playerMatch.homeScore : playerMatch.awayScore;
   const opponentScore = isHome ? playerMatch.awayScore : playerMatch.homeScore;
   const isCleanSheet = opponentScore === 0;
+  const teamResult = getMatchResult(teamScore, opponentScore);
 
   // Count goals and assists per player
   const playerGoals = new Map<string, number>();
@@ -248,7 +261,13 @@ export async function processPlayerStatsAndGrowth(
     );
 
     // Apply in-season growth
-    const grownPlayer = applyMatchGrowth(player, minutesPlayed, matchRating);
+    const grownPlayer = applyMatchGrowth(player, minutesPlayed, matchRating, {
+      teamResult,
+      goals,
+      assists,
+      goalsConceded: opponentScore,
+      cleanSheet: isCleanSheet,
+    });
 
     // Update form ratings
     const newLastFiveRatings = [
