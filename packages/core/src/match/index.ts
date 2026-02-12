@@ -12,6 +12,7 @@ import type {
   Fixture,
 } from '../types';
 import { calculateOverall } from '../types';
+import { sampleAttendance } from '../attendance';
 import {
   EVENT_PROBABILITY_PER_MINUTE,
   BASE_GOAL_CONVERSION,
@@ -892,10 +893,7 @@ export function simulateMatch(config: MatchConfig): MatchResult {
     homeScore: state.homeScore,
     awayScore: state.awayScore,
     events: state.events,
-    attendance: randomInt(
-      Math.floor(homeTeam.capacity * 0.5),
-      homeTeam.capacity,
-    ),
+    attendance: sampleAttendance(homeTeam, awayTeam, homeTeam.capacity),
     date: new Date().toISOString(),
   };
 }
@@ -1122,10 +1120,10 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       homeTeam,
       awayTeam,
       state,
-      attendance: randomInt(
-        Math.floor(homeTeam.capacity * 0.5),
-        homeTeam.capacity,
-      ),
+      attendance: sampleAttendance(homeTeam, awayTeam, homeTeam.capacity, {
+        round: currentRound,
+        totalRounds,
+      }),
     });
   }
 

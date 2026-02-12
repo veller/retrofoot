@@ -93,6 +93,69 @@ Players can pause at any time to:
 | `corner`         | Corner kick awarded             |
 | `free_kick`      | Free kick in dangerous position |
 
+### Attendance Model
+
+Attendance uses one shared model for pre-match expectations, match simulation, and
+finance projections.
+
+Inputs:
+
+- Home team reputation
+- Home team momentum
+- Away team reputation
+- Stadium capacity
+- Fixture round (optional, with `totalRounds`)
+
+Central expectation:
+
+```
+baseFillRate = 0.35 + (homeReputation * 0.004)
+opponentAttraction = awayReputation * 0.0018
+momentumEffect = ((homeMomentum - 50) / 50) * 0.06
+
+balancedFixtureFactor = clamp(1 - abs(homeReputation - awayReputation) / 40, 0, 1)
+qualityFactor = (homeReputation + awayReputation) / 200
+fixturePrestigeBoost = balancedFixtureFactor * qualityFactor * 0.03
+
+roundProgress = clamp((round - 1) / (totalRounds - 1), 0, 1) // if round+total provided
+roundImportanceBoost = roundProgress * 0.04
+
+fillRate = clamp(
+  baseFillRate +
+  opponentAttraction +
+  momentumEffect +
+  fixturePrestigeBoost +
+  roundImportanceBoost,
+  0.35,
+  0.98
+)
+
+expectedAttendance = round(stadiumCapacity * fillRate)
+```
+
+Pre-match expected range (narrow confidence band):
+
+```
+uncertainty = clamp(
+  0.08 + ((100 - homeReputation) / 100) * 0.02 - roundProgress * 0.02,
+  0.06,
+  0.10
+)
+
+minAttendance = clamp(round(expectedAttendance * (1 - uncertainty)), 0, stadiumCapacity)
+maxAttendance = clamp(round(expectedAttendance * (1 + uncertainty)), 0, stadiumCapacity)
+```
+
+Matchday sampling:
+
+```
+// Center-weighted random draw (more likely near expected value)
+centered = (random() + random()) / 2
+attendance = round(minAttendance + centered * (maxAttendance - minAttendance))
+```
+
+All final attendance values are integers and clamped to `[0, stadiumCapacity]`.
+
 ## Player System
 
 ### Attributes (15 total)

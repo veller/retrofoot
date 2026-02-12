@@ -20,6 +20,19 @@ function getPlaybackSpeedLabel(speed: PlaybackSpeed): string {
   }
 }
 
+function getPlaybackSpeedMobileLabel(speed: PlaybackSpeed): string {
+  switch (speed) {
+    case 1:
+      return '1x';
+    case 3:
+      return '3x';
+    case 5:
+      return '5x';
+    default:
+      return '1x';
+  }
+}
+
 function getNextPlaybackSpeed(speed: PlaybackSpeed): PlaybackSpeed {
   switch (speed) {
     case 1:
@@ -409,7 +422,7 @@ function MobileControlBar({
             onClick={() => onSpeedChange(getNextPlaybackSpeed(playbackSpeed))}
             className="shrink-0 px-4 py-3 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors"
           >
-            Game speed: {getPlaybackSpeedLabel(playbackSpeed)}
+            Speed: {getPlaybackSpeedMobileLabel(playbackSpeed)}
           </button>
         )}
         {isLive && !isPaused && (
@@ -438,7 +451,7 @@ function MobileControlBar({
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-700 active:bg-slate-600 text-white font-medium rounded-lg transition-colors"
           >
             <SubstitutionIcon className="w-5 h-5" />
-            <span>Team Changes</span>
+            <span>Team</span>
           </button>
         )}
 

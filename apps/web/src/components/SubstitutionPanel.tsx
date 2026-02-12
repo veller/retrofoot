@@ -124,6 +124,7 @@ export function SubstitutionPanel({
   const [selectedLineupPlayer, setSelectedLineupPlayer] = useState<
     string | null
   >(null);
+  const [isHintsOpen, setIsHintsOpen] = useState(false);
   const [selectedFormation, setSelectedFormation] = useState<FormationType>(
     currentTactics.formation,
   );
@@ -215,9 +216,9 @@ export function SubstitutionPanel({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleDone]);
 
-  const scoreLabel = isHome
-    ? `${matchState.homeScore} – ${matchState.awayScore}`
-    : `${matchState.awayScore} – ${matchState.homeScore}`;
+  const homeTeam = isHome ? playerTeam : opponentTeam;
+  const awayTeam = isHome ? opponentTeam : playerTeam;
+  const scoreLabel = `${matchState.homeScore} – ${matchState.awayScore}`;
 
   const nonNeutralFormationHints = hints.formationMatchupHints.filter(
     (k) => k !== 'neutral',
@@ -254,9 +255,9 @@ export function SubstitutionPanel({
                 Half-time
               </h2>
               <div className="flex items-center justify-center gap-3">
-                <TeamShield team={playerTeam} />
+                <TeamShield team={homeTeam} />
                 <p className="text-white font-bold text-4xl">{scoreLabel}</p>
-                <TeamShield team={opponentTeam} />
+                <TeamShield team={awayTeam} />
               </div>
               <p className="text-slate-500 text-sm mt-2 text-center">
                 {isHome ? 'You’re at home' : 'You’re away'}
@@ -264,29 +265,46 @@ export function SubstitutionPanel({
             </div>
 
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
-              <h2 className="text-slate-400 text-xs uppercase mb-2">Hints</h2>
-              <p className="text-pitch-200 text-sm mb-3">
-                {SITUATION_COPY[hints.situation]}
-              </p>
-              <p className="text-slate-400 text-xs uppercase mb-2">Posture</p>
-              <ul className="space-y-1.5 text-sm text-slate-300">
-                {POSTURE_OPTIONS.map((posture) => (
-                  <li key={posture}>
-                    <span className="font-medium text-white">
-                      {POSTURE_LABEL[posture]}:
-                    </span>{' '}
-                    {POSTURE_HINT_COPY[hints.postureHints[posture]]}
-                  </li>
-                ))}
-              </ul>
-              <p className="text-slate-400 text-xs uppercase mt-3 mb-2">
-                Formation
-              </p>
-              <ul className="space-y-1 text-sm text-slate-300">
-                {formationMatchupLines.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
+              <button
+                type="button"
+                onClick={() => setIsHintsOpen((prev) => !prev)}
+                className="w-full flex items-center justify-between text-left"
+                aria-expanded={isHintsOpen}
+                aria-controls="team-changes-hints-content"
+              >
+                <h2 className="text-slate-400 text-xs uppercase">Hints</h2>
+                <span className="text-slate-400 text-xs">
+                  {isHintsOpen ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {isHintsOpen ? (
+                <div id="team-changes-hints-content" className="mt-3">
+                  <p className="text-pitch-200 text-sm mb-3">
+                    {SITUATION_COPY[hints.situation]}
+                  </p>
+                  <p className="text-slate-400 text-xs uppercase mb-2">
+                    Posture
+                  </p>
+                  <ul className="space-y-1.5 text-sm text-slate-300">
+                    {POSTURE_OPTIONS.map((posture) => (
+                      <li key={posture}>
+                        <span className="font-medium text-white">
+                          {POSTURE_LABEL[posture]}:
+                        </span>{' '}
+                        {POSTURE_HINT_COPY[hints.postureHints[posture]]}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-slate-400 text-xs uppercase mt-3 mb-2">
+                    Formation
+                  </p>
+                  <ul className="space-y-1 text-sm text-slate-300">
+                    {formationMatchupLines.map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </aside>
 
@@ -294,8 +312,8 @@ export function SubstitutionPanel({
           <div className="flex-1 min-w-0 space-y-6">
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
               <h2 className="text-white font-bold mb-4">Formation & Posture</h2>
-              <div className="flex flex-row gap-6 items-end flex-wrap">
-                <div className="min-w-0 flex-1">
+              <div className="flex flex-col gap-4 md:flex-row md:gap-6 md:items-end">
+                <div className="min-w-0 w-full md:flex-1">
                   <p className="text-slate-400 text-xs uppercase mb-2">
                     Formation
                   </p>
@@ -327,11 +345,11 @@ export function SubstitutionPanel({
                   )}
                 </div>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 w-full md:flex-1">
                   <p className="text-slate-400 text-xs uppercase mb-2">
                     Posture
                   </p>
-                  <div className="flex flex-wrap gap-2 h-10 items-center">
+                  <div className="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:items-center">
                     {POSTURE_OPTIONS.map((posture) => {
                       const isSelected = selectedPosture === posture;
                       return (
@@ -340,8 +358,8 @@ export function SubstitutionPanel({
                           onClick={() => setSelectedPosture(posture)}
                           className={
                             isSelected
-                              ? 'h-10 px-3 rounded text-sm font-medium bg-pitch-600 text-white'
-                              : 'h-10 px-3 rounded text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600'
+                              ? 'h-10 w-full md:w-auto px-3 rounded text-sm font-medium bg-pitch-600 text-white'
+                              : 'h-10 w-full md:w-auto px-3 rounded text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600'
                           }
                         >
                           {POSTURE_LABEL[posture]}

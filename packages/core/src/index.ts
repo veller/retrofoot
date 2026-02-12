@@ -24,6 +24,9 @@ export * from './pitch';
 // Re-export financial system
 export * from './finance';
 
+// Re-export attendance model
+export * from './attendance';
+
 // Re-export transfer system
 export * from './transfer';
 

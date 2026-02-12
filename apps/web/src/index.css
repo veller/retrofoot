@@ -458,6 +458,10 @@ body {
   animation: immersive-stadium-enter 0.5s steps(3) both;
 }
 
+.immersive-pitch-enter {
+  animation: immersive-stadium-enter 0.22s ease-out both;
+}
+
 .immersive-player-pop {
   opacity: 0;
   animation: immersive-player-pop 0.28s steps(3) forwards;

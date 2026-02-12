@@ -9,14 +9,10 @@ import type { D1Database } from '@cloudflare/workers-types';
 const DEFAULT_LEAGUE_POSITION = 10;
 const DEFAULT_MOMENTUM = 50;
 const DEFAULT_REPUTATION = 50;
+const DEFAULT_TOTAL_ROUNDS = 38;
 import type { drizzle } from 'drizzle-orm/d1';
 import { eq, and } from 'drizzle-orm';
-import {
-  teams,
-  players,
-  standings,
-  fixtures,
-} from '@retrofoot/db/schema';
+import { teams, players, standings, fixtures } from '@retrofoot/db/schema';
 import {
   calculateAttendance,
   calculateMatchDayIncome,
@@ -107,7 +103,9 @@ export async function processRoundFinances(
           awayTeamId: fixtures.awayTeamId,
         })
         .from(fixtures)
-        .where(and(eq(fixtures.saveId, saveId), eq(fixtures.round, currentRound)));
+        .where(
+          and(eq(fixtures.saveId, saveId), eq(fixtures.round, currentRound)),
+        );
 
   const homeTeamOpponents = new Map<string, string>();
   for (const fixture of roundFixtures) {
@@ -155,6 +153,7 @@ export async function processRoundFinances(
         },
         { reputation: awayRep },
         team.capacity,
+        { round: currentRound, totalRounds: DEFAULT_TOTAL_ROUNDS },
       );
 
       const matchResult = matchResultByHomeTeam.get(team.id);
@@ -296,11 +295,12 @@ export async function processRoundFinances(
       ),
   );
 
-  for (let i = 0; i < transactionStatements.length; i += D1_BATCH_STATEMENT_LIMIT) {
-    const chunk = transactionStatements.slice(
-      i,
-      i + D1_BATCH_STATEMENT_LIMIT,
-    );
+  for (
+    let i = 0;
+    i < transactionStatements.length;
+    i += D1_BATCH_STATEMENT_LIMIT
+  ) {
+    const chunk = transactionStatements.slice(i, i + D1_BATCH_STATEMENT_LIMIT);
     if (chunk.length > 0) await d1.batch(chunk);
   }
 }

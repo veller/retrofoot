@@ -213,27 +213,25 @@ export function PreMatchOverviewImmersiveDesktop({
                   </div>
                 ))}
               </div>
-              <div className="mt-3 border-t border-slate-700 pt-3">
-                <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
-                  Previous Matches
-                </p>
-                <div className="flex gap-1">
-                  {homeTeam.lastFiveResults?.length ? (
-                    homeTeam.lastFiveResults
+              {homeTeam.lastFiveResults?.length ? (
+                <div className="mt-3 border-t border-slate-700 pt-3">
+                  <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
+                    Previous Matches
+                  </p>
+                  <div className="flex gap-1">
+                    {homeTeam.lastFiveResults
                       .slice(0, 5)
                       .map((result, index) => (
                         <ResultBadge key={`home-${index}`} result={result} />
-                      ))
-                  ) : (
-                    <span className="text-xs text-slate-500">No data</span>
-                  )}
+                      ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </aside>
 
             <div
               id="immersive-stadium-scene"
-              className="relative min-h-[470px] immersive-stadium-enter"
+              className="relative min-h-[470px]"
             >
               <div id="immersive-stadium-bowl" className="absolute inset-0" />
               <div
@@ -254,7 +252,9 @@ export function PreMatchOverviewImmersiveDesktop({
                 playersById={pitchPlayersById}
                 formation={hostData.displayFormation as FormationType}
                 opponentLineup={opponentLineupIds}
-                opponentFormation={opponentData.displayFormation as FormationType}
+                opponentFormation={
+                  opponentData.displayFormation as FormationType
+                }
                 posture={playerTactics.posture}
                 hideBench
                 hostPinBorderColor={hostPrimaryColor}
@@ -269,7 +269,7 @@ export function PreMatchOverviewImmersiveDesktop({
                 staggerStepSeconds={staggerSeconds}
                 rootClassName="relative z-10 h-full min-h-[470px]"
                 pitchWrapperClassName="relative h-full min-h-[470px] w-full"
-                pitchContainerClassName="absolute left-[2%] right-[2%] top-[14%] bottom-[10%] overflow-hidden rounded-xl border-2 border-white/80"
+                pitchContainerClassName="absolute left-[2%] right-[2%] top-[14%] bottom-[10%] overflow-hidden rounded-xl border-2 border-white/80 immersive-pitch-enter"
                 pitchStyle={{ aspectRatio: 'auto' }}
               />
               <Stands
@@ -333,22 +333,20 @@ export function PreMatchOverviewImmersiveDesktop({
                   </div>
                 ))}
               </div>
-              <div className="mt-3 border-t border-slate-700 pt-3">
-                <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
-                  Previous Matches
-                </p>
-                <div className="flex gap-1">
-                  {awayTeam.lastFiveResults?.length ? (
-                    awayTeam.lastFiveResults
+              {awayTeam.lastFiveResults?.length ? (
+                <div className="mt-3 border-t border-slate-700 pt-3">
+                  <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
+                    Previous Matches
+                  </p>
+                  <div className="flex gap-1">
+                    {awayTeam.lastFiveResults
                       .slice(0, 5)
                       .map((result, index) => (
                         <ResultBadge key={`away-${index}`} result={result} />
-                      ))
-                  ) : (
-                    <span className="text-xs text-slate-500">No data</span>
-                  )}
+                      ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </aside>
           </div>
 

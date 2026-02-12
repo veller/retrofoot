@@ -1,6 +1,10 @@
 import { useMemo } from 'react';
 import type { Team, Fixture, Tactics, Player } from '@retrofoot/core';
-import { calculateOverall, selectBestLineup } from '@retrofoot/core';
+import {
+  calculateAttendanceRange,
+  calculateOverall,
+  selectBestLineup,
+} from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
 import { PreMatchOverviewImmersiveDesktop } from './PreMatchOverviewImmersiveDesktop';
 
@@ -13,6 +17,8 @@ interface PreMatchOverviewProps {
   onConfirm: () => void;
   onBack: () => void;
 }
+
+const DEFAULT_TOTAL_ROUNDS = 38;
 
 // Small form badge for mobile
 function FormBadgeSmall({ result }: { result: 'W' | 'D' | 'L' }) {
@@ -78,6 +84,9 @@ function MobileComparisonView({
   playerTactics: Tactics;
   venue: string;
 }) {
+  const hasAnyFormData =
+    Boolean(homeTeam.lastFiveResults?.length) ||
+    Boolean(awayTeam.lastFiveResults?.length);
   const homeData = useTeamLineup(
     homeTeam,
     isPlayerHome ? playerTactics : undefined,
@@ -143,23 +152,27 @@ function MobileComparisonView({
           </span>
 
           {/* Form */}
-          <div className="flex gap-0.5 justify-center">
-            {homeTeam.lastFiveResults
-              ?.slice(0, 5)
-              .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
-              <span className="text-slate-500 text-[10px]">-</span>
-            )}
-          </div>
-          <span className="text-slate-500 text-[10px] uppercase px-2">
-            Form
-          </span>
-          <div className="flex gap-0.5 justify-center">
-            {awayTeam.lastFiveResults
-              ?.slice(0, 5)
-              .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
-              <span className="text-slate-500 text-[10px]">-</span>
-            )}
-          </div>
+          {hasAnyFormData ? (
+            <>
+              <div className="flex gap-0.5 justify-center">
+                {homeTeam.lastFiveResults
+                  ?.slice(0, 5)
+                  .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
+                  <span className="text-slate-500 text-[10px]">-</span>
+                )}
+              </div>
+              <span className="text-slate-500 text-[10px] uppercase px-2">
+                Form
+              </span>
+              <div className="flex gap-0.5 justify-center">
+                {awayTeam.lastFiveResults
+                  ?.slice(0, 5)
+                  .map((r, i) => <FormBadgeSmall key={i} result={r} />) || (
+                  <span className="text-slate-500 text-[10px]">-</span>
+                )}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -279,10 +292,23 @@ export function PreMatchOverview({
   const isPlayerHome = fixture.homeTeamId === playerTeamId;
 
   const expectedAttendance = useMemo(() => {
-    const min = Math.floor(homeTeam.capacity * 0.5);
-    const max = homeTeam.capacity;
+    const { min, max } = calculateAttendanceRange(
+      {
+        reputation: homeTeam.reputation,
+        momentum: homeTeam.momentum,
+      },
+      { reputation: awayTeam.reputation },
+      homeTeam.capacity,
+      { round: fixture.round, totalRounds: DEFAULT_TOTAL_ROUNDS },
+    );
     return `${min.toLocaleString()} - ${max.toLocaleString()}`;
-  }, [homeTeam.capacity]);
+  }, [
+    awayTeam.reputation,
+    fixture.round,
+    homeTeam.capacity,
+    homeTeam.momentum,
+    homeTeam.reputation,
+  ]);
 
   return (
     <div

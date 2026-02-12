@@ -11,6 +11,7 @@ import type {
   FinancialTransaction,
   FinanceCategory,
 } from '../types';
+import { calculateAttendanceExpectation } from '../attendance';
 
 // ============================================================================
 // CONSTANTS
@@ -63,20 +64,14 @@ export function calculateAttendance(
   homeTeam: Pick<Team, 'reputation' | 'momentum'>,
   awayTeam: Pick<Team, 'reputation'>,
   stadiumCapacity: number,
+  options: { round?: number; totalRounds?: number } = {},
 ): number {
-  // Base fill rate from reputation (50-90%)
-  const baseFillRate = 0.4 + (homeTeam.reputation / 100) * 0.5;
-
-  // Opponent boost (big games fill more) - 0 to 0.5
-  const opponentBoost = awayTeam.reputation / 200;
-
-  // Momentum factor (winning teams draw crowds) - -0.25 to +0.25
-  const momentumFactor = (homeTeam.momentum - 50) / 200;
-
-  // Calculate final fill rate, capped at 100%
-  const fillRate = Math.min(1, baseFillRate + opponentBoost + momentumFactor);
-
-  return Math.floor(stadiumCapacity * fillRate);
+  return calculateAttendanceExpectation(
+    homeTeam,
+    awayTeam,
+    stadiumCapacity,
+    options,
+  );
 }
 
 /**
