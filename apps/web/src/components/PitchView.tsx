@@ -131,6 +131,19 @@ interface PitchViewProps {
   pitchStyle?: CSSProperties;
 }
 
+function clampPitchPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function getMidfielderHookY(
+  posture: TacticalPosture | null | undefined,
+  offensiveMidfieldShiftX: number,
+): number {
+  if (posture === 'defensive') return 47;
+  if (posture === 'attacking') return 53 + offensiveMidfieldShiftX;
+  return 50;
+}
+
 export function PitchView({
   lineup,
   substitutes,
@@ -156,7 +169,7 @@ export function PitchView({
   hostPinTextColor,
   opponentPinBorderColor = '#94a3b8',
   opponentPinTextColor = '#ffffff',
-  opponentPinOpacity = 0.75,
+  opponentPinOpacity = 0.3,
   hostPinClassName = '',
   opponentPinClassName = '',
   offensiveMidfieldShiftX = 0,
@@ -176,24 +189,25 @@ export function PitchView({
     ? getFormationSlotCoordinates(opponentFormation)
     : null;
 
-  function getPostureXOffset(position: Position): number {
-    if (position === 'GK') return 0;
+  function getDefenderDepthOffset(): number {
     if (!posture) return 0;
-    if (posture === 'balanced') {
-      if (position === 'MID' || position === 'ATT') return 3;
-      return 5; // DEF
-    }
-    if (posture === 'attacking') {
-      if (position === 'MID') return 6 + offensiveMidfieldShiftX;
-      if (position === 'ATT') return 4;
-      return 5; // DEF
-    }
-    // defensive
-    const direction = -1;
-    if (position === 'DEF') return 2.4 * direction;
-    if (position === 'MID') return 1.4 * direction;
-    if (position === 'ATT') return 0.8 * direction;
-    return 0;
+    if (posture === 'balanced' || posture === 'attacking') return 5;
+    return -2.4;
+  }
+
+  // Tactical hook anchors (0-100 depth axis, left-to-right attack direction).
+  const goalkeeperHookY = 8;
+  const midfielderHookY = getMidfielderHookY(posture, offensiveMidfieldShiftX);
+  const strikerHookY = 80;
+
+  function getHostPinDepthY(position: Position, coord: SlotCoordinate): number {
+    if (position === 'GK') return clampPitchPercent(goalkeeperHookY);
+    // Some pitch variants don't provide tactical posture; keep legacy formation depth there.
+    if (!posture) return clampPitchPercent(coord.y);
+    if (position === 'MID') return clampPitchPercent(midfielderHookY);
+    if (position === 'ATT') return clampPitchPercent(strikerHookY);
+    // Keep defenders anchored to formation depth with existing posture offsets.
+    return clampPitchPercent(coord.y + getDefenderDepthOffset());
   }
 
   return (
@@ -317,7 +331,7 @@ export function PitchView({
                 key={playerId}
                 className="absolute z-20 -translate-x-1/2 -translate-y-1/2 group"
                 style={{
-                  left: `${coord.y + getPostureXOffset(player.position)}%`,
+                  left: `${getHostPinDepthY(player.position, coord)}%`,
                   top: `${coord.x + hostTopOffsetPercent}%`,
                 }}
               >

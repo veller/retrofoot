@@ -251,12 +251,13 @@ export function PreMatchOverviewImmersiveDesktop({
                 formation={homeData.displayFormation as FormationType}
                 opponentLineup={awayLineupIds}
                 opponentFormation={awayData.displayFormation as FormationType}
+                posture={isPlayerHome ? playerTactics.posture : 'balanced'}
                 hideBench
                 hostPinBorderColor={homePrimaryColor}
                 hostPinTextColor="#ffffff"
                 opponentPinBorderColor="#94a3b8"
                 opponentPinTextColor="#ffffff"
-                opponentPinOpacity={0.75}
+                opponentPinOpacity={0.3}
                 hostPinClassName="immersive-player-pop"
                 opponentPinClassName="immersive-player-pop"
                 offensiveMidfieldShiftX={5}
