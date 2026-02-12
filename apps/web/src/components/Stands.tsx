@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import type { Player } from '@retrofoot/core';
 
 type SeatKind = 'empty' | 'home' | 'away';
 
@@ -54,6 +56,96 @@ interface StandsProps {
   awayFanRatio?: number;
   rows?: number;
   cols?: number;
+  homeLastFiveResults?: ('W' | 'D' | 'L')[];
+  homeFormation?: string;
+  homeLineup?: Player[];
+}
+
+interface BubbleMessage {
+  id: string;
+  seatKey: string;
+  text: string;
+}
+
+const BUBBLE_DURATION_MS = 4200;
+const BUBBLE_MIN_DELAY_MS = 1800;
+const BUBBLE_MAX_DELAY_MS = 4600;
+const AWAY_BUBBLE_INTERVAL_MS = 10000;
+const MAX_ACTIVE_BUBBLES = 2;
+
+function toFirstName(input: string): string {
+  const normalized = input.trim();
+  if (!normalized) return 'the striker';
+  return normalized.split(/\s+/)[0] || 'the striker';
+}
+
+function resolveStrikerFirstName(lineup: Player[]): string {
+  const attacker = lineup.find((player) => player.position === 'ATT');
+  if (attacker?.nickname?.trim()) return toFirstName(attacker.nickname);
+  if (attacker?.name?.trim()) return toFirstName(attacker.name);
+
+  const fallback = lineup[0];
+  if (fallback?.nickname?.trim()) return toFirstName(fallback.nickname);
+  if (fallback?.name?.trim()) return toFirstName(fallback.name);
+
+  return 'the striker';
+}
+
+function resolveDefenderFirstName(lineup: Player[]): string {
+  const defender = lineup.find((player) => player.position === 'DEF');
+  if (defender?.nickname?.trim()) return toFirstName(defender.nickname);
+  if (defender?.name?.trim()) return toFirstName(defender.name);
+
+  const fallback = lineup[0];
+  if (fallback?.nickname?.trim()) return toFirstName(fallback.nickname);
+  if (fallback?.name?.trim()) return toFirstName(fallback.name);
+
+  return 'our center-back';
+}
+
+function countTailStreak(
+  results: ('W' | 'D' | 'L')[],
+  target: 'W' | 'L',
+): number {
+  let streak = 0;
+  for (let i = results.length - 1; i >= 0; i--) {
+    if (results[i] !== target) break;
+    streak++;
+  }
+  return streak;
+}
+
+function randomInt(maxExclusive: number): number {
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function randomDelayMs(): number {
+  return (
+    BUBBLE_MIN_DELAY_MS +
+    randomInt(BUBBLE_MAX_DELAY_MS - BUBBLE_MIN_DELAY_MS + 1)
+  );
+}
+
+function fillTemplate(
+  template: string,
+  tokens: { strikerFirstName: string; defenderFirstName: string; formation: string },
+): string {
+  return template
+    .replace(/\{strikerFirstName\}/g, tokens.strikerFirstName)
+    .replace(/\{defenderFirstName\}/g, tokens.defenderFirstName)
+    .replace(/\{formation\}/g, tokens.formation);
+}
+
+function pickCommentWithoutImmediateRepeat(
+  pool: string[],
+  latestComment: string | null,
+): string {
+  if (pool.length <= 1) return pool[0] || '';
+  const candidates = latestComment
+    ? pool.filter((entry) => entry !== latestComment)
+    : pool;
+  if (candidates.length === 0) return pool[randomInt(pool.length)];
+  return candidates[randomInt(candidates.length)];
 }
 
 interface GenerateSeatGridParams {
@@ -205,7 +297,13 @@ export function Stands({
   awayFanRatio = 0.1,
   rows = 3,
   cols = 20,
+  homeLastFiveResults = [],
+  homeFormation = '4-3-3',
+  homeLineup = [],
 }: StandsProps) {
+  const [activeBubbles, setActiveBubbles] = useState<BubbleMessage[]>([]);
+  const latestHomeCommentRef = useRef<string | null>(null);
+  const latestAwayCommentRef = useRef<string | null>(null);
   const seatRows = generateSeatGrid({
     capacity,
     expectedAttendance,
@@ -222,6 +320,227 @@ export function Stands({
     awayShirt,
     awayShirtDark: darkenHex(awayShirt, 0.35),
   };
+  const homeSeatKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (let rowIndex = 0; rowIndex < seatRows.length; rowIndex++) {
+      const row = seatRows[rowIndex];
+      for (let seatIndex = 0; seatIndex < row.length; seatIndex++) {
+        if (row[seatIndex] === 'home') keys.push(`${rowIndex}-${seatIndex}`);
+      }
+    }
+    return keys;
+  }, [seatRows]);
+  const awaySeatKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (let rowIndex = 0; rowIndex < seatRows.length; rowIndex++) {
+      const row = seatRows[rowIndex];
+      for (let seatIndex = 0; seatIndex < row.length; seatIndex++) {
+        if (row[seatIndex] === 'away') keys.push(`${rowIndex}-${seatIndex}`);
+      }
+    }
+    return keys;
+  }, [seatRows]);
+  const strikerFirstName = useMemo(
+    () => resolveStrikerFirstName(homeLineup),
+    [homeLineup],
+  );
+  const defenderFirstName = useMemo(
+    () => resolveDefenderFirstName(homeLineup),
+    [homeLineup],
+  );
+  const winStreak = useMemo(
+    () => countTailStreak(homeLastFiveResults, 'W'),
+    [homeLastFiveResults],
+  );
+  const lossStreak = useMemo(
+    () => countTailStreak(homeLastFiveResults, 'L'),
+    [homeLastFiveResults],
+  );
+
+  const commentPool = useMemo(() => {
+    const winningComments = [
+      'i hope {strikerFirstName} scores today',
+      'i love when they play {formation}',
+      'one more win and we fly',
+      'our attack is cooking lately',
+      'this squad is full confidence',
+      'keep pressing, keep scoring',
+      '{strikerFirstName} is on fire today',
+      '{formation} is pure football art',
+      'this team is playing with swagger',
+      'we are about to put on a show',
+      'the crowd can smell another win',
+      'if we strike first this is over',
+      'best grilled corn in the league',
+      'hot dogs taste better on win streaks',
+    ];
+
+    const losingComments = [
+      'i cant believe they insist on {formation}',
+      'this defense is the worst',
+      'another bad start and i go silent',
+      'we need changes in midfield',
+      'please stop giving the ball away',
+      'why are we so open at the back',
+      '{formation} again? really?',
+      'we need heart today, not excuses',
+      'my nerves cant take another collapse',
+      'somebody please mark their striker',
+      'we need to fight for every ball',
+      'this back line is giving me gray hair',
+      'the chips are cold and so is our form',
+      'even the stadium burger gave up on us',
+      "if {defenderFirstName} scores another own goal i'm divorcing my wife",
+    ];
+
+    const neutralComments = [
+      'come on lads, wake up',
+      'big game, big noise',
+      'i just want a clean sheet',
+      'first tackle sets the tone',
+      'stadium is buzzing tonight',
+      'one early goal changes everything',
+      'lets see who steps up',
+      'ninety minutes, no fear',
+      'play simple and move the ball',
+      'this is where heroes are made',
+      'every duel matters today',
+      'give us effort and we sing all night',
+      'the popcorn is elite tonight',
+      'food is good, now give us goals',
+    ];
+
+    const tokens = {
+      strikerFirstName,
+      defenderFirstName,
+      formation: homeFormation || '4-3-3',
+    };
+
+    if (winStreak >= 1) {
+      return winningComments.map((entry) => fillTemplate(entry, tokens));
+    }
+    if (lossStreak >= 1) {
+      return losingComments.map((entry) => fillTemplate(entry, tokens));
+    }
+    return neutralComments.map((entry) => fillTemplate(entry, tokens));
+  }, [defenderFirstName, homeFormation, lossStreak, strikerFirstName, winStreak]);
+  const awayCommentPool = useMemo(
+    () => [
+      '10h driving to see them',
+      'away end still louder than theirs',
+      'long trip, no regrets',
+      'we came far, sing harder',
+      'fuel, tolls, and full voice',
+      'rain or sun, we travel',
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    setActiveBubbles([]);
+    latestHomeCommentRef.current = null;
+    latestAwayCommentRef.current = null;
+  }, [homeFormation, homeLastFiveResults, strikerFirstName, homeSeatKeys.length]);
+
+  useEffect(() => {
+    if (homeSeatKeys.length === 0 || commentPool.length === 0) return;
+
+    let mounted = true;
+    const timeoutHandles = new Set<number>();
+
+    const scheduleNext = () => {
+      if (!mounted) return;
+      const spawnHandle = window.setTimeout(() => {
+        if (!mounted) return;
+        const seatChoice = homeSeatKeys[randomInt(homeSeatKeys.length)];
+        const textChoice = pickCommentWithoutImmediateRepeat(
+          commentPool,
+          latestHomeCommentRef.current,
+        );
+        latestHomeCommentRef.current = textChoice;
+
+        setActiveBubbles((current) => {
+          const nextId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const next: BubbleMessage = {
+            id: nextId,
+            seatKey: seatChoice,
+            text: textChoice,
+          };
+
+          const withoutSameSeat = current.filter(
+            (bubble) => bubble.seatKey !== seatChoice,
+          );
+          const nextMessages = [...withoutSameSeat.slice(-(MAX_ACTIVE_BUBBLES - 1)), next];
+
+          const cleanupHandle = window.setTimeout(() => {
+            setActiveBubbles((live) => live.filter((bubble) => bubble.id !== nextId));
+            timeoutHandles.delete(cleanupHandle);
+          }, BUBBLE_DURATION_MS);
+          timeoutHandles.add(cleanupHandle);
+
+          return nextMessages;
+        });
+
+        timeoutHandles.delete(spawnHandle);
+        scheduleNext();
+      }, randomDelayMs());
+
+      timeoutHandles.add(spawnHandle);
+    };
+
+    scheduleNext();
+
+    return () => {
+      mounted = false;
+      timeoutHandles.forEach((handle) => window.clearTimeout(handle));
+      timeoutHandles.clear();
+    };
+  }, [commentPool, homeSeatKeys]);
+
+  useEffect(() => {
+    if (awaySeatKeys.length === 0 || awayCommentPool.length === 0) return;
+
+    let mounted = true;
+    const timeoutHandles = new Set<number>();
+
+    const intervalHandle = window.setInterval(() => {
+      if (!mounted) return;
+      const seatChoice = awaySeatKeys[randomInt(awaySeatKeys.length)];
+      const textChoice = pickCommentWithoutImmediateRepeat(
+        awayCommentPool,
+        latestAwayCommentRef.current,
+      );
+      latestAwayCommentRef.current = textChoice;
+
+      setActiveBubbles((current) => {
+        const nextId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const next: BubbleMessage = {
+          id: nextId,
+          seatKey: seatChoice,
+          text: textChoice,
+        };
+        const withoutSameSeat = current.filter(
+          (bubble) => bubble.seatKey !== seatChoice,
+        );
+        const nextMessages = [...withoutSameSeat.slice(-(MAX_ACTIVE_BUBBLES - 1)), next];
+
+        const cleanupHandle = window.setTimeout(() => {
+          setActiveBubbles((live) => live.filter((bubble) => bubble.id !== nextId));
+          timeoutHandles.delete(cleanupHandle);
+        }, BUBBLE_DURATION_MS);
+        timeoutHandles.add(cleanupHandle);
+
+        return nextMessages;
+      });
+    }, AWAY_BUBBLE_INTERVAL_MS);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalHandle);
+      timeoutHandles.forEach((handle) => window.clearTimeout(handle));
+      timeoutHandles.clear();
+    };
+  }, [awayCommentPool, awaySeatKeys]);
 
   const standContentWidth =
     cols * PERSON_WIDTH +
@@ -242,18 +561,33 @@ export function Stands({
               key={rowIndex}
               className="flex w-fit items-center gap-[2px] bg-[#2a2a3e] px-[2px] py-[1px]"
             >
-              {row.map((seat, seatIndex) => (
-                <div
-                  key={`${rowIndex}-${seatIndex}`}
-                  className="relative shrink-0"
-                  style={{
-                    width: `${PERSON_WIDTH}px`,
-                    height: `${PERSON_HEIGHT}px`,
-                    ...getSeatStyle(seat, colorSet),
-                    imageRendering: 'pixelated',
-                  }}
-                />
-              ))}
+              {row.map((seat, seatIndex) => {
+                const seatKey = `${rowIndex}-${seatIndex}`;
+                const bubble = activeBubbles.find(
+                  (entry) => entry.seatKey === seatKey,
+                );
+
+                return (
+                  <div
+                    key={seatKey}
+                    className="relative shrink-0"
+                    style={{
+                      width: `${PERSON_WIDTH}px`,
+                      height: `${PERSON_HEIGHT}px`,
+                      ...getSeatStyle(seat, colorSet),
+                      imageRendering: 'pixelated',
+                    }}
+                  >
+                    {(seat === 'home' || seat === 'away') && bubble?.text && (
+                      <div className="immersive-stand-bubble" role="presentation">
+                        <span className="immersive-stand-bubble__text">
+                          {bubble.text}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ))}
         </div>

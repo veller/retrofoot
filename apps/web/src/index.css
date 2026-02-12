@@ -468,6 +468,79 @@ body {
   animation: immersive-info-reveal 0.4s ease-out forwards;
 }
 
+@keyframes immersive-stand-bubble {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.78);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -2px) scale(1);
+  }
+  72% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -9px) scale(0.9);
+  }
+}
+
+.immersive-stand-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: 180px;
+  padding: 3px 4px;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.94);
+  box-shadow: 0 3px 0 rgba(2, 6, 23, 0.75);
+  image-rendering: pixelated;
+  overflow: visible;
+  animation: immersive-stand-bubble 4.2s ease-out forwards;
+}
+
+.immersive-stand-bubble::before,
+.immersive-stand-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 1px);
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+}
+
+.immersive-stand-bubble::before {
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid rgba(148, 163, 184, 0.8);
+}
+
+.immersive-stand-bubble::after {
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 5px solid rgba(15, 23, 42, 0.94);
+}
+
+.immersive-stand-bubble__text {
+  display: block;
+  font-family:
+    'Press Start 2P', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+  font-size: 8px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #f8fafc;
+  text-wrap: balance;
+  white-space: normal;
+}
+
 @keyframes immersive-tv-zero-flicker {
   0%,
   86%,

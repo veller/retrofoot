@@ -329,7 +329,7 @@ export function PitchView({
             return (
               <div
                 key={playerId}
-                className="absolute z-20 -translate-x-1/2 -translate-y-1/2 group"
+                className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 group ${hostPinClassName}`}
                 style={{
                   left: `${getHostPinDepthY(player.position, coord)}%`,
                   top: `${coord.x + hostTopOffsetPercent}%`,
@@ -374,7 +374,7 @@ export function PitchView({
                     (e.key === 'Enter' || e.key === ' ') &&
                     onPlayerClick?.({ type: 'lineup', index }, playerId)
                   }
-                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getPitchSlotCursorClass(hasDnD, onPlayerClick)} ${hostPinClassName}`}
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getPitchSlotCursorClass(hasDnD, onPlayerClick)}`}
                   style={{
                     borderColor: hostPinBorderColor,
                     color: hostPinTextColor,

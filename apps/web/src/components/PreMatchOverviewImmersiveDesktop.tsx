@@ -279,6 +279,9 @@ export function PreMatchOverviewImmersiveDesktop({
                 awayFanRatio={0.1}
                 rows={3}
                 cols={20}
+                homeLastFiveResults={homeTeam.lastFiveResults}
+                homeFormation={homeData.displayFormation}
+                homeLineup={homeData.lineup}
               />
             </div>
 
