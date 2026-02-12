@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Team, Fixture, Tactics, Player } from '@retrofoot/core';
 import { calculateOverall, selectBestLineup } from '@retrofoot/core';
 import { TeamShield } from './TeamShield';
+import { PreMatchOverviewImmersiveDesktop } from './PreMatchOverviewImmersiveDesktop';
 
 interface PreMatchOverviewProps {
   fixture: Fixture;
@@ -11,22 +12,6 @@ interface PreMatchOverviewProps {
   playerTactics: Tactics;
   onConfirm: () => void;
   onBack: () => void;
-}
-
-function FormBadge({ result }: { result: 'W' | 'D' | 'L' }) {
-  const colors = {
-    W: 'bg-green-600',
-    D: 'bg-yellow-500',
-    L: 'bg-red-600',
-  };
-
-  return (
-    <span
-      className={`${colors[result]} text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded`}
-    >
-      {result}
-    </span>
-  );
 }
 
 // Small form badge for mobile
@@ -77,99 +62,6 @@ function useTeamLineup(team: Team, tactics?: Tactics, formation?: string) {
   }, [lineup]);
 
   return { lineup, avgOverall, displayFormation };
-}
-
-// Desktop Team Card (existing design)
-function TeamOverview({
-  team,
-  tactics,
-  isOpponent,
-  formation,
-}: {
-  team: Team;
-  tactics?: Tactics;
-  isOpponent: boolean;
-  formation?: string;
-}) {
-  const { lineup, avgOverall, displayFormation } = useTeamLineup(
-    team,
-    tactics,
-    formation,
-  );
-
-  return (
-    <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <TeamShield team={team} />
-          <div>
-            <h3 className="text-white font-bold text-lg">{team.name}</h3>
-            <p className="text-slate-400 text-sm">
-              {isOpponent ? 'Opponent' : 'Your Team'}
-            </p>
-          </div>
-        </div>
-        <div className="shrink-0 flex flex-col items-end">
-          <span className="text-slate-500 text-[10px] uppercase font-medium mb-1">
-            Avg overall
-          </span>
-          <div className="bg-pitch-900/60 border-2 border-pitch-500/50 rounded-lg px-3 py-1.5 min-w-[56px] text-center">
-            <span className="text-pitch-400 font-bold text-2xl">
-              {avgOverall}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Form */}
-      <div className="mb-4">
-        <p className="text-slate-500 text-xs uppercase mb-1">Form</p>
-        <div className="flex gap-1">
-          {team.lastFiveResults && team.lastFiveResults.length > 0 ? (
-            team.lastFiveResults.map((r, i) => <FormBadge key={i} result={r} />)
-          ) : (
-            <span className="text-slate-500 text-sm">No matches yet</span>
-          )}
-        </div>
-      </div>
-
-      {/* Lineup Preview */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-slate-500 text-xs uppercase">
-            {isOpponent ? 'Predicted Lineup' : 'Your Lineup'}
-          </p>
-          <span className="text-pitch-400 text-xs font-medium bg-pitch-900/50 px-2 py-0.5 rounded">
-            {displayFormation}
-          </span>
-        </div>
-        <div className="grid gap-1">
-          {lineup.length > 0 ? (
-            lineup.slice(0, 11).map((player) => (
-              <div
-                key={player.id}
-                className="flex justify-between items-center text-sm bg-slate-700/50 px-2 py-1 rounded"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-slate-400 text-xs font-medium w-7 shrink-0">
-                    {player.position}
-                  </span>
-                  <span className="text-white truncate">
-                    {player.nickname || player.name}
-                  </span>
-                </div>
-                <span className="text-pitch-400 font-medium shrink-0">
-                  {calculateOverall(player)}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="text-slate-500 text-sm">No lineup data available</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // Mobile Comparison View - keeps both teams side-by-side
@@ -366,9 +258,9 @@ function MobileControlBar({
         </button>
         <button
           onClick={onConfirm}
-          className="flex-1 py-3 bg-pitch-600 active:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
+          className="cta-play-shiny flex-1 py-3 bg-pitch-600 active:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
         >
-          Play Match
+          <span className="relative z-10">Play Match</span>
         </button>
       </div>
     </div>
@@ -393,7 +285,13 @@ export function PreMatchOverview({
   }, [homeTeam.capacity]);
 
   return (
-    <div className="min-h-dvh md:min-h-screen bg-slate-900 flex flex-col">
+    <div
+      className="min-h-dvh md:min-h-screen flex flex-col"
+      style={{
+        background:
+          'linear-gradient(to bottom, rgb(100 116 139), rgb(30 41 59) 45%, rgb(2 6 23))',
+      }}
+    >
       {/* Mobile Header */}
       <header className="md:hidden bg-slate-800 border-b border-slate-700 px-4 py-2">
         <div className="flex items-center justify-between">
@@ -408,25 +306,27 @@ export function PreMatchOverview({
 
       {/* Desktop Header */}
       <header className="hidden md:block bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-pixel text-lg text-pitch-400">MATCH DAY</h1>
-            <p className="text-slate-400 text-sm">
-              Round {fixture.round} · Série A
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
+        <div className="grid grid-cols-3 items-center">
+          <div className="flex justify-start">
             <button
               onClick={onBack}
               className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
             >
               Go Back
             </button>
+          </div>
+          <div className="text-center">
+            <h1 className="font-pixel text-lg text-pitch-400">MATCH DAY</h1>
+            <p className="text-slate-400 text-sm">
+              Round {fixture.round} · Série A
+            </p>
+          </div>
+          <div className="flex justify-end">
             <button
               onClick={onConfirm}
-              className="px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
+              className="cta-play-shiny px-6 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors"
             >
-              Play Match
+              <span className="relative z-10">Play Match</span>
             </button>
           </div>
         </div>
@@ -441,49 +341,13 @@ export function PreMatchOverview({
         venue={`${homeTeam.stadium} · ${expectedAttendance}`}
       />
 
-      {/* Desktop View */}
-      <main className="hidden md:block flex-1 p-6">
-        {/* Match Title */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-6">
-            <div className="flex items-center gap-3">
-              <TeamShield team={homeTeam} />
-              <span className="text-white font-bold text-xl">
-                {homeTeam.name}
-              </span>
-            </div>
-            <span className="text-slate-500 text-2xl font-bold">vs</span>
-            <div className="flex items-center gap-3">
-              <span className="text-white font-bold text-xl">
-                {awayTeam.name}
-              </span>
-              <TeamShield team={awayTeam} />
-            </div>
-          </div>
-
-          <div className="mt-4 text-slate-400 text-sm">
-            <p>
-              {homeTeam.stadium} · Expected Attendance: {expectedAttendance}
-            </p>
-          </div>
-        </div>
-
-        {/* Team Comparison */}
-        <div className="grid grid-cols-2 gap-6 max-w-4xl mx-auto">
-          <TeamOverview
-            team={homeTeam}
-            tactics={isPlayerHome ? playerTactics : undefined}
-            isOpponent={!isPlayerHome}
-            formation={isPlayerHome ? playerTactics.formation : undefined}
-          />
-          <TeamOverview
-            team={awayTeam}
-            tactics={!isPlayerHome ? playerTactics : undefined}
-            isOpponent={isPlayerHome}
-            formation={!isPlayerHome ? playerTactics.formation : undefined}
-          />
-        </div>
-      </main>
+      <PreMatchOverviewImmersiveDesktop
+        homeTeam={homeTeam}
+        awayTeam={awayTeam}
+        isPlayerHome={isPlayerHome}
+        playerTactics={playerTactics}
+        expectedAttendance={expectedAttendance}
+      />
 
       {/* Mobile Control Bar */}
       <MobileControlBar onBack={onBack} onConfirm={onConfirm} />

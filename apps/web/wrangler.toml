@@ -1,0 +1,6 @@
+# RetroFoot Web - Cloudflare Pages
+# Use same account_id as apps/api/wrangler.toml (your RetroFoot team account)
+account_id = "REPLACE_WITH_RETROFOOT_TEAM_ACCOUNT_ID"
+
+name = "retrofoot-web"
+pages_build_output_dir = "dist"

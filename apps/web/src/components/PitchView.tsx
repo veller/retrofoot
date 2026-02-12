@@ -1,4 +1,8 @@
-import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type {
+  CSSProperties,
+  DragEvent,
+  PointerEvent as ReactPointerEvent,
+} from 'react';
 import type {
   Player,
   FormationType,
@@ -43,7 +47,9 @@ function getBenchSlotStyle(
 
 function getPitchSlotCursorClass(
   hasDnD: boolean,
-  onPlayerClick: ((slot: PitchSlot, playerId: string | undefined) => void) | undefined,
+  onPlayerClick:
+    | ((slot: PitchSlot, playerId: string | undefined) => void)
+    | undefined,
 ): string {
   if (hasDnD) return 'cursor-grab active:cursor-grabbing';
   if (onPlayerClick) return 'cursor-pointer hover:border-pitch-300';
@@ -52,7 +58,9 @@ function getPitchSlotCursorClass(
 
 function getBenchSlotCursorClass(
   hasDnD: boolean,
-  onPlayerClick: ((slot: PitchSlot, playerId: string | undefined) => void) | undefined,
+  onPlayerClick:
+    | ((slot: PitchSlot, playerId: string | undefined) => void)
+    | undefined,
 ): string {
   if (hasDnD) return 'cursor-grab active:cursor-grabbing';
   if (onPlayerClick) return 'cursor-pointer hover:bg-slate-600/80';
@@ -83,6 +91,8 @@ interface PitchViewProps {
   substitutes: string[];
   playersById: Map<string, Player>;
   formation: FormationType;
+  opponentLineup?: string[];
+  opponentFormation?: FormationType;
   posture?: TacticalPosture | null;
   onPlayerClick?: (slot: PitchSlot, playerId: string | undefined) => void;
   selectedSlot?: PitchSlot | null;
@@ -104,6 +114,21 @@ interface PitchViewProps {
     getPointerUp: () => (e: ReactPointerEvent) => void;
     getPointerMove: () => (e: ReactPointerEvent) => void;
   };
+  hideBench?: boolean;
+  hostPinBorderColor?: string;
+  hostPinTextColor?: string;
+  opponentPinBorderColor?: string;
+  opponentPinTextColor?: string;
+  opponentPinOpacity?: number;
+  hostPinClassName?: string;
+  opponentPinClassName?: string;
+  offensiveMidfieldShiftX?: number;
+  staggerStartSeconds?: number;
+  staggerStepSeconds?: number;
+  rootClassName?: string;
+  pitchWrapperClassName?: string;
+  pitchContainerClassName?: string;
+  pitchStyle?: CSSProperties;
 }
 
 export function PitchView({
@@ -111,6 +136,8 @@ export function PitchView({
   substitutes,
   playersById,
   formation,
+  opponentLineup,
+  opponentFormation,
   posture,
   onPlayerClick,
   selectedSlot,
@@ -124,10 +151,30 @@ export function PitchView({
   onDragLeave,
   onDrop,
   touchDragHandlers,
+  hideBench = false,
+  hostPinBorderColor,
+  hostPinTextColor,
+  opponentPinBorderColor = '#94a3b8',
+  opponentPinTextColor = '#ffffff',
+  opponentPinOpacity = 0.75,
+  hostPinClassName = '',
+  opponentPinClassName = '',
+  offensiveMidfieldShiftX = 0,
+  staggerStartSeconds,
+  staggerStepSeconds,
+  rootClassName = 'flex flex-col gap-4 items-center',
+  pitchWrapperClassName = 'w-[100%] mx-auto',
+  pitchContainerClassName = 'relative w-full rounded-lg overflow-hidden border-2 border-white/80',
+  pitchStyle,
 }: PitchViewProps) {
   const hasDnD = Boolean(onDrop && onDragStart);
   const benchCount = substitutes.length;
   const coordinates = getFormationSlotCoordinates(formation);
+  const hasOpponentLayer = Boolean(opponentLineup?.length && opponentFormation);
+  const hostTopOffsetPercent = hasOpponentLayer ? 5 : 0;
+  const opponentCoordinates = opponentFormation
+    ? getFormationSlotCoordinates(opponentFormation)
+    : null;
 
   function getPostureXOffset(position: Position): number {
     if (position === 'GK') return 0;
@@ -137,7 +184,7 @@ export function PitchView({
       return 5; // DEF
     }
     if (posture === 'attacking') {
-      if (position === 'MID') return 6;
+      if (position === 'MID') return 6 + offensiveMidfieldShiftX;
       if (position === 'ATT') return 4;
       return 5; // DEF
     }
@@ -150,16 +197,17 @@ export function PitchView({
   }
 
   return (
-    <div className="flex flex-col gap-4 items-center">
+    <div className={rootClassName}>
       {/* Football pitch - horizontal, aspect ratio 105:68 (length:width), 80% size */}
-      <div className="w-[100%] mx-auto">
+      <div className={pitchWrapperClassName}>
         <div
           id="pitch-container"
-          className="relative w-full rounded-lg overflow-hidden border-2 border-white/80"
+          className={pitchContainerClassName}
           style={{
             aspectRatio: '55 / 30',
             background:
               'repeating-linear-gradient(90deg, #50A66E 0px, #50A66E 12px, #489362 12px, #489362 24px)',
+            ...pitchStyle,
           }}
         >
           {/* Halfway line - vertical for horizontal pitch */}
@@ -267,10 +315,10 @@ export function PitchView({
             return (
               <div
                 key={playerId}
-                className="absolute -translate-x-1/2 -translate-y-1/2 group"
+                className="absolute z-20 -translate-x-1/2 -translate-y-1/2 group"
                 style={{
                   left: `${coord.y + getPostureXOffset(player.position)}%`,
-                  top: `${coord.x}%`,
+                  top: `${coord.x + hostTopOffsetPercent}%`,
                 }}
               >
                 <div
@@ -312,7 +360,16 @@ export function PitchView({
                     (e.key === 'Enter' || e.key === ' ') &&
                     onPlayerClick?.({ type: 'lineup', index }, playerId)
                   }
-                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getPitchSlotCursorClass(hasDnD, onPlayerClick)}`}
+                  className={`w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-800 border-2 flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-lg ${getPlayerBorderStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getPitchSlotCursorClass(hasDnD, onPlayerClick)} ${hostPinClassName}`}
+                  style={{
+                    borderColor: hostPinBorderColor,
+                    color: hostPinTextColor,
+                    animationDelay:
+                      staggerStartSeconds !== undefined &&
+                      staggerStepSeconds !== undefined
+                        ? `${staggerStartSeconds + index * staggerStepSeconds}s`
+                        : undefined,
+                  }}
                   title={`${player.name} - OVR ${overall}`}
                 >
                   {isDropTarget ? (
@@ -327,99 +384,142 @@ export function PitchView({
               </div>
             );
           })}
-        </div>
-      </div>
 
-      {/* Bench area */}
-      <div className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 md:p-4">
-        <div className="mb-2 md:mb-3">
-          <h3 className="text-xs md:text-sm font-bold text-slate-400 uppercase">
-            Bench ({benchCount}/{benchLimit})
-          </h3>
-        </div>
-        <div className="flex flex-wrap gap-1.5 md:gap-2">
-          {substitutes.map((playerId, i) => {
+          {opponentLineup?.map((playerId, index) => {
             const player = playersById.get(playerId);
-            const slot: PitchSlot = { type: 'bench', index: i };
-            const isSelected =
-              selectedSlot?.type === 'bench' && selectedSlot.index === i;
-            const isHighlighted =
-              !isSelected &&
-              !!player &&
-              highlightPositions?.length &&
-              highlightPositions.includes(player.position);
-            const isDropTarget =
-              dropTargetSlot?.type === 'bench' && dropTargetSlot.index === i;
-            const isDragging =
-              draggedSlot?.type === 'bench' && draggedSlot.index === i;
+            const coord = opponentCoordinates?.[index] as
+              | SlotCoordinate
+              | undefined;
+            if (!coord || !player) return null;
+
+            const mirroredLeft = 100 - coord.y;
+            const animationDelay =
+              staggerStartSeconds !== undefined &&
+              staggerStepSeconds !== undefined
+                ? `${staggerStartSeconds + (lineup.length + index) * staggerStepSeconds}s`
+                : undefined;
 
             return (
               <div
-                key={playerId}
-                data-pitch-slot={JSON.stringify(slot)}
-                className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-800 border-2 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getBenchSlotCursorClass(hasDnD, onPlayerClick)}`}
-                role="button"
-                tabIndex={0}
-                draggable={hasDnD}
-                onPointerDown={touchDragHandlers?.getPointerDown(slot)}
-                onPointerUp={touchDragHandlers?.getPointerUp()}
-                onPointerMove={touchDragHandlers?.getPointerMove()}
-                onDragStart={(e) => {
-                  if (!hasDnD) return;
-                  e.dataTransfer.setData(
-                    'application/json',
-                    JSON.stringify(slot),
-                  );
-                  e.dataTransfer.effectAllowed = 'move';
-                  onDragStart?.(slot);
+                key={`opp-${playerId}`}
+                className={`absolute z-0 -translate-x-1/2 -translate-y-1/2 group ${opponentPinClassName}`}
+                style={{
+                  left: `${mirroredLeft}%`,
+                  top: `${coord.x}%`,
+                  animationDelay,
                 }}
-                onDragEnd={() => onDragEnd?.()}
-                onDragOver={(e) => {
-                  if (hasDnD && draggedSlot) {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    onDragOver?.(slot);
-                  }
-                }}
-                onDragLeave={() => onDragLeave?.()}
-                onDrop={(e) => {
-                  if (hasDnD) {
-                    e.preventDefault();
-                    onDrop?.(slot, e);
-                  }
-                }}
-                onClick={() =>
-                  onPlayerClick?.({ type: 'bench', index: i }, playerId)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ')
-                    onPlayerClick?.({ type: 'bench', index: i }, playerId);
-                }}
+                title={`${player.name} - OVR ${calculateOverall(player)}`}
               >
-                {isDropTarget ? (
-                  <ReplaceIcon className="w-4 h-4 md:w-5 md:h-5 text-amber-400 shrink-0" />
-                ) : player ? (
-                  <>
-                    <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold text-pitch-400 shrink-0">
-                      {player.position}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] md:text-xs text-white truncate">
-                        {player.nickname ?? player.name.split(' ').pop() ?? '?'}
-                      </p>
-                      <p className="text-[9px] md:text-[10px] text-slate-400">
-                        OVR {calculateOverall(player)}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-slate-500 text-xs">—</span>
-                )}
+                <div
+                  className="flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-full border-2 bg-slate-900/75 text-[10px] font-bold md:text-xs"
+                  style={{
+                    borderColor: opponentPinBorderColor,
+                    color: opponentPinTextColor,
+                    opacity: opponentPinOpacity,
+                  }}
+                >
+                  {player.position}
+                </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Bench area */}
+      {!hideBench && (
+        <div className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 md:p-4">
+          <div className="mb-2 md:mb-3">
+            <h3 className="text-xs md:text-sm font-bold text-slate-400 uppercase">
+              Bench ({benchCount}/{benchLimit})
+            </h3>
+          </div>
+          <div className="flex flex-wrap gap-1.5 md:gap-2">
+            {substitutes.map((playerId, i) => {
+              const player = playersById.get(playerId);
+              const slot: PitchSlot = { type: 'bench', index: i };
+              const isSelected =
+                selectedSlot?.type === 'bench' && selectedSlot.index === i;
+              const isHighlighted =
+                !isSelected &&
+                !!player &&
+                highlightPositions?.length &&
+                highlightPositions.includes(player.position);
+              const isDropTarget =
+                dropTargetSlot?.type === 'bench' && dropTargetSlot.index === i;
+              const isDragging =
+                draggedSlot?.type === 'bench' && draggedSlot.index === i;
+
+              return (
+                <div
+                  key={playerId}
+                  data-pitch-slot={JSON.stringify(slot)}
+                  className={`flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded min-w-[85px] md:min-w-[100px] ${getBenchSlotStyle(isSelected, isHighlighted)} ${isDropTarget ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-800 border-2 border-amber-400' : ''} ${isDragging ? 'opacity-50' : ''} ${getBenchSlotCursorClass(hasDnD, onPlayerClick)}`}
+                  role="button"
+                  tabIndex={0}
+                  draggable={hasDnD}
+                  onPointerDown={touchDragHandlers?.getPointerDown(slot)}
+                  onPointerUp={touchDragHandlers?.getPointerUp()}
+                  onPointerMove={touchDragHandlers?.getPointerMove()}
+                  onDragStart={(e) => {
+                    if (!hasDnD) return;
+                    e.dataTransfer.setData(
+                      'application/json',
+                      JSON.stringify(slot),
+                    );
+                    e.dataTransfer.effectAllowed = 'move';
+                    onDragStart?.(slot);
+                  }}
+                  onDragEnd={() => onDragEnd?.()}
+                  onDragOver={(e) => {
+                    if (hasDnD && draggedSlot) {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = 'move';
+                      onDragOver?.(slot);
+                    }
+                  }}
+                  onDragLeave={() => onDragLeave?.()}
+                  onDrop={(e) => {
+                    if (hasDnD) {
+                      e.preventDefault();
+                      onDrop?.(slot, e);
+                    }
+                  }}
+                  onClick={() =>
+                    onPlayerClick?.({ type: 'bench', index: i }, playerId)
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ')
+                      onPlayerClick?.({ type: 'bench', index: i }, playerId);
+                  }}
+                >
+                  {isDropTarget ? (
+                    <ReplaceIcon className="w-4 h-4 md:w-5 md:h-5 text-amber-400 shrink-0" />
+                  ) : player ? (
+                    <>
+                      <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-slate-600 flex items-center justify-center text-[9px] md:text-[10px] font-bold text-pitch-400 shrink-0">
+                        {player.position}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] md:text-xs text-white truncate">
+                          {player.nickname ??
+                            player.name.split(' ').pop() ??
+                            '?'}
+                        </p>
+                        <p className="text-[9px] md:text-[10px] text-slate-400">
+                          OVR {calculateOverall(player)}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-slate-500 text-xs">—</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
