@@ -141,19 +141,62 @@ Overall is calculated based on position-weighted attributes:
 
 ### Player Development
 
-Players improve or decline each season based on:
+Progression is match-driven and conservative. Overall changes indirectly through attribute changes.
 
-**Growth factors (age < 30):**
+#### In-match growth formula
 
-- `age` - Younger players develop faster
-- `potential` - Maximum possible overall
-- `developmentRate` - Individual growth speed (0.5-1.5)
-- `minutesPlayed` - More game time = faster development
+Growth is evaluated only for players who played (`minutesPlayed > 0`) and still have room to grow (`overall < potential`).
 
-**Decline factors (age >= 30):**
+**Hard age gate:**
 
-- Physical attributes decline faster than mental
-- Rate increases with age (30=slight, 35+=significant)
+- Age `>= 40`: growth is disabled.
+
+**Age multiplier (`ageMult`):**
+
+- `<=21`: `1.00`
+- `22-25`: `0.75`
+- `26-29`: `0.45`
+- `30-34`: `0.20`
+- `35-39`: `0.05`
+- `>=40`: `0.00`
+
+**Match contribution inputs:**
+
+- `minutesMult = clamp(minutesPlayed / 90, 0..1)`
+- Team result score: win `+0.15`, draw `+0.03`, loss `-0.10`
+- Role score:
+  - ATT: `0.22*goals + 0.12*assists`
+  - MID: `0.14*goals + 0.16*assists + 0.03*teamWin`
+  - DEF: `0.08*goals + 0.08*assists + 0.14*cleanSheet - 0.04*goalsConceded`
+  - GK: `0.20*cleanSheet - 0.06*goalsConceded`
+- MVP-like bonus: `+0.15` when `rating >= 8.5` OR `goals >= 2` OR `(goals + assists) >= 3`
+
+**Raw growth score:**
+
+`growthScore = ageMult * minutesMult * clamp(0.40 + resultScore + roleScore + mvpBonus, 0..1.8)`
+
+**Pacing and caps (per match):**
+
+- Usually `+0` or `+1` attribute point.
+- `+2` is only possible for exceptional young players (`age < 24`) with MVP-like output.
+- If player is near potential (`growthRoom <= 2`), growth is capped to max `+1`.
+- Growth points are distributed to position-biased attributes (GK grows GK stats more often, ATT grows attacking stats, etc.).
+
+#### In-match decline
+
+- Decline checks apply for older players (`age >= 30`) after poor performances.
+- Physical attributes (`speed`, `stamina`, `strength`) are more likely to decline.
+
+#### Season-end standout bonus
+
+At season transition, a rare bonus pass runs before reset:
+
+- Eligible profile (conservative): active, young (`<24`), meaningful minutes, and still below potential.
+- Impact score uses season output (`seasonGoals`, `seasonAssists`, `seasonAvgRating`) plus team success.
+- DEF/GK also get defensive credit from team goals conceded per game.
+- Reward is at most `+1` attribute point.
+
+This keeps growth realistic over a season while allowing true breakout campaigns to matter.
 
 ### Player energy
 
