@@ -130,9 +130,13 @@ export function PreMatchOverviewImmersiveDesktop({
   const staggerSeconds = 0.1;
   const immersivePanelGradient =
     'linear-gradient(rgb(9 7 7 / 74%), rgb(27 32 53 / 90%))';
-  const homePrimaryColor = homeTeam.primaryColor;
-  const awayPrimaryColor = awayTeam.primaryColor;
-  const hostPostureLabel = (
+  const hostTeam = isPlayerHome ? homeTeam : awayTeam;
+  const hostData = isPlayerHome ? homeData : awayData;
+  const opponentData = isPlayerHome ? awayData : homeData;
+  const hostLineupIds = isPlayerHome ? homeLineupIds : awayLineupIds;
+  const opponentLineupIds = isPlayerHome ? awayLineupIds : homeLineupIds;
+  const hostPrimaryColor = hostTeam.primaryColor;
+  const homePosture = (
     isPlayerHome ? playerTactics.posture : 'balanced'
   ).replace('attacking', 'offensive');
   const expectedAttendanceMidpoint = useMemo(
@@ -174,7 +178,7 @@ export function PreMatchOverviewImmersiveDesktop({
                 >
                   <p
                     className="truncate text-sm font-pixel"
-                    style={{ color: homePrimaryColor }}
+                    style={{ color: homeTeam.primaryColor }}
                   >
                     {homeTeam.shortName}
                   </p>
@@ -186,9 +190,9 @@ export function PreMatchOverviewImmersiveDesktop({
                 id="immersive-home-lineup-meta"
                 className="mb-2 flex items-center justify-between text-[10px] uppercase text-slate-400"
               >
-                <span>Host Lineup</span>
+                <span>Home Lineup</span>
                 <span className="text-white">
-                  {homeData.displayFormation} ({hostPostureLabel})
+                  {homeData.displayFormation} ({homePosture})
                 </span>
               </div>
               <div className="space-y-1">
@@ -245,19 +249,19 @@ export function PreMatchOverviewImmersiveDesktop({
               </div>
 
               <PitchView
-                lineup={homeLineupIds}
+                lineup={hostLineupIds}
                 substitutes={[]}
                 playersById={pitchPlayersById}
-                formation={homeData.displayFormation as FormationType}
-                opponentLineup={awayLineupIds}
-                opponentFormation={awayData.displayFormation as FormationType}
-                posture={isPlayerHome ? playerTactics.posture : 'balanced'}
+                formation={hostData.displayFormation as FormationType}
+                opponentLineup={opponentLineupIds}
+                opponentFormation={opponentData.displayFormation as FormationType}
+                posture={playerTactics.posture}
                 hideBench
-                hostPinBorderColor={homePrimaryColor}
+                hostPinBorderColor={hostPrimaryColor}
                 hostPinTextColor="#ffffff"
                 opponentPinBorderColor="#94a3b8"
                 opponentPinTextColor="#ffffff"
-                opponentPinOpacity={0.3}
+                opponentPinOpacity={0}
                 hostPinClassName="immersive-player-pop"
                 opponentPinClassName="immersive-player-pop"
                 offensiveMidfieldShiftX={5}
@@ -297,7 +301,7 @@ export function PreMatchOverviewImmersiveDesktop({
                 >
                   <p
                     className="truncate text-sm font-pixel"
-                    style={{ color: awayPrimaryColor }}
+                    style={{ color: awayTeam.primaryColor }}
                   >
                     {awayTeam.shortName}
                   </p>
@@ -308,7 +312,7 @@ export function PreMatchOverviewImmersiveDesktop({
                 id="immersive-opponent-lineup-meta"
                 className="mb-2 flex items-center justify-between text-[10px] uppercase text-slate-400"
               >
-                <span>Opponent</span>
+                <span>Away</span>
                 <span className="text-white">{awayData.displayFormation}</span>
               </div>
               <div className="space-y-1">
