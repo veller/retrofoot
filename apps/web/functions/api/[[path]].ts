@@ -3,6 +3,30 @@
 
 const API_ORIGIN = 'https://retrofoot-api.vellerbauer.workers.dev';
 
+function getSetCookieHeaders(headers: Headers): string[] {
+  const withGetSetCookie = headers as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+
+  if (typeof withGetSetCookie.getSetCookie === 'function') {
+    return withGetSetCookie.getSetCookie();
+  }
+
+  if (typeof withGetSetCookie.getAll === 'function') {
+    return withGetSetCookie.getAll('Set-Cookie');
+  }
+
+  const cookies: string[] = [];
+  for (const [key, value] of headers.entries()) {
+    if (key.toLowerCase() === 'set-cookie') {
+      cookies.push(value);
+    }
+  }
+
+  return cookies;
+}
+
 export const onRequest: PagesFunction = async (context) => {
   const { request } = context;
   const url = new URL(request.url);
@@ -43,7 +67,7 @@ export const onRequest: PagesFunction = async (context) => {
   const responseHeaders = new Headers(response.headers);
 
   // Rewrite Set-Cookie headers to use the Pages domain
-  const cookies = response.headers.getSetCookie?.() || [];
+  const cookies = getSetCookieHeaders(response.headers);
   if (cookies.length > 0) {
     // Remove old Set-Cookie headers
     responseHeaders.delete('Set-Cookie');
