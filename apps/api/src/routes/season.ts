@@ -133,7 +133,10 @@ function applySeasonStandoutAttributeBonus(
 
 // Get season summary after round 38
 seasonRoutes.get('/:saveId/summary', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -310,7 +313,10 @@ seasonRoutes.get('/:saveId/summary', async (c) => {
 
 // Advance to next season
 seasonRoutes.post('/:saveId/advance', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -793,7 +799,10 @@ seasonRoutes.post('/:saveId/advance', async (c) => {
 
 // Get season history
 seasonRoutes.get('/:saveId/history', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

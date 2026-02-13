@@ -48,6 +48,7 @@ import {
   type LeaderboardEntry,
   type SeasonHistoryEntry,
 } from '../hooks';
+import { useAuth } from '../hooks/useAuth';
 import { useGameStore } from '../stores/gameStore';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances' | 'history';
@@ -131,6 +132,7 @@ export function GamePage() {
   const { saveId } = useParams<{ saveId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { signOut } = useAuth();
   const {
     data,
     isLoading,
@@ -508,6 +510,18 @@ export function GamePage() {
 
         {/* Desktop header items */}
         <div className="hidden md:flex items-center gap-6 text-sm">
+          <Link
+            to="/"
+            className="text-slate-300 hover:text-white font-medium transition-colors"
+          >
+            Home
+          </Link>
+          <button
+            onClick={signOut}
+            className="text-slate-300 hover:text-red-400 font-medium transition-colors"
+          >
+            Sign Out
+          </button>
           <div>
             <span className="text-slate-500">Club:</span>{' '}
             <span className="text-white font-medium">{playerTeam.name}</span>
@@ -608,6 +622,22 @@ export function GamePage() {
             <div className="p-4 space-y-4">
               <div className="bg-slate-700/40 p-3 rounded-lg">
                 <div className="grid grid-cols-1 gap-2">
+                  <Link
+                    to="/"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-medium uppercase transition-colors bg-slate-700 text-slate-200 hover:bg-slate-600"
+                  >
+                    <span>Home</span>
+                  </Link>
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      void signOut();
+                    }}
+                    className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-medium uppercase transition-colors bg-slate-700 text-slate-200 hover:bg-red-700 hover:text-white"
+                  >
+                    <span>Sign Out</span>
+                  </button>
                   <Link
                     to="/"
                     onClick={() => setMobileMenuOpen(false)}

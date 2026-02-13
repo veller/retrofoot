@@ -38,7 +38,10 @@ const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
 export const matchRoutes = new Hono<{ Bindings: Env }>();
 
 matchRoutes.get('/:saveId/fixtures', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -197,7 +200,10 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
 });
 
 matchRoutes.post('/:saveId/complete', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

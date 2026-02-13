@@ -19,7 +19,10 @@ export const achievementsRoutes = new Hono<{ Bindings: Env }>();
 
 // Get all achievements for a save
 achievementsRoutes.get('/:saveId', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

@@ -151,7 +151,10 @@ saveRoutes.get('/teams', async (c) => {
  * List all saves for current user
  */
 saveRoutes.get('/', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -186,7 +189,10 @@ saveRoutes.get('/', async (c) => {
  */
 saveRoutes.post('/', async (c) => {
   const requestStart = performance.now();
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const authStart = performance.now();
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
@@ -316,7 +322,10 @@ saveRoutes.post('/', async (c) => {
  * Get setup status for an asynchronously created save
  */
 saveRoutes.get('/:id/setup-status', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -363,7 +372,10 @@ saveRoutes.get('/:id/setup-status', async (c) => {
  * Get save details with team and player counts
  */
 saveRoutes.get('/:id', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -439,7 +451,10 @@ saveRoutes.get('/:id', async (c) => {
  * Get standings for a save
  */
 saveRoutes.get('/:id/standings', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -489,7 +504,10 @@ saveRoutes.get('/:id/standings', async (c) => {
  * Get squad for a team in a save
  */
 saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -545,7 +563,10 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
 });
 
 saveRoutes.get('/:id/tactics/:teamId', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -605,7 +626,10 @@ saveRoutes.get('/:id/tactics/:teamId', async (c) => {
 });
 
 saveRoutes.put('/:id/tactics/:teamId', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -817,7 +841,10 @@ saveRoutes.put('/:id/tactics/:teamId', async (c) => {
  * Get transactions for a team in a save
  */
 saveRoutes.get('/:id/transactions', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -926,7 +953,10 @@ saveRoutes.get('/:id/transactions', async (c) => {
  * Get leaderboards (top scorers and top assists) for a save
  */
 saveRoutes.get('/:id/leaderboards', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
@@ -982,7 +1012,10 @@ saveRoutes.get('/:id/leaderboards', async (c) => {
  * Delete save
  */
 saveRoutes.delete('/:id', async (c) => {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

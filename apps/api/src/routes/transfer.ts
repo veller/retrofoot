@@ -169,7 +169,10 @@ async function verifySaveOwnership(
   c: Context<{ Bindings: Env }>,
   saveId: string,
 ): Promise<{ userId: string; playerTeamId: string } | null> {
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
