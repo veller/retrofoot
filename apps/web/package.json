@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test:auth-flow": "node scripts/auth-signup-flow-check.mjs",
     "publish:prod": "pnpm build && wrangler pages deploy dist --project-name=retrofoot-web"
   },
   "dependencies": {

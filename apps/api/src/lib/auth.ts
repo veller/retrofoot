@@ -29,9 +29,26 @@ const SESSION_REFRESH_AGE = ONE_DAY;
 const COOKIE_CACHE_MAX_AGE = 60 * 5;
 const CLI_FALLBACK_SECRET =
   'cli-schema-generation-fallback-secret-not-used-at-runtime-32chars';
+const PRODUCTION_API_BASE_URL = 'https://retrofoot-api.vellerbauer.workers.dev';
+const DEVELOPMENT_API_BASE_URL = 'http://localhost:8787';
 
 let cachedRuntimeAuth: ReturnType<typeof betterAuth> | null = null;
 let cachedRuntimeAuthKey: string | null = null;
+let warnedLocalCookieOverride = false;
+
+type RequestContext = {
+  url?: string;
+  headers?: Headers;
+};
+
+type CookiePolicy = {
+  sameSite: 'lax' | 'none';
+  secure: boolean;
+  crossSubDomainCookies: boolean;
+  baseURL: string;
+  modeKey: string;
+  localOverride: boolean;
+};
 
 function perfLogsEnabled(env?: CloudflareBindings): boolean {
   return env?.AUTH_PERF_LOGS !== '0';
@@ -48,12 +65,107 @@ function logAuthPerf(
   console.log(JSON.stringify({ event: 'auth_perf', ...data }));
 }
 
-function getRuntimeCacheKey(env: CloudflareBindings): string {
-  return `${env.ENVIRONMENT ?? 'production'}:${env.BETTER_AUTH_SECRET}`;
+function getRuntimeCacheKey(
+  env: CloudflareBindings,
+  modeKey: string,
+): string {
+  return `${env.ENVIRONMENT ?? 'production'}:${modeKey}:${env.BETTER_AUTH_SECRET}`;
 }
 
-function buildAuth(env?: CloudflareBindings) {
+function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.localhost')
+  );
+}
+
+function normalizeHostname(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.startsWith('[')) {
+    const closingIndex = trimmed.indexOf(']');
+    return closingIndex > 1 ? trimmed.slice(1, closingIndex) : trimmed;
+  }
+  return trimmed.split(':')[0] || trimmed;
+}
+
+function parseFirstHeaderValue(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const first = value.split(',')[0]?.trim().toLowerCase();
+  return first || null;
+}
+
+export function resolveCookiePolicy(
+  environment: string | undefined,
+  context?: RequestContext,
+): CookiePolicy {
+  const envMode = environment === 'development' ? 'development' : 'production';
+  const forwardedProto = parseFirstHeaderValue(
+    context?.headers?.get('x-forwarded-proto') ?? null,
+  );
+  const hostHeader = parseFirstHeaderValue(
+    context?.headers?.get('x-forwarded-host') ??
+      context?.headers?.get('host') ??
+      null,
+  );
+
+  let protocol = forwardedProto;
+  let hostname = hostHeader ? normalizeHostname(hostHeader) : null;
+  if (context?.url) {
+    try {
+      const parsed = new URL(context.url);
+      protocol = protocol || parsed.protocol.replace(':', '').toLowerCase();
+      hostname = hostname || parsed.hostname.toLowerCase();
+    } catch {
+      // Best-effort parser: ignore malformed URLs and use header-derived context.
+    }
+  }
+
+  const isLocal = Boolean(hostname && isLocalHostname(hostname));
+  const isInsecureHttp = protocol === 'http' || (!protocol && isLocal);
+  const localOverride = envMode !== 'development' && isLocal && isInsecureHttp;
+  const isDevelopmentLike = envMode === 'development' || localOverride;
+
+  return {
+    sameSite: isDevelopmentLike ? 'lax' : 'none',
+    secure: !isDevelopmentLike,
+    crossSubDomainCookies: !isDevelopmentLike,
+    baseURL: isDevelopmentLike
+      ? DEVELOPMENT_API_BASE_URL
+      : PRODUCTION_API_BASE_URL,
+    modeKey: isDevelopmentLike ? 'development-like' : 'production-like',
+    localOverride,
+  };
+}
+
+function maybeLogLocalCookieOverride(
+  env: CloudflareBindings | undefined,
+  policy: CookiePolicy,
+): void {
+  if (!env || !policy.localOverride || warnedLocalCookieOverride) {
+    return;
+  }
+
+  warnedLocalCookieOverride = true;
+  console.warn(
+    JSON.stringify({
+      event: 'auth_config_warning',
+      warning:
+        'ENVIRONMENT is production but localhost HTTP request detected. Falling back to development cookie policy.',
+      environment: env.ENVIRONMENT,
+      secureCookies: policy.secure,
+      sameSite: policy.sameSite,
+    }),
+  );
+}
+
+function buildAuth(env?: CloudflareBindings, context?: RequestContext) {
   const isRuntime = Boolean(env);
+  const cookiePolicy = resolveCookiePolicy(env?.ENVIRONMENT, context);
+  maybeLogLocalCookieOverride(env, cookiePolicy);
 
   // Use actual DB for runtime, empty object for CLI schema generation
   const db = env
@@ -141,11 +253,11 @@ function buildAuth(env?: CloudflareBindings) {
     },
     advanced: {
       crossSubDomainCookies: {
-        enabled: env?.ENVIRONMENT !== 'development',
+        enabled: cookiePolicy.crossSubDomainCookies,
       },
       defaultCookieAttributes: {
-        sameSite: env?.ENVIRONMENT === 'development' ? 'lax' : 'none',
-        secure: env?.ENVIRONMENT !== 'development',
+        sameSite: cookiePolicy.sameSite,
+        secure: cookiePolicy.secure,
       },
     },
     trustedOrigins: [
@@ -154,10 +266,7 @@ function buildAuth(env?: CloudflareBindings) {
       'https://retrofoot-web.pages.dev',
     ],
     secret: env?.BETTER_AUTH_SECRET || CLI_FALLBACK_SECRET,
-    baseURL:
-      env?.ENVIRONMENT === 'development'
-        ? 'http://localhost:8787'
-        : 'https://retrofoot-api.vellerbauer.workers.dev',
+    baseURL: cookiePolicy.baseURL,
     basePath: '/api/auth',
   });
 }
@@ -168,17 +277,18 @@ function buildAuth(env?: CloudflareBindings) {
  * This function handles both runtime execution (with actual DB)
  * and CLI schema generation (without DB binding).
  */
-export function createAuth(env?: CloudflareBindings) {
+export function createAuth(env?: CloudflareBindings, context?: RequestContext) {
   if (!env) {
     return buildAuth();
   }
 
-  const cacheKey = getRuntimeCacheKey(env);
+  const cookiePolicy = resolveCookiePolicy(env.ENVIRONMENT, context);
+  const cacheKey = getRuntimeCacheKey(env, cookiePolicy.modeKey);
   if (cachedRuntimeAuth && cachedRuntimeAuthKey === cacheKey) {
     return cachedRuntimeAuth;
   }
 
-  cachedRuntimeAuth = buildAuth(env);
+  cachedRuntimeAuth = buildAuth(env, context);
   cachedRuntimeAuthKey = cacheKey;
   return cachedRuntimeAuth;
 }

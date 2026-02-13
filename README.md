@@ -51,6 +51,15 @@ pnpm --filter @retrofoot/web dev
 pnpm --filter @retrofoot/api dev
 ```
 
+For local API auth, create `/apps/api/.dev.vars` with:
+
+```bash
+BETTER_AUTH_SECRET=your-local-secret-at-least-32-characters
+ENVIRONMENT=development
+```
+
+`ENVIRONMENT=development` is required for localhost cookie/session behavior.
+
 ### Type Checking
 
 ```bash

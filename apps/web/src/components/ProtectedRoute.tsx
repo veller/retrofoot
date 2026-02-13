@@ -3,6 +3,7 @@
 // ============================================================================
 
 import type { ReactElement } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { SeoHead } from './SeoHead';
@@ -14,8 +15,24 @@ import { SeoHead } from './SeoHead';
 export function ProtectedRoute(): ReactElement {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const [redirectReady, setRedirectReady] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (isAuthenticated || isLoading) {
+      setRedirectReady(false);
+      return;
+    }
+
+    const redirectTimer = window.setTimeout(() => {
+      setRedirectReady(true);
+    }, 250);
+
+    return () => {
+      window.clearTimeout(redirectTimer);
+    };
+  }, [isAuthenticated, isLoading]);
+
+  if (isLoading || (!isAuthenticated && !redirectReady)) {
     return (
       <>
         <SeoHead

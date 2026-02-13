@@ -23,7 +23,10 @@ authRoutes.on(['GET', 'POST', 'OPTIONS'], '/*', async (c) => {
   const path = new URL(c.req.url).pathname;
 
   // Create auth instance with environment bindings
-  const auth = createAuth(c.env);
+  const auth = createAuth(c.env, {
+    url: c.req.url,
+    headers: c.req.raw.headers,
+  });
 
   // Let Better Auth handle the request
   try {

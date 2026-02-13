@@ -14,6 +14,7 @@ import { useSession, signOut as authSignOut } from '@/lib/auth';
 export function useAuth() {
   const session = useSession();
   const navigate = useNavigate();
+  const isBootstrapping = typeof session.data === 'undefined';
 
   // Sign out and redirect to login
   const signOut = useCallback(async () => {
@@ -27,7 +28,7 @@ export function useAuth() {
     session: session.data?.session ?? null,
 
     // Loading state
-    isLoading: session.isPending,
+    isLoading: session.isPending || isBootstrapping,
 
     // Auth state helpers
     isAuthenticated: !!session.data?.user,

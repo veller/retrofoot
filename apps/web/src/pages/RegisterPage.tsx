@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { signUp, useSession } from '@/lib/auth';
+import { signIn, signUp, useSession } from '@/lib/auth';
+import { awaitSessionReady } from '@/lib/auth-session';
 import { SeoHead } from '@/components';
 
 export function RegisterPage() {
@@ -44,8 +45,34 @@ export function RegisterPage() {
         );
         setLoading(false);
       } else {
-        // Refetch session to update the reactive state before navigating
-        await session.refetch();
+        const sessionReady = await awaitSessionReady(session.refetch);
+        if (!sessionReady) {
+          const { error: signInError } = await signIn.email({
+            email,
+            password,
+          });
+
+          if (signInError) {
+            setError(
+              signInError.message ||
+                'Account was created, but sign-in failed. Please sign in manually.',
+            );
+            setLoading(false);
+            return;
+          }
+
+          const sessionReadyAfterRetry = await awaitSessionReady(
+            session.refetch,
+          );
+          if (!sessionReadyAfterRetry) {
+            setError(
+              'Account was created, but a session could not be established. Please sign in manually.',
+            );
+            setLoading(false);
+            return;
+          }
+        }
+
         navigate('/', { replace: true });
       }
     } catch (err) {

@@ -2,5 +2,6 @@
 # Must be at least 32 characters. Generate with: openssl rand -base64 32
 BETTER_AUTH_SECRET=change-me-to-a-secure-random-string-at-least-32-chars
 
-# Environment mode - set to "development" to enable dev-only features
+# Environment mode for local wrangler dev.
+# Must be "development" so auth cookies are compatible with http://localhost.
 ENVIRONMENT=development
