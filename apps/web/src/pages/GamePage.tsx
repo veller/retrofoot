@@ -28,6 +28,7 @@ import { FormStatusBadge } from '../components/FormStatusBadge';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
+import { RetrofootLogo } from '../components/RetrofootLogo';
 import { TeamShield } from '../components/TeamShield';
 import { TransferMarketPanel } from '../components/TransferMarket';
 import {
@@ -407,13 +408,24 @@ export function GamePage() {
   ]);
 
   if ((isSetupRoute || isSetupPending) && !data) {
+    const effectiveProgress = Math.max(setupProgress, backgroundSetupProgress);
     const progressPercent = Math.round(
-      Math.max(setupProgress, backgroundSetupProgress) * 100,
+      Math.max(0, Math.min(1, effectiveProgress)) * 100,
     );
     const stageLabel = getSetupStageLabel(backgroundSetupStage ?? setupStage);
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
-        <div className="w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl p-6">
+      <div
+        className="relative min-h-screen flex flex-col items-center justify-center px-6 gap-4 overflow-hidden"
+        style={{
+          backgroundImage: "url('/setup-loading-cover.webp')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+        }}
+      >
+        <div className="absolute inset-0 bg-slate-950/60" aria-hidden />
+        <RetrofootLogo size="lg" className="relative z-10" />
+        <div className="relative z-10 w-full max-w-xl bg-slate-800/90 border border-slate-700 rounded-xl p-6 backdrop-blur-[1px]">
           <h1 className="text-xl font-bold text-white mb-2">
             Your World Is Loading
           </h1>
@@ -471,11 +483,27 @@ export function GamePage() {
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Top Bar */}
       <header className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="text-slate-400 hover:text-white">
-            &larr; Menu
-          </Link>
-          <h1 className="font-pixel text-sm text-pitch-400">RETROFOOT</h1>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-2 text-slate-400 hover:text-white md:hidden"
+            aria-label="Open menu"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 6h16M4 12h16M4 18h16"
+              />
+            </svg>
+          </button>
+          <RetrofootLogo />
         </div>
 
         {/* Desktop header items */}
@@ -542,25 +570,6 @@ export function GamePage() {
               {isPlayMatchDisabled ? 'Loading...' : 'Play'}
             </button>
           )}
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 text-slate-400 hover:text-white"
-            aria-label="Open menu"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
         </div>
       </header>
 
@@ -573,7 +582,7 @@ export function GamePage() {
             onClick={() => setMobileMenuOpen(false)}
           />
           {/* Drawer */}
-          <div className="absolute right-0 top-0 bottom-0 w-72 bg-slate-800 border-l border-slate-700 shadow-xl">
+          <div className="absolute left-0 top-0 bottom-0 w-72 bg-slate-800 border-r border-slate-700 shadow-xl">
             <div className="p-4 border-b border-slate-700 flex items-center justify-between">
               <h2 className="text-white font-bold">Game Info</h2>
               <button
@@ -597,6 +606,41 @@ export function GamePage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
+              <div className="bg-slate-700/40 p-3 rounded-lg">
+                <div className="grid grid-cols-1 gap-2">
+                  <Link
+                    to="/"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-medium uppercase transition-colors bg-slate-700 text-slate-200 hover:bg-slate-600"
+                  >
+                    <span>Menu</span>
+                  </Link>
+                  {(['squad', 'table', 'transfers', 'finances'] as const).map(
+                    (tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => {
+                          setActiveTab(tab);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between rounded px-3 py-2 text-sm font-medium uppercase transition-colors ${
+                          activeTab === tab
+                            ? 'bg-pitch-600 text-white'
+                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                        }`}
+                      >
+                        <span>{tab}</span>
+                        {tab === 'transfers' && pendingIncomingOffers > 0 && (
+                          <span className="px-1.5 py-0.5 text-xs bg-amber-600 text-white rounded-full font-bold">
+                            {pendingIncomingOffers}
+                          </span>
+                        )}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+              <div className="h-px bg-gradient-to-r from-transparent via-slate-600/80 to-transparent" />
               <div className="bg-slate-700/50 p-3 rounded-lg">
                 <span className="text-slate-500 text-xs uppercase">Club</span>
                 <p className="text-white font-medium">{playerTeam.name}</p>
@@ -634,7 +678,7 @@ export function GamePage() {
       )}
 
       {/* Navigation Tabs */}
-      <nav className="bg-slate-800 border-b border-slate-700 px-4">
+      <nav className="hidden md:block bg-slate-800 border-b border-slate-700 px-4">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {(
             ['squad', 'table', 'transfers', 'finances', 'history'] as const

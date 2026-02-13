@@ -635,3 +635,49 @@ body {
   background: inherit;
   pointer-events: none;
 }
+
+@keyframes setup-logo-shine-sweep {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.95;
+  }
+  34% {
+    transform: translateX(140%) skewX(-18deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(140%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+.retrofoot-logo-shiny {
+  position: relative;
+  display: inline-block;
+  color: #34d399;
+  text-shadow:
+    0 0 6px rgba(52, 211, 153, 0.6),
+    0 0 14px rgba(16, 185, 129, 0.35);
+  overflow: hidden;
+}
+
+.retrofoot-logo-shiny::after {
+  content: '';
+  position: absolute;
+  top: -35%;
+  bottom: -35%;
+  left: -40%;
+  width: 28%;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.88) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  filter: blur(0.5px);
+  animation: setup-logo-shine-sweep 2.9s ease-in-out infinite;
+}
