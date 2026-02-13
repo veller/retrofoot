@@ -182,7 +182,6 @@ export function GamePage() {
     data: matchData,
     isLoading: isMatchDataLoading,
     error: matchDataError,
-    refetch: refetchMatchData,
   } = useSaveMatchData(saveId);
 
   // Compute upcoming match from database match data
@@ -208,13 +207,23 @@ export function GamePage() {
     return { fixture: playerFixture, opponent, isHome };
   }, [matchData]);
 
-  const shouldBlockForNextMatch = useMemo(() => {
-    if (!data) return false;
-    if (data.currentRound >= 38) return false;
-    if (isMatchDataLoading) return true;
-    if (matchDataError) return true;
-    return !upcomingMatch;
-  }, [data, isMatchDataLoading, matchDataError, upcomingMatch]);
+  const isSeasonComplete = (data?.currentRound ?? 0) >= 38;
+  const isPlayMatchDisabled =
+    !isSeasonComplete &&
+    (isMatchDataLoading || !!matchDataError || !upcomingMatch);
+
+  function getPlayMatchDetailText(): string {
+    if (upcomingMatch) {
+      return `vs ${upcomingMatch.opponent?.shortName || '???'}${upcomingMatch.isHome ? ' (H)' : ' (A)'}`;
+    }
+    if (isMatchDataLoading) {
+      return 'Preparing fixture...';
+    }
+    if (matchDataError) {
+      return 'Syncing fixture data...';
+    }
+    return 'Waiting for fixture...';
+  }
 
   const handlePlayMatch = () => {
     // Sync tactics to game store before navigating
@@ -397,22 +406,6 @@ export function GamePage() {
           <div className="mt-2 text-xs text-slate-400">
             {progressPercent}% complete
           </div>
-          <div className="mt-5 flex gap-3">
-            <Link
-              to="/"
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
-            >
-              Back to Menu
-            </Link>
-            <button
-              onClick={() => {
-                void refetchSaveData();
-              }}
-              className="px-4 py-2 bg-pitch-700 hover:bg-pitch-600 text-white rounded"
-            >
-              Refresh Now
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -422,45 +415,6 @@ export function GamePage() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading game...</p>
-      </div>
-    );
-  }
-
-  if (shouldBlockForNextMatch) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
-        <div className="w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl p-6 text-center">
-          <h1 className="text-xl font-bold text-white mb-2">
-            Preparing Next Match
-          </h1>
-          <p className="text-slate-300 mb-4">
-            Finalizing your next fixture so the match action is ready.
-          </p>
-          <div className="mx-auto h-2 w-full max-w-sm rounded-full bg-slate-700 overflow-hidden">
-            <div className="h-full w-1/3 bg-pitch-500 animate-pulse" />
-          </div>
-          {matchDataError && (
-            <p className="mt-4 text-sm text-amber-300">
-              Still syncing match data. Try refreshing.
-            </p>
-          )}
-          <div className="mt-5 flex justify-center gap-3">
-            <button
-              onClick={() => {
-                void refetchMatchData();
-              }}
-              className="px-4 py-2 bg-pitch-700 hover:bg-pitch-600 text-white rounded"
-            >
-              Refresh
-            </button>
-            <Link
-              to="/"
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
-            >
-              Back to Menu
-            </Link>
-          </div>
-        </div>
       </div>
     );
   }
@@ -520,19 +474,21 @@ export function GamePage() {
             <span className="text-slate-500">Round:</span>{' '}
             <span className="text-white">{data.currentRound}</span>
           </div>
-          {upcomingMatch && (
+          {!isSeasonComplete && (
             <button
               onClick={handlePlayMatch}
-              className="ml-4 px-4 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors flex items-center gap-2"
+              disabled={isPlayMatchDisabled}
+              className={`ml-4 px-4 py-2 text-white font-bold rounded-lg transition-colors flex items-center gap-2 ${
+                isPlayMatchDisabled
+                  ? 'bg-slate-600 cursor-not-allowed opacity-70'
+                  : 'bg-pitch-600 hover:bg-pitch-500'
+              }`}
             >
               <span>Play Match</span>
-              <span className="text-pitch-200 text-xs">
-                vs {upcomingMatch.opponent?.shortName || '???'}
-                {upcomingMatch.isHome ? ' (H)' : ' (A)'}
-              </span>
+              <span className="text-pitch-200 text-xs">{getPlayMatchDetailText()}</span>
             </button>
           )}
-          {!upcomingMatch && data.currentRound >= 38 && (
+          {!upcomingMatch && isSeasonComplete && (
             <button
               onClick={() => navigate(`/game/${saveId}/season-summary`)}
               className="ml-4 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition-colors"
@@ -544,12 +500,17 @@ export function GamePage() {
 
         {/* Mobile header items */}
         <div className="flex md:hidden items-center gap-3">
-          {upcomingMatch && (
+          {!isSeasonComplete && (
             <button
               onClick={handlePlayMatch}
-              className="px-3 py-2 bg-pitch-600 hover:bg-pitch-500 text-white font-bold rounded-lg transition-colors text-sm"
+              disabled={isPlayMatchDisabled}
+              className={`px-3 py-2 text-white font-bold rounded-lg transition-colors text-sm ${
+                isPlayMatchDisabled
+                  ? 'bg-slate-600 cursor-not-allowed opacity-70'
+                  : 'bg-pitch-600 hover:bg-pitch-500'
+              }`}
             >
-              Play
+              {isPlayMatchDisabled ? 'Preparing...' : 'Play'}
             </button>
           )}
           <button
