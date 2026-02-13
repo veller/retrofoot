@@ -177,7 +177,12 @@ export function GamePage() {
   );
 
   // Fetch match data from database for upcoming fixture
-  const { data: matchData } = useSaveMatchData(saveId);
+  const {
+    data: matchData,
+    isLoading: isMatchDataLoading,
+    error: matchDataError,
+    refetch: refetchMatchData,
+  } = useSaveMatchData(saveId);
 
   // Compute upcoming match from database match data
   const upcomingMatch = useMemo(() => {
@@ -201,6 +206,14 @@ export function GamePage() {
 
     return { fixture: playerFixture, opponent, isHome };
   }, [matchData]);
+
+  const shouldBlockForNextMatch = useMemo(() => {
+    if (!data) return false;
+    if (data.currentRound >= 38) return false;
+    if (isMatchDataLoading) return true;
+    if (matchDataError) return true;
+    return !upcomingMatch;
+  }, [data, isMatchDataLoading, matchDataError, upcomingMatch]);
 
   const handlePlayMatch = () => {
     // Sync tactics to game store before navigating
@@ -408,6 +421,45 @@ export function GamePage() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading game...</p>
+      </div>
+    );
+  }
+
+  if (shouldBlockForNextMatch) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
+        <div className="w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl p-6 text-center">
+          <h1 className="text-xl font-bold text-white mb-2">
+            Preparing Next Match
+          </h1>
+          <p className="text-slate-300 mb-4">
+            Finalizing your next fixture so the match action is ready.
+          </p>
+          <div className="mx-auto h-2 w-full max-w-sm rounded-full bg-slate-700 overflow-hidden">
+            <div className="h-full w-1/3 bg-pitch-500 animate-pulse" />
+          </div>
+          {matchDataError && (
+            <p className="mt-4 text-sm text-amber-300">
+              Still syncing match data. Try refreshing.
+            </p>
+          )}
+          <div className="mt-5 flex justify-center gap-3">
+            <button
+              onClick={() => {
+                void refetchMatchData();
+              }}
+              className="px-4 py-2 bg-pitch-700 hover:bg-pitch-600 text-white rounded"
+            >
+              Refresh
+            </button>
+            <Link
+              to="/"
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
+            >
+              Back to Menu
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
