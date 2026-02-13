@@ -113,7 +113,11 @@ interface CreateSaveParams {
 }
 
 interface UseCreateSaveResult {
-  createSave: (params: CreateSaveParams) => Promise<{ saveId: string } | null>;
+  createSave: (params: CreateSaveParams) => Promise<{
+    saveId: string;
+    setupStatus: 'pending' | 'ready';
+    pollUrl?: string;
+  } | null>;
   isCreating: boolean;
   error: string | null;
 }
@@ -126,7 +130,13 @@ export function useCreateSave(): UseCreateSaveResult {
   const [error, setError] = useState<string | null>(null);
 
   const createSave = useCallback(
-    async (params: CreateSaveParams): Promise<{ saveId: string } | null> => {
+    async (
+      params: CreateSaveParams,
+    ): Promise<{
+      saveId: string;
+      setupStatus: 'pending' | 'ready';
+      pollUrl?: string;
+    } | null> => {
       try {
         setIsCreating(true);
         setError(null);
@@ -145,7 +155,14 @@ export function useCreateSave(): UseCreateSaveResult {
         }
 
         const data = await response.json();
-        return { saveId: data.saveId };
+        return {
+          saveId: data.saveId,
+          setupStatus: data.setupStatus === 'ready' ? 'ready' : 'pending',
+          pollUrl:
+            typeof data.pollUrl === 'string' && data.pollUrl.length > 0
+              ? data.pollUrl
+              : undefined,
+        };
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create save');
         return null;

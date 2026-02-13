@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useCreateSave, useSaves } from '@/hooks';
+import { useCreateSave } from '@/hooks';
 import { apiFetch } from '@/lib/api';
-import { SaveCreationLoader } from '@/components/SaveCreationLoader';
 
 interface TeamOption {
   id: string;
@@ -15,7 +14,6 @@ interface TeamOption {
 
 export function NewGamePage() {
   const navigate = useNavigate();
-  const { hasSave } = useSaves();
   const { createSave, isCreating, error } = useCreateSave();
 
   const [teams, setTeams] = useState<TeamOption[]>([]);
@@ -23,13 +21,6 @@ export function NewGamePage() {
   const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [managerName, setManagerName] = useState('');
   const [saveName, setSaveName] = useState('My Career');
-
-  // Redirect if user already has a save
-  useEffect(() => {
-    if (hasSave) {
-      navigate('/');
-    }
-  }, [hasSave, navigate]);
 
   // Fetch available teams
   useEffect(() => {
@@ -59,6 +50,10 @@ export function NewGamePage() {
     });
 
     if (result) {
+      if (result.setupStatus === 'pending') {
+        navigate(`/game/${result.saveId}?setup=1`);
+        return;
+      }
       navigate(`/game/${result.saveId}`);
     }
   };
@@ -67,9 +62,6 @@ export function NewGamePage() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
-      {isCreating && (
-        <SaveCreationLoader accentColor={selectedTeamData?.primaryColor} />
-      )}
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
@@ -175,8 +167,13 @@ export function NewGamePage() {
                 : 'bg-pitch-600 hover:bg-pitch-500 text-white'
             }`}
           >
-            {isCreating ? 'CREATING GAME...' : 'START CAREER'}
+            {isCreating ? 'CREATING SAVE...' : 'START CAREER'}
           </button>
+          {isCreating && (
+            <p className="mt-3 text-sm text-slate-300">
+              Save created instantly, setting up your world in the background...
+            </p>
+          )}
         </div>
       </main>
     </div>

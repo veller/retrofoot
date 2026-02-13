@@ -1,18 +1,22 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, desc, gt } from 'drizzle-orm';
+import { eq, and, desc, gt, count } from 'drizzle-orm';
 import {
   saves,
   teams,
   players,
   standings,
+  fixtures,
   transactions,
   tactics,
 } from '@retrofoot/db/schema';
 import {
   DEFAULT_FORMATION,
   FORMATION_OPTIONS,
+  ALL_PLAYERS,
+  TEAMS,
   evaluateFormationEligibility,
+  generateInitialFreeAgents,
   normalizeFormation,
   selectBestLineup,
   type FormationType,
@@ -20,12 +24,120 @@ import {
   type Position,
   type TacticalPosture,
 } from '@retrofoot/core';
-import { seedNewGame, getAvailableTeams } from '../lib/seed';
+import {
+  seedNewGame,
+  getAvailableTeams,
+  createPendingSave,
+  seedPendingSaveWorld,
+} from '../lib/seed';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
 
 // Save management routes
 export const saveRoutes = new Hono<{ Bindings: Env }>();
+const EXPECTED_TEAM_COUNT = TEAMS.length;
+const EXPECTED_FIXTURE_COUNT = EXPECTED_TEAM_COUNT * (EXPECTED_TEAM_COUNT - 1);
+
+interface SaveSetupStatus {
+  ready: boolean;
+  stage: string;
+  progress: number;
+  teamCount: number;
+  playerCount: number;
+  standingsCount: number;
+  fixturesCount: number;
+  expectedTeamCount: number;
+  expectedPlayerCountMinimum: number;
+  expectedFixtureCount: number;
+}
+
+async function getSaveSetupStatus(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  currentSeason: string,
+  playerTeamId: string,
+): Promise<SaveSetupStatus> {
+  const [
+    teamCountResult,
+    playerCountResult,
+    standingsCountResult,
+    fixturesCountResult,
+    playerTeamResult,
+  ] = await Promise.all([
+    db.select({ value: count() }).from(teams).where(eq(teams.saveId, saveId)),
+    db
+      .select({ value: count() })
+      .from(players)
+      .where(eq(players.saveId, saveId)),
+    db
+      .select({ value: count() })
+      .from(standings)
+      .where(eq(standings.saveId, saveId)),
+    db
+      .select({ value: count() })
+      .from(fixtures)
+      .where(eq(fixtures.saveId, saveId)),
+    db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(eq(teams.id, playerTeamId))
+      .limit(1),
+  ]);
+
+  const teamCount = Number(teamCountResult[0]?.value ?? 0);
+  const playerCount = Number(playerCountResult[0]?.value ?? 0);
+  const standingsCount = Number(standingsCountResult[0]?.value ?? 0);
+  const fixturesCount = Number(fixturesCountResult[0]?.value ?? 0);
+  const seasonNumber = Number.parseInt(currentSeason, 10);
+  const generatedFreeAgents = Number.isNaN(seasonNumber)
+    ? 0
+    : generateInitialFreeAgents(seasonNumber).length;
+  const expectedPlayerCountMinimum = ALL_PLAYERS.length + generatedFreeAgents;
+  const playerTeamReady = playerTeamResult.length > 0;
+
+  const ready =
+    teamCount >= EXPECTED_TEAM_COUNT &&
+    playerCount >= expectedPlayerCountMinimum &&
+    standingsCount >= EXPECTED_TEAM_COUNT &&
+    fixturesCount >= EXPECTED_FIXTURE_COUNT &&
+    playerTeamReady;
+
+  let stage = 'initializing';
+  if (ready) {
+    stage = 'ready';
+  } else if (teamCount < EXPECTED_TEAM_COUNT) {
+    stage = 'teams';
+  } else if (playerCount < expectedPlayerCountMinimum) {
+    stage = 'players';
+  } else if (standingsCount < EXPECTED_TEAM_COUNT) {
+    stage = 'standings';
+  } else if (fixturesCount < EXPECTED_FIXTURE_COUNT) {
+    stage = 'fixtures';
+  }
+
+  const teamProgress = Math.min(1, teamCount / EXPECTED_TEAM_COUNT);
+  const playerProgress = Math.min(1, playerCount / expectedPlayerCountMinimum);
+  const standingsProgress = Math.min(1, standingsCount / EXPECTED_TEAM_COUNT);
+  const fixturesProgress = Math.min(1, fixturesCount / EXPECTED_FIXTURE_COUNT);
+  const progress =
+    teamProgress * 0.2 +
+    playerProgress * 0.5 +
+    standingsProgress * 0.1 +
+    fixturesProgress * 0.2;
+
+  return {
+    ready,
+    stage,
+    progress: ready ? 1 : Number(progress.toFixed(3)),
+    teamCount,
+    playerCount,
+    standingsCount,
+    fixturesCount,
+    expectedTeamCount: EXPECTED_TEAM_COUNT,
+    expectedPlayerCountMinimum,
+    expectedFixtureCount: EXPECTED_FIXTURE_COUNT,
+  };
+}
 
 /**
  * Get available teams for new game creation
@@ -73,10 +185,13 @@ saveRoutes.get('/', async (c) => {
  * Create new save (seeds the game)
  */
 saveRoutes.post('/', async (c) => {
+  const requestStart = performance.now();
   const auth = createAuth(c.env);
+  const authStart = performance.now();
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });
+  const authMs = Math.round(performance.now() - authStart);
 
   if (!session?.user?.id) {
     return c.json({ error: 'Unauthorized' }, 401);
@@ -96,27 +211,152 @@ saveRoutes.post('/', async (c) => {
   }
 
   const db = drizzle(c.env.DB);
+  const mode = c.req.query('mode') === 'sync' ? 'sync' : 'async';
 
   try {
-    const result = await seedNewGame(
+    if (mode === 'sync') {
+      const result = await seedNewGame(
+        db,
+        session.user.id,
+        body.name,
+        body.teamId,
+        body.managerName,
+      );
+      const totalMs = Math.round(performance.now() - requestStart);
+      console.info('save.create.sync', {
+        userId: session.user.id,
+        saveId: result.saveId,
+        authMs,
+        timingsMs: result.timingsMs,
+        totalMs,
+      });
+      return c.json({
+        success: true,
+        setupStatus: 'ready',
+        saveId: result.saveId,
+        teamCount: result.teamCount,
+        playerCount: result.playerCount,
+        message: `Created new save with ${result.teamCount} teams and ${result.playerCount} players`,
+        timingsMs: {
+          auth: authMs,
+          seed: result.timingsMs.total,
+          total: totalMs,
+        },
+      });
+    }
+
+    const pendingStart = performance.now();
+    const pending = await createPendingSave(
       db,
       session.user.id,
       body.name,
       body.teamId,
       body.managerName,
     );
+    const pendingMs = Math.round(performance.now() - pendingStart);
 
-    return c.json({
-      success: true,
-      saveId: result.saveId,
-      teamCount: result.teamCount,
-      playerCount: result.playerCount,
-      message: `Created new save with ${result.teamCount} teams and ${result.playerCount} players`,
+    c.executionCtx.waitUntil(
+      (async () => {
+        const seedStart = performance.now();
+        try {
+          const seeded = await seedPendingSaveWorld(
+            db,
+            pending.saveId,
+            pending.season,
+          );
+          const seedMs = Math.round(performance.now() - seedStart);
+          console.info('save.create.async.completed', {
+            userId: session.user.id,
+            saveId: pending.saveId,
+            seedMs,
+            timingsMs: seeded.timingsMs,
+            teamCount: seeded.teamCount,
+            playerCount: seeded.playerCount,
+          });
+        } catch (seedError) {
+          console.error('save.create.async.failed', {
+            userId: session.user.id,
+            saveId: pending.saveId,
+            error: seedError,
+          });
+        }
+      })(),
+    );
+
+    const totalMs = Math.round(performance.now() - requestStart);
+    console.info('save.create.async.accepted', {
+      userId: session.user.id,
+      saveId: pending.saveId,
+      authMs,
+      pendingMs,
+      totalMs,
     });
+    return c.json(
+      {
+        success: true,
+        setupStatus: 'pending',
+        saveId: pending.saveId,
+        message: 'Save created. World setup is running in the background.',
+        pollUrl: `/api/save/${pending.saveId}/setup-status`,
+        timingsMs: {
+          auth: authMs,
+          pendingSave: pendingMs,
+          total: totalMs,
+        },
+      },
+      202,
+    );
   } catch (error) {
     console.error('Failed to create save:', error);
     return c.json({ error: 'Failed to create game save' }, 500);
   }
+});
+
+/**
+ * Get setup status for an asynchronously created save
+ */
+saveRoutes.get('/:id/setup-status', async (c) => {
+  const auth = createAuth(c.env);
+  const session = await auth.api.getSession({
+    headers: c.req.raw.headers,
+  });
+
+  if (!session?.user?.id) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const saveId = c.req.param('id');
+  const db = drizzle(c.env.DB);
+  const saveResult = await db
+    .select({
+      id: saves.id,
+      userId: saves.userId,
+      currentSeason: saves.currentSeason,
+      playerTeamId: saves.playerTeamId,
+    })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0) {
+    return c.json({ error: 'Save not found' }, 404);
+  }
+  if (saveResult[0].userId !== session.user.id) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const setup = await getSaveSetupStatus(
+    db,
+    saveId,
+    saveResult[0].currentSeason,
+    saveResult[0].playerTeamId,
+  );
+
+  return c.json({
+    saveId,
+    setupStatus: setup.ready ? 'ready' : 'pending',
+    ...setup,
+  });
 });
 
 /**
@@ -153,19 +393,25 @@ saveRoutes.get('/:id', async (c) => {
     return c.json({ error: 'Unauthorized' }, 403);
   }
 
-  // Get team count
-  const teamResult = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .where(eq(teams.saveId, saveId));
+  const setup = await getSaveSetupStatus(
+    db,
+    saveId,
+    save.currentSeason,
+    save.playerTeamId,
+  );
 
-  // Get player count
-  const playerResult = await db
-    .select({ id: players.id })
-    .from(players)
-    .where(eq(players.saveId, saveId));
+  if (!setup.ready) {
+    return c.json(
+      {
+        saveId,
+        setupStatus: 'pending',
+        ...setup,
+      },
+      202,
+    );
+  }
 
-  // Get player team details
+  // Get player team details (ready state)
   const playerTeam = await db
     .select()
     .from(teams)
@@ -184,8 +430,8 @@ saveRoutes.get('/:id', async (c) => {
       updatedAt: save.updatedAt,
     },
     playerTeam: playerTeam[0] || null,
-    teamCount: teamResult.length,
-    playerCount: playerResult.length,
+    teamCount: setup.teamCount,
+    playerCount: setup.playerCount,
   });
 });
 
@@ -454,7 +700,10 @@ saveRoutes.put('/:id/tactics/:teamId', async (c) => {
     injured: player.injured ?? false,
     fitness: player.fitness ?? 100,
   }));
-  const eligibility = evaluateFormationEligibility(formation, availabilityPlayers);
+  const eligibility = evaluateFormationEligibility(
+    formation,
+    availabilityPlayers,
+  );
   if (!eligibility.eligible) {
     return c.json(
       {

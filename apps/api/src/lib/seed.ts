@@ -4,7 +4,6 @@
 // Creates initial game state when a user starts a new save
 
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
 import {
   saves,
   teams,
@@ -194,16 +193,44 @@ export async function seedNewGame(
   saveName: string,
   playerTeamId: string,
   managerName: string,
-): Promise<{ saveId: string; teamCount: number; playerCount: number }> {
+): Promise<{
+  saveId: string;
+  teamCount: number;
+  playerCount: number;
+  timingsMs: Record<string, number>;
+}> {
+  const pending = await createPendingSave(
+    db,
+    userId,
+    saveName,
+    playerTeamId,
+    managerName,
+  );
+  const seeded = await seedPendingSaveWorld(db, pending.saveId, pending.season);
+
+  return {
+    saveId: pending.saveId,
+    teamCount: seeded.teamCount,
+    playerCount: seeded.playerCount,
+    timingsMs: seeded.timingsMs,
+  };
+}
+
+export async function createPendingSave(
+  db: ReturnType<typeof drizzle>,
+  userId: string,
+  saveName: string,
+  playerTeamTemplateId: string,
+  managerName: string,
+): Promise<{ saveId: string; season: string }> {
   const saveId = generateId();
   const season = '2026';
 
-  // 1. Create the save record
   const newSave: NewSave = {
     id: saveId,
     userId,
     name: saveName,
-    playerTeamId: `${saveId}-${playerTeamId}`,
+    playerTeamId: `${saveId}-${playerTeamTemplateId}`,
     managerName,
     managerReputation: 50,
     currentSeason: season,
@@ -214,7 +241,24 @@ export async function seedNewGame(
 
   await db.insert(saves).values(newSave);
 
-  // 2. Create all teams
+  return { saveId, season };
+}
+
+export async function seedPendingSaveWorld(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  season = '2026',
+): Promise<{
+  teamCount: number;
+  playerCount: number;
+  timingsMs: Record<string, number>;
+}> {
+  const now = () => performance.now();
+  const timingsMs: Record<string, number> = {};
+  const totalStart = now();
+
+  // 1. Create all teams
+  const teamsPrepStart = now();
   const teamIdMap = new Map<string, string>(); // templateId -> dbId
 
   const teamWagesMap = new Map<string, number>();
@@ -250,18 +294,14 @@ export async function seedNewGame(
       seasonExpenses: 0,
     };
   });
+  timingsMs.teamsPrepare = Math.round(now() - teamsPrepStart);
 
+  const teamsInsertStart = now();
   await batchInsertChunked(db, teams, newTeams);
+  timingsMs.teamsInsert = Math.round(now() - teamsInsertStart);
 
-  const playerTeamDbId = teamIdMap.get(playerTeamId);
-  if (playerTeamDbId) {
-    await db
-      .update(saves)
-      .set({ playerTeamId: playerTeamDbId })
-      .where(eq(saves.id, saveId));
-  }
-
-  // 3. Create all players (team players)
+  // 2. Create all players (team players)
+  const playersPrepStart = now();
   const newPlayers: NewPlayer[] = ALL_PLAYERS.map((player) => {
     const teamDbId = teamIdMap.get(player.teamId);
 
@@ -330,9 +370,10 @@ export async function seedNewGame(
 
   // Combine team players and free agents
   const allPlayers = [...newPlayers, ...freeAgentPlayers];
-  await batchInsertChunked(db, players, allPlayers);
+  timingsMs.playersPrepare = Math.round(now() - playersPrepStart);
 
-  // 4. Create standings for all teams
+  // 3. Create standings for all teams
+  const standingsPrepStart = now();
   const newStandings: NewStanding[] = TEAMS.map((team, index) => ({
     id: `${saveId}-standing-${team.id}`,
     saveId,
@@ -347,20 +388,28 @@ export async function seedNewGame(
     goalsAgainst: 0,
     points: 0,
   }));
+  timingsMs.standingsPrepare = Math.round(now() - standingsPrepStart);
 
-  await batchInsertChunked(db, standings, newStandings);
-
-  // 5. Generate fixtures
+  // 4. Generate fixtures
   // Shuffle team IDs before generating fixtures for balanced home/away distribution
+  const fixturesPrepStart = now();
   const teamDbIds = shuffleArray(Array.from(teamIdMap.values()));
   const fixturesList = generateFixtures(teamDbIds, saveId, season);
+  timingsMs.fixturesPrepare = Math.round(now() - fixturesPrepStart);
 
-  await batchInsertChunked(db, fixtures, fixturesList);
+  const parallelInsertStart = now();
+  await Promise.all([
+    batchInsertChunked(db, players, allPlayers),
+    batchInsertChunked(db, standings, newStandings),
+    batchInsertChunked(db, fixtures, fixturesList),
+  ]);
+  timingsMs.parallelInsert = Math.round(now() - parallelInsertStart);
+  timingsMs.total = Math.round(now() - totalStart);
 
   return {
-    saveId,
     teamCount: newTeams.length,
     playerCount: allPlayers.length,
+    timingsMs,
   };
 }
 

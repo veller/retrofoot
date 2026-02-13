@@ -104,6 +104,9 @@ interface UseSaveDataResult {
   data: SaveData | null;
   isLoading: boolean;
   error: string | null;
+  isSetupPending: boolean;
+  setupStage: string | null;
+  setupProgress: number;
   refetch: () => Promise<void>;
 }
 
@@ -402,6 +405,9 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
   const [data, setData] = useState<SaveData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSetupPending, setIsSetupPending] = useState(false);
+  const [setupStage, setSetupStage] = useState<string | null>(null);
+  const [setupProgress, setSetupProgress] = useState(0);
 
   const fetchData = useCallback(async () => {
     if (!saveId) {
@@ -413,9 +419,28 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
     try {
       setIsLoading(true);
       setError(null);
+      setIsSetupPending(false);
+      setSetupStage(null);
+      setSetupProgress(0);
 
       // Fetch save details
       const saveResponse = await apiFetch(`/api/save/${saveId}`);
+
+      if (saveResponse.status === 202) {
+        const pendingData: {
+          stage?: string;
+          progress?: number;
+        } = await saveResponse.json();
+        setData(null);
+        setIsSetupPending(true);
+        setSetupStage(pendingData.stage ?? 'initializing');
+        setSetupProgress(
+          typeof pendingData.progress === 'number'
+            ? Math.max(0, Math.min(1, pendingData.progress))
+            : 0,
+        );
+        return;
+      }
 
       if (!saveResponse.ok) {
         if (saveResponse.status === 401) {
@@ -503,6 +528,9 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
         playerTeam,
         standings,
       });
+      setIsSetupPending(false);
+      setSetupStage(null);
+      setSetupProgress(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load save data');
       setData(null);
@@ -519,7 +547,34 @@ export function useSaveData(saveId: string | undefined): UseSaveDataResult {
     data,
     isLoading,
     error,
+    isSetupPending,
+    setupStage,
+    setupProgress,
     refetch: fetchData,
+  };
+}
+
+export async function fetchSaveSetupStatus(saveId: string): Promise<{
+  setupStatus: 'pending' | 'ready';
+  stage: string;
+  progress: number;
+}> {
+  const response = await apiFetch(`/api/save/${saveId}/setup-status`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch save setup status');
+  }
+  const payload: {
+    setupStatus?: string;
+    stage?: string;
+    progress?: number;
+  } = await response.json();
+  return {
+    setupStatus: payload.setupStatus === 'ready' ? 'ready' : 'pending',
+    stage: payload.stage ?? 'initializing',
+    progress:
+      typeof payload.progress === 'number'
+        ? Math.max(0, Math.min(1, payload.progress))
+        : 0,
   };
 }
 

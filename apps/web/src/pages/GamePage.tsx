@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
@@ -36,6 +36,7 @@ import {
   useTeamListings,
   useTeamOffers,
   useSeasonHistory,
+  fetchSaveSetupStatus,
   fetchTeamTactics,
   saveTeamTactics,
   listPlayerForSale,
@@ -106,15 +107,44 @@ function formatGoalDifference(gd: number): string {
   return String(gd);
 }
 
+function getSetupStageLabel(stage: string | null): string {
+  switch (stage) {
+    case 'teams':
+      return 'Creating clubs';
+    case 'players':
+      return 'Signing players';
+    case 'standings':
+      return 'Building table';
+    case 'fixtures':
+      return 'Scheduling season fixtures';
+    case 'ready':
+      return 'Ready';
+    default:
+      return 'Preparing world';
+  }
+}
+
 export function GamePage() {
   const { saveId } = useParams<{ saveId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     data,
     isLoading,
     error,
+    isSetupPending,
+    setupStage,
+    setupProgress,
     refetch: refetchSaveData,
   } = useSaveData(saveId);
+  const isSetupRoute = useMemo(
+    () => new URLSearchParams(location.search).get('setup') === '1',
+    [location.search],
+  );
+  const [backgroundSetupStage, setBackgroundSetupStage] = useState<
+    string | null
+  >(null);
+  const [backgroundSetupProgress, setBackgroundSetupProgress] = useState(0);
 
   const [activeTab, setActiveTab] = useState<GameTab>('squad');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -285,6 +315,94 @@ export function GamePage() {
       window.clearTimeout(timeoutId);
     };
   }, [saveId, playerTeam, tactics, isTacticsHydrated]);
+
+  useEffect(() => {
+    if (!saveId || (!isSetupRoute && !isSetupPending)) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: number | undefined;
+
+    const pollStatus = async () => {
+      try {
+        const status = await fetchSaveSetupStatus(saveId);
+        if (cancelled) return;
+        setBackgroundSetupStage(status.stage);
+        setBackgroundSetupProgress(status.progress);
+
+        if (status.setupStatus === 'ready') {
+          navigate(`/game/${saveId}`, { replace: true });
+          await refetchSaveData();
+          return;
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          console.error('Failed to poll setup status:', pollError);
+        }
+      }
+
+      if (!cancelled) {
+        timeoutId = window.setTimeout(() => {
+          void pollStatus();
+        }, 1500);
+      }
+    };
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [saveId, isSetupRoute, isSetupPending, navigate, refetchSaveData]);
+
+  if ((isSetupRoute || isSetupPending) && !data) {
+    const progressPercent = Math.round(
+      Math.max(setupProgress, backgroundSetupProgress) * 100,
+    );
+    const stageLabel = getSetupStageLabel(backgroundSetupStage ?? setupStage);
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center px-6">
+        <div className="w-full max-w-xl bg-slate-800 border border-slate-700 rounded-xl p-6">
+          <h1 className="text-xl font-bold text-white mb-2">
+            Your World Is Loading
+          </h1>
+          <p className="text-slate-300 mb-5">
+            {stageLabel}... You can leave this screen and come back later. Your
+            save continues in the background.
+          </p>
+          <div className="w-full h-2 rounded-full bg-slate-700 overflow-hidden">
+            <div
+              className="h-full bg-pitch-500 transition-all duration-300"
+              style={{ width: `${Math.max(5, progressPercent)}%` }}
+            />
+          </div>
+          <div className="mt-2 text-xs text-slate-400">
+            {progressPercent}% complete
+          </div>
+          <div className="mt-5 flex gap-3">
+            <Link
+              to="/"
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded"
+            >
+              Back to Menu
+            </Link>
+            <button
+              onClick={() => {
+                void refetchSaveData();
+              }}
+              className="px-4 py-2 bg-pitch-700 hover:bg-pitch-600 text-white rounded"
+            >
+              Refresh Now
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
