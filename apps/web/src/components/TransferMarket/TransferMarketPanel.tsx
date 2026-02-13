@@ -33,6 +33,7 @@ interface TransferMarketPanelProps {
   currentSeason: string;
   currentRound: number;
   onTransferComplete?: () => void;
+  onOffersChanged?: () => void;
 }
 
 export function TransferMarketPanel({
@@ -41,6 +42,7 @@ export function TransferMarketPanel({
   currentSeason,
   currentRound,
   onTransferComplete,
+  onOffersChanged,
 }: TransferMarketPanelProps) {
   const [activeTab, setActiveTab] = useState<TransferTab>('search');
   const [statusFilter, setStatusFilter] = useState<PlayerStatusFilter>('all');
@@ -122,15 +124,11 @@ export function TransferMarketPanel({
     return filterPlayers(combined);
   }, [marketData, statusFilter, filterPlayers]);
 
-  // Filter active offers (hide expired, rejected, completed, cancelled)
+  // Keep only actionable incoming bids for this panel (pending/counter).
   const filteredIncoming = useMemo(
     () =>
       incoming.filter(
-        (o) =>
-          o.status !== 'expired' &&
-          o.status !== 'rejected' &&
-          o.status !== 'completed' &&
-          o.status !== 'cancelled',
+        (o) => o.status === 'pending' || o.status === 'counter',
       ),
     [incoming],
   );
@@ -158,7 +156,7 @@ export function TransferMarketPanel({
     successMessage: string,
     errorMessage: string,
     refreshMarket = false,
-    isTransferComplete = false,
+    refreshParentOnSuccess: 'offers' | 'transfer' = 'offers',
   ) => {
     setIsSubmitting(true);
     try {
@@ -168,8 +166,11 @@ export function TransferMarketPanel({
         setActionMessage({ type: 'success', text: successMessage });
         refetchOffers();
         if (refreshMarket) refetchMarket();
-        // If this is a transfer completion (sale), refresh squad data too
-        if (isTransferComplete) onTransferComplete?.();
+        if (refreshParentOnSuccess === 'transfer') {
+          onTransferComplete?.();
+        } else {
+          onOffersChanged?.();
+        }
       } else {
         setActionMessage({ type: 'error', text: result.error || errorMessage });
       }
@@ -194,12 +195,11 @@ export function TransferMarketPanel({
         : 'Offer rejected.',
       'Failed to respond',
       response === 'accept', // refreshMarket
-      response === 'accept', // isTransferComplete (sale happened)
+      response === 'accept' ? 'transfer' : 'offers',
     );
 
   // Handle counter offer completion from CounterOfferModal
   const handleCounterOfferComplete = useCallback(() => {
-    setCounterOfferTarget(null);
     setActionMessage({ type: 'success', text: 'Player sold!' });
     refetchOffers();
     refetchListings();
@@ -209,8 +209,18 @@ export function TransferMarketPanel({
 
   // Handle counter offer rejection (AI walked away)
   const handleCounterOfferRejected = useCallback(() => {
+    setActionMessage({
+      type: 'error',
+      text: 'Counter offer rejected. The buyer walked away.',
+    });
     refetchOffers(); // Remove rejected offer from list
-  }, [refetchOffers]);
+    onOffersChanged?.();
+  }, [refetchOffers, onOffersChanged]);
+
+  const handleCounterOfferStateChange = useCallback(() => {
+    refetchOffers();
+    onOffersChanged?.();
+  }, [refetchOffers, onOffersChanged]);
 
   const handleListPlayer = async (playerId: string) => {
     setIsSubmitting(true);
@@ -595,17 +605,17 @@ export function TransferMarketPanel({
     }
   };
 
-  // Count pending incoming offers for alert
-  const pendingIncoming = filteredIncoming.filter((o) => o.status === 'pending');
+  // Count actionable incoming negotiations for alert
+  const actionableIncoming = filteredIncoming;
 
   return (
     <div className="p-4 space-y-4">
       {/* Alert Banner for Pending Offers */}
-      {pendingIncoming.length > 0 && (
+      {actionableIncoming.length > 0 && (
         <div className="p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm flex items-center gap-2">
           <span className="font-medium">
-            {pendingIncoming.length} incoming bid
-            {pendingIncoming.length > 1 ? 's' : ''} awaiting response
+            {actionableIncoming.length} incoming negotiation
+            {actionableIncoming.length > 1 ? 's' : ''} awaiting response
           </span>
           <button
             onClick={() => setActiveTab('my_transfers')}
@@ -662,7 +672,7 @@ export function TransferMarketPanel({
           {
             id: 'my_transfers',
             label: 'My Transfers',
-            count: myListings.length + filteredIncoming.length,
+            count: filteredIncoming.length,
           },
         ].map((tab) => (
           <button
@@ -709,6 +719,7 @@ export function TransferMarketPanel({
           onClose={() => setCounterOfferTarget(null)}
           onComplete={handleCounterOfferComplete}
           onRejected={handleCounterOfferRejected}
+          onStateChange={handleCounterOfferStateChange}
         />
       )}
     </div>

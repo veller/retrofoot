@@ -181,7 +181,10 @@ export function GamePage() {
   const { incoming: incomingOffers, refetch: refetchIncomingOffers } =
     useTeamOffers(saveId, playerTeam?.id);
   const pendingIncomingOffers = useMemo(
-    () => incomingOffers?.filter((o) => o.status === 'pending').length || 0,
+    () =>
+      incomingOffers?.filter(
+        (o) => o.status === 'pending' || o.status === 'counter',
+      ).length || 0,
     [incomingOffers],
   );
 
@@ -775,6 +778,7 @@ export function GamePage() {
               playerTeam={playerTeam}
               currentSeason={data.currentSeason}
               currentRound={data.currentRound}
+              onOffersChanged={refetchIncomingOffers}
               onTransferComplete={() => {
                 refetchSaveData();
                 refetchIncomingOffers();
@@ -1812,12 +1816,14 @@ function TransfersPanel({
   playerTeam,
   currentSeason,
   currentRound,
+  onOffersChanged,
   onTransferComplete,
 }: {
   saveId: string;
   playerTeam: Team;
   currentSeason: string;
   currentRound: number;
+  onOffersChanged?: () => void;
   onTransferComplete?: () => void;
 }) {
   return (
@@ -1826,6 +1832,7 @@ function TransfersPanel({
       playerTeam={playerTeam}
       currentSeason={currentSeason}
       currentRound={currentRound}
+      onOffersChanged={onOffersChanged}
       onTransferComplete={onTransferComplete}
     />
   );

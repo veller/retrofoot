@@ -136,3 +136,34 @@ Release feature verification update:
 - Unit tests added and passing:
   - `pnpm -C packages/core exec vitest run src/transfer/release-compensation.test.ts`
 - Ran the `$WEB_GAME_CLIENT` loop command once against `http://localhost:5173`; command exited successfully, but no fresh screenshot artifacts were produced in `output/playwright`, so targeted visual verification for the new release UI still needs a focused headed probe.
+
+Transfer UX follow-up fixes:
+- `My Transfers` tab badge now counts only actionable incoming bids (`pending`/`counter`) and no longer includes listed-player count.
+- Incoming filter tightened to actionable statuses only (`pending`, `counter`) to prevent stale/terminal statuses from inflating counts.
+- Counter-offer completion no longer force-closes modal from parent; modal now remains and shows its built-in completion state before the user closes it.
+- Added explicit parent-level feedback when AI rejects a counter: "Counter offer rejected. The buyer walked away."
+- Validation: `pnpm -C apps/web exec tsc --noEmit` passes.
+
+Full badge/offer-lifecycle consistency pass:
+- Unified top-level GamePage transfer badge count to actionable incoming offers (`pending` + `counter`) instead of only `pending`.
+- Added CounterOfferModal `onStateChange` callback and wired parent refresh so every successful negotiation transition triggers refresh of:
+  - panel offers list, and
+  - parent-level badge hook state.
+- Ensured parent refresh callback runs on reject/accept flows from `TransferMarketPanel` offer actions, not only on completed transfers.
+- Ensured AI walk-away (counter rejected) path also refreshes parent counters and shows explicit message.
+- Unified TransferMarket alert banner count/text to actionable incoming negotiations to avoid mismatched numbers across widgets.
+- Validation: `pnpm -C apps/web exec tsc --noEmit` passes.
+
+Counter-thread regression fix:
+- Root cause: counter negotiation state changes were calling `onTransferComplete` (heavy parent refresh via `refetchSaveData`) which could remount/reset transfers panel state to default tab.
+- Fix: separated callbacks in transfer UI:
+  - `onOffersChanged` for badge/counter refresh only (lightweight).
+  - `onTransferComplete` reserved for real squad/finance transfer completion.
+- Updated GamePage transfer badge to actionable incoming statuses (`pending` + `counter`) for consistency.
+- Updated TransferMarket panel lifecycle handlers so counter state transitions/walk-away refresh only offers/badges and keep negotiation thread in place.
+- Added CounterOfferModal `onStateChange` callback to push parent offer refresh on each successful negotiation transition.
+- Typecheck pass: `pnpm -C apps/web exec tsc --noEmit`.
+- Playwright run:
+  - Started local dev server on `http://127.0.0.1:5173`.
+  - Ran Playwright smoke script (elevated due sandbox browser restriction), reached page title: `Sign In | RetroFoot`.
+  - Transfer-flow E2E from this environment is currently gated by auth/session context.

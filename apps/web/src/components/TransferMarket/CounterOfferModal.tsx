@@ -22,6 +22,7 @@ interface CounterOfferModalProps {
     finalWage: number;
   }) => void;
   onRejected?: () => void; // Called when AI walks away - parent should refetch offers
+  onStateChange?: () => void; // Called after any successful negotiation state transition
 }
 
 interface NegotiationRound {
@@ -37,6 +38,7 @@ export function CounterOfferModal({
   onClose,
   onComplete,
   onRejected,
+  onStateChange,
 }: CounterOfferModalProps) {
   // Counter offer form state - round to nearest thousand for cleaner UX
   const [counterFee, setCounterFee] = useState(
@@ -112,6 +114,7 @@ export function CounterOfferModal({
         setNegotiationId(neg.negotiationId);
         setRound(neg.round);
         setCanCounter(neg.canCounter);
+        onStateChange?.();
 
         // Add AI response to history
         setHistory((prev) => [
@@ -161,6 +164,7 @@ export function CounterOfferModal({
       negotiationId,
       onComplete,
       onRejected,
+      onStateChange,
     ],
   );
 
