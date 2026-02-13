@@ -182,6 +182,7 @@ export function GamePage() {
     data: matchData,
     isLoading: isMatchDataLoading,
     error: matchDataError,
+    refetch: refetchMatchData,
   } = useSaveMatchData(saveId);
 
   // Compute upcoming match from database match data
@@ -216,13 +217,7 @@ export function GamePage() {
     if (upcomingMatch) {
       return `vs ${upcomingMatch.opponent?.shortName || '???'}${upcomingMatch.isHome ? ' (H)' : ' (A)'}`;
     }
-    if (isMatchDataLoading) {
-      return 'Preparing fixture...';
-    }
-    if (matchDataError) {
-      return 'Syncing fixture data...';
-    }
-    return 'Waiting for fixture...';
+    return 'Loading your next match';
   }
 
   const handlePlayMatch = () => {
@@ -382,6 +377,34 @@ export function GamePage() {
     };
   }, [saveId, isSetupRoute, isSetupPending, navigate, refetchSaveData]);
 
+  useEffect(() => {
+    if (
+      !saveId ||
+      !data ||
+      isSeasonComplete ||
+      upcomingMatch ||
+      isMatchDataLoading
+    ) {
+      return;
+    }
+
+    void refetchMatchData();
+    const intervalId = window.setInterval(() => {
+      void refetchMatchData();
+    }, 2000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [
+    saveId,
+    data,
+    isSeasonComplete,
+    upcomingMatch,
+    isMatchDataLoading,
+    refetchMatchData,
+  ]);
+
   if ((isSetupRoute || isSetupPending) && !data) {
     const progressPercent = Math.round(
       Math.max(setupProgress, backgroundSetupProgress) * 100,
@@ -485,7 +508,12 @@ export function GamePage() {
               }`}
             >
               <span>Play Match</span>
-              <span className="text-pitch-200 text-xs">{getPlayMatchDetailText()}</span>
+              <span className="text-pitch-200 text-xs">
+                {getPlayMatchDetailText()}
+                {!upcomingMatch && (
+                  <span className="inline-block animate-pulse">...</span>
+                )}
+              </span>
             </button>
           )}
           {!upcomingMatch && isSeasonComplete && (
@@ -510,7 +538,7 @@ export function GamePage() {
                   : 'bg-pitch-600 hover:bg-pitch-500'
               }`}
             >
-              {isPlayMatchDisabled ? 'Preparing...' : 'Play'}
+              {isPlayMatchDisabled ? 'Loading...' : 'Play'}
             </button>
           )}
           <button
