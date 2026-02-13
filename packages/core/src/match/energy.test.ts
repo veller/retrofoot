@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchConfig, MatchState } from './index';
 import {
+  calculateChanceSuccessForTesting,
   calculateEnergyModifier,
   calculateLiveEnergyDrainPerMinute,
   createMatchState,
@@ -62,7 +63,61 @@ function makeTeam(prefix: string): { team: Team; tactics: Tactics } {
     makePlayer(`${prefix}-a2`, 'ATT', 100),
     makePlayer(`${prefix}-a3`, 'ATT', 100),
   ];
-  const bench = [makePlayer(`${prefix}-b1`, 'MID', 88)];
+  const bench = [
+    makePlayer(`${prefix}-b1`, 'MID', 88),
+    makePlayer(`${prefix}-b2`, 'ATT', 89),
+  ];
+  const players = [...starters, ...bench];
+
+  const team: Team = {
+    id: `${prefix}-team`,
+    name: `${prefix.toUpperCase()} FC`,
+    shortName: prefix.toUpperCase(),
+    primaryColor: '#ffffff',
+    secondaryColor: '#000000',
+    stadium: 'Arena',
+    capacity: 40000,
+    reputation: 60,
+    budget: 1_000_000,
+    wageBudget: 200_000,
+    players,
+    momentum: 50,
+    lastFiveResults: [],
+  };
+
+  const tactics: Tactics = {
+    formation: '4-3-3',
+    posture: 'balanced',
+    lineup: starters.map((p) => p.id),
+    substitutes: bench.map((p) => p.id),
+  };
+
+  return { team, tactics };
+}
+
+function makeDeepBenchTeam(prefix: string): { team: Team; tactics: Tactics } {
+  const starters = [
+    makePlayer(`${prefix}-gk`, 'GK', 100),
+    makePlayer(`${prefix}-d1`, 'DEF', 18),
+    makePlayer(`${prefix}-d2`, 'DEF', 19),
+    makePlayer(`${prefix}-d3`, 'DEF', 20),
+    makePlayer(`${prefix}-d4`, 'DEF', 21),
+    makePlayer(`${prefix}-m1`, 'MID', 20),
+    makePlayer(`${prefix}-m2`, 'MID', 19),
+    makePlayer(`${prefix}-m3`, 'MID', 21),
+    makePlayer(`${prefix}-a1`, 'ATT', 20),
+    makePlayer(`${prefix}-a2`, 'ATT', 22),
+    makePlayer(`${prefix}-a3`, 'ATT', 23),
+  ];
+  const bench = [
+    makePlayer(`${prefix}-bd1`, 'DEF', 90),
+    makePlayer(`${prefix}-bd2`, 'DEF', 88),
+    makePlayer(`${prefix}-bm1`, 'MID', 90),
+    makePlayer(`${prefix}-bm2`, 'MID', 88),
+    makePlayer(`${prefix}-ba1`, 'ATT', 91),
+    makePlayer(`${prefix}-ba2`, 'ATT', 89),
+    makePlayer(`${prefix}-bgk`, 'GK', 90),
+  ];
   const players = [...starters, ...bench];
 
   const team: Team = {
@@ -146,8 +201,8 @@ describe('energy match behavior', () => {
   it('starts draining a substitute only after coming on', () => {
     const { config, state } = setupMatch();
 
-    const outgoingId = state.homeLineup[10].id;
-    const incomingId = state.homeSubs[0].id;
+    const outgoingId = state.homeLineup.find((p) => p.position === 'ATT')!.id;
+    const incomingId = state.homeSubs.find((p) => p.position === 'ATT')!.id;
 
     simulateMatchStep(state, config); // kickoff
     simulateMatchStep(state, config); // minute 1
@@ -162,5 +217,208 @@ describe('energy match behavior', () => {
 
     expect(state.homeLiveEnergy[incomingId]).toBeLessThan(incomingBeforeSub);
     expect(state.homeLiveEnergy[outgoingId]).toBe(outgoingAtSub);
+  });
+
+  it('reduces chance conversion when attacking side is fatigued', () => {
+    const home = makeTeam('ha');
+    const away = makeTeam('aa');
+
+    const highEnergyAttack = calculateChanceSuccessForTesting(
+      home.team.players,
+      away.team.players,
+      home.tactics,
+      away.tactics,
+      {
+        isHome: true,
+        isNeutralVenue: true,
+        attackingTeam: home.team,
+        defendingTeam: away.team,
+        attackingLiveEnergyByPlayerId: Object.fromEntries(
+          home.team.players.map((p) => [p.id, 100]),
+        ),
+        defendingLiveEnergyByPlayerId: Object.fromEntries(
+          away.team.players.map((p) => [p.id, 100]),
+        ),
+      },
+    );
+
+    const lowEnergyAttack = calculateChanceSuccessForTesting(
+      home.team.players,
+      away.team.players,
+      home.tactics,
+      away.tactics,
+      {
+        isHome: true,
+        isNeutralVenue: true,
+        attackingTeam: home.team,
+        defendingTeam: away.team,
+        attackingLiveEnergyByPlayerId: Object.fromEntries(
+          home.team.players.map((p) => [p.id, 28]),
+        ),
+        defendingLiveEnergyByPlayerId: Object.fromEntries(
+          away.team.players.map((p) => [p.id, 100]),
+        ),
+      },
+    );
+
+    expect(lowEnergyAttack).toBeLessThan(highEnergyAttack);
+  });
+
+  it('increases chance conversion when defending side is fatigued', () => {
+    const home = makeTeam('hb');
+    const away = makeTeam('ab');
+
+    const freshDefense = calculateChanceSuccessForTesting(
+      home.team.players,
+      away.team.players,
+      home.tactics,
+      away.tactics,
+      {
+        isHome: true,
+        isNeutralVenue: true,
+        attackingTeam: home.team,
+        defendingTeam: away.team,
+        attackingLiveEnergyByPlayerId: Object.fromEntries(
+          home.team.players.map((p) => [p.id, 100]),
+        ),
+        defendingLiveEnergyByPlayerId: Object.fromEntries(
+          away.team.players.map((p) => [p.id, 100]),
+        ),
+      },
+    );
+
+    const tiredDefense = calculateChanceSuccessForTesting(
+      home.team.players,
+      away.team.players,
+      home.tactics,
+      away.tactics,
+      {
+        isHome: true,
+        isNeutralVenue: true,
+        attackingTeam: home.team,
+        defendingTeam: away.team,
+        attackingLiveEnergyByPlayerId: Object.fromEntries(
+          home.team.players.map((p) => [p.id, 100]),
+        ),
+        defendingLiveEnergyByPlayerId: Object.fromEntries(
+          away.team.players.map((p) => [p.id, 28]),
+        ),
+      },
+    );
+
+    expect(tiredDefense).toBeGreaterThan(freshDefense);
+  });
+
+  it('does not auto-sub tired AI players before half-time, but does after', () => {
+    const home = makeDeepBenchTeam('hsub');
+    const away = makeTeam('asub');
+    const config: MatchConfig = {
+      homeTeam: home.team,
+      awayTeam: away.team,
+      homeTactics: home.tactics,
+      awayTactics: away.tactics,
+      homeControl: 'ai',
+      awayControl: 'ai',
+    };
+    const state = createMatchState(config);
+
+    simulateMatchStep(state, config); // kickoff
+    for (let minute = 1; minute <= 45; minute++) {
+      simulateMatchStep(state, config);
+    }
+
+    const firstHalfSub = state.events.find(
+      (e) => e.type === 'substitution' && e.team === 'home' && e.minute <= 45,
+    );
+    expect(firstHalfSub).toBeUndefined();
+
+    // Move into second half and allow AI substitution logic.
+    simulateMatchStep(state, config); // minute 46
+
+    const subEvent = state.events.find((e) => e.type === 'substitution' && e.team === 'home');
+    expect(subEvent).toBeDefined();
+    expect(subEvent?.description).toContain('[ai_reason:fatigue]');
+    expect(state.homeSubsUsed).toBeGreaterThan(0);
+  });
+
+  it('can perform multiple AI substitutions in the same minute window', () => {
+    const home = makeDeepBenchTeam('hmulti');
+    const away = makeTeam('amulti');
+    const config: MatchConfig = {
+      homeTeam: home.team,
+      awayTeam: away.team,
+      homeTactics: home.tactics,
+      awayTactics: away.tactics,
+      homeControl: 'ai',
+      awayControl: 'ai',
+    };
+    const state = createMatchState(config);
+
+    simulateMatchStep(state, config); // kickoff
+    for (let minute = 1; minute <= 46; minute++) {
+      simulateMatchStep(state, config);
+    }
+
+    const minute46Subs = state.events.filter(
+      (e) => e.type === 'substitution' && e.team === 'home' && e.minute === 46,
+    );
+    expect(minute46Subs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('never exceeds 5 automatic substitutions for AI team', () => {
+    const home = makeDeepBenchTeam('hcap');
+    const away = makeDeepBenchTeam('acap');
+    const config: MatchConfig = {
+      homeTeam: home.team,
+      awayTeam: away.team,
+      homeTactics: home.tactics,
+      awayTactics: away.tactics,
+      homeControl: 'ai',
+      awayControl: 'ai',
+    };
+    const state = createMatchState(config);
+
+    simulateMatchStep(state, config); // kickoff
+    for (let i = 0; i < 120; i++) {
+      simulateMatchStep(state, config);
+    }
+
+    expect(state.homeSubsUsed).toBeLessThanOrEqual(5);
+    expect(state.awaySubsUsed).toBeLessThanOrEqual(5);
+  });
+
+  it('does not auto-substitute for human-controlled side', () => {
+    const home = makeDeepBenchTeam('hhuman');
+    const away = makeTeam('ahuman');
+    const config: MatchConfig = {
+      homeTeam: home.team,
+      awayTeam: away.team,
+      homeTactics: home.tactics,
+      awayTactics: away.tactics,
+      homeControl: 'human',
+      awayControl: 'ai',
+    };
+    const state = createMatchState(config);
+
+    simulateMatchStep(state, config); // kickoff
+    simulateMatchStep(state, config); // minute 1
+
+    expect(state.homeSubsUsed).toBe(0);
+  });
+
+  it('rejects substitution when incoming player is a different position', () => {
+    const { state } = setupMatch();
+    const homeOutAttackerId = state.homeLineup.find((p) => p.position === 'ATT')?.id;
+    const homeInMidId = state.homeSubs.find((p) => p.position === 'MID')?.id;
+    expect(homeOutAttackerId).toBeDefined();
+    expect(homeInMidId).toBeDefined();
+
+    const result = makeSubstitution(
+      state,
+      'home',
+      homeOutAttackerId as string,
+      homeInMidId as string,
+    );
+    expect(result.success).toBe(false);
   });
 });

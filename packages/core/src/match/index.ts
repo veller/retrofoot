@@ -52,6 +52,9 @@ import {
   POSSESSION_CHANCE_MIN,
   type TacticalImpact,
 } from './tactical-constants';
+import { selectBestLineup } from '../team';
+
+type MatchControl = 'human' | 'ai';
 
 // Match simulation configuration
 export interface MatchConfig {
@@ -59,6 +62,8 @@ export interface MatchConfig {
   awayTeam: Team;
   homeTactics: Tactics;
   awayTactics: Tactics;
+  homeControl?: MatchControl;
+  awayControl?: MatchControl;
   neutralVenue?: boolean;
   fixtureId?: string;
 }
@@ -93,10 +98,19 @@ export interface LiveMatchState {
   fixtureId: string;
   homeTeam: Team;
   awayTeam: Team;
+  homeControl: MatchControl;
+  awayControl: MatchControl;
   state: MatchState;
   attendance: number;
   latestEvent?: MatchEvent;
 }
+
+const AI_SUB_MINUTE_EARLY = 46;
+const AI_SUB_MINUTE_SITUATIONAL = 60;
+const AI_SUB_URGENT_ENERGY = 35;
+const AI_SUB_SITUATIONAL_ENERGY = 45;
+const AI_SUB_PREFERRED_BENCH_ENERGY = 55;
+const AI_SUB_MAX = 5;
 
 // Random number generator (can be seeded for deterministic results)
 function random(): number {
@@ -380,6 +394,8 @@ interface ChanceSuccessOptions {
   scorer?: Player;
   attackingImpact?: TacticalImpact;
   defendingImpact?: TacticalImpact;
+  attackingLiveEnergyByPlayerId?: Record<string, number>;
+  defendingLiveEnergyByPlayerId?: Record<string, number>;
 }
 
 // Calculate attack vs defense for a chance
@@ -402,6 +418,7 @@ function calculateChanceSuccess(
       team: options?.attackingTeam,
       redCards: isHome ? options?.homeRedCards : options?.awayRedCards,
       minute,
+      liveEnergyByPlayerId: options?.attackingLiveEnergyByPlayerId,
     },
   );
 
@@ -414,6 +431,7 @@ function calculateChanceSuccess(
     team: options?.defendingTeam,
     redCards: isHome ? options?.awayRedCards : options?.homeRedCards,
     minute,
+    liveEnergyByPlayerId: options?.defendingLiveEnergyByPlayerId,
   });
 
   // Base chance modified by strength difference
@@ -445,6 +463,23 @@ function calculateChanceSuccess(
   return Math.max(
     MIN_GOAL_CONVERSION,
     Math.min(MAX_GOAL_CONVERSION, baseChance),
+  );
+}
+
+// Test helper to validate chance conversion behavior without exposing internals to runtime callers.
+export function calculateChanceSuccessForTesting(
+  attackingPlayers: Player[],
+  defendingPlayers: Player[],
+  attackingTactics: Tactics,
+  defendingTactics?: Tactics,
+  options?: ChanceSuccessOptions,
+): number {
+  return calculateChanceSuccess(
+    attackingPlayers,
+    defendingPlayers,
+    attackingTactics,
+    defendingTactics,
+    options,
   );
 }
 
@@ -538,8 +573,9 @@ export function makeSubstitution(
   team: 'home' | 'away',
   playerOutId: string,
   playerInId: string,
+  options?: { reason?: 'fatigue' | 'tactical' | 'protect_lead' },
 ): { success: boolean; event?: MatchEvent } {
-  const MAX_SUBS = 5;
+  const MAX_SUBS = AI_SUB_MAX;
   const subsUsed = team === 'home' ? state.homeSubsUsed : state.awaySubsUsed;
 
   if (subsUsed >= MAX_SUBS) {
@@ -558,6 +594,9 @@ export function makeSubstitution(
   }
 
   const playerOut = lineup[playerOutIndex];
+  if (playerOut.position !== playerIn.position) {
+    return { success: false };
+  }
 
   // Swap players
   lineup[playerOutIndex] = playerIn;
@@ -590,12 +629,135 @@ export function makeSubstitution(
     playerName: playerIn.nickname || playerIn.name,
     assistPlayerId: playerOutId,
     assistPlayerName: playerOut.nickname || playerOut.name,
-    description: `Substitution: ${playerIn.nickname || playerIn.name} replaces ${playerOut.nickname || playerOut.name}`,
+    description: `Substitution: ${playerIn.nickname || playerIn.name} replaces ${playerOut.nickname || playerOut.name}${options?.reason ? ` [ai_reason:${options.reason}]` : ''}`,
   };
 
   state.events.push(event);
 
   return { success: true, event };
+}
+
+function calculateProjectedPlayerStrength(
+  player: Player,
+  liveEnergy: number,
+): number {
+  const energyPenalty = calculateEnergyModifier(liveEnergy);
+  return calculateOverall(player) * (1 - energyPenalty);
+}
+
+function getMaxSubsAllowedByMinute(minute: number): number {
+  if (minute < AI_SUB_MINUTE_EARLY) return 0;
+  if (minute < AI_SUB_MINUTE_SITUATIONAL) return 2;
+  if (minute < 75) return 3;
+  if (minute < 85) return 4;
+  return AI_SUB_MAX;
+}
+
+function getMaxSubsInCurrentMinute(minute: number): number {
+  if (minute === 46) return 2; // Half-time window: allow a double change
+  if (minute >= 75) return 2; // Late-game push/protection can include paired changes
+  return 1;
+}
+
+function evaluateAiSubstitutions(
+  state: MatchState,
+  config: MatchConfig,
+  team: 'home' | 'away',
+): void {
+  const isHome = team === 'home';
+  const teamControl = isHome ? config.homeControl ?? 'ai' : config.awayControl ?? 'ai';
+  if (teamControl !== 'ai') return;
+
+  const subsUsed = isHome ? state.homeSubsUsed : state.awaySubsUsed;
+  if (subsUsed >= AI_SUB_MAX) return;
+
+  const maxSubsAllowed = getMaxSubsAllowedByMinute(state.minute);
+  const liveEnergy = isHome ? state.homeLiveEnergy : state.awayLiveEnergy;
+  const scoreLead = isHome
+    ? state.homeScore - state.awayScore
+    : state.awayScore - state.homeScore;
+
+  const lineup = isHome ? state.homeLineup : state.awayLineup;
+  const bench = isHome ? state.homeSubs : state.awaySubs;
+  if (bench.length === 0 || lineup.length === 0) return;
+  if (state.minute < AI_SUB_MINUTE_EARLY) return;
+  if (subsUsed >= maxSubsAllowed) return;
+
+  const minuteSubCap = getMaxSubsInCurrentMinute(state.minute);
+  const remainingTotalCap = maxSubsAllowed - subsUsed;
+  const maxSubsThisMinute = Math.min(minuteSubCap, remainingTotalCap);
+
+  for (let subAttempt = 0; subAttempt < maxSubsThisMinute; subAttempt++) {
+    const latestLineup = isHome ? state.homeLineup : state.awayLineup;
+    const latestBench = isHome ? state.homeSubs : state.awaySubs;
+    const candidateOrder = [...latestLineup]
+      .map((player) => ({
+        player,
+        energy: liveEnergy[player.id] ?? player.energy ?? 100,
+      }))
+      .sort((a, b) => a.energy - b.energy);
+
+    let executedSub = false;
+
+    for (const candidate of candidateOrder) {
+      const outgoing = candidate.player;
+      const outgoingEnergy = candidate.energy;
+      const isUrgent = outgoingEnergy <= AI_SUB_URGENT_ENERGY;
+      const isSituational =
+        state.minute >= AI_SUB_MINUTE_SITUATIONAL &&
+        outgoingEnergy <= AI_SUB_SITUATIONAL_ENERGY;
+      if (!isUrgent && !isSituational) continue;
+
+      const outgoingScore = calculateProjectedPlayerStrength(
+        outgoing,
+        outgoingEnergy,
+      );
+      const samePositionBench = latestBench.filter(
+        (p) => p.position === outgoing.position,
+      );
+
+      const pickReplacement = (pool: Player[]): Player | undefined => {
+        const scored = pool
+          .map((p) => {
+            const benchEnergy = liveEnergy[p.id] ?? p.energy ?? 100;
+            return {
+              player: p,
+              energy: benchEnergy,
+              score: calculateProjectedPlayerStrength(p, benchEnergy),
+            };
+          })
+          .filter((entry) => entry.score > outgoingScore)
+          .sort((a, b) => {
+            const aPreferred = a.energy >= AI_SUB_PREFERRED_BENCH_ENERGY ? 1 : 0;
+            const bPreferred = b.energy >= AI_SUB_PREFERRED_BENCH_ENERGY ? 1 : 0;
+            if (bPreferred !== aPreferred) return bPreferred - aPreferred;
+            if (b.score !== a.score) return b.score - a.score;
+            return a.player.id.localeCompare(b.player.id);
+          });
+        return scored[0]?.player;
+      };
+
+      const incoming = pickReplacement(samePositionBench);
+      if (!incoming) continue;
+
+      const reason: 'fatigue' | 'tactical' | 'protect_lead' =
+        isUrgent
+          ? 'fatigue'
+          : scoreLead > 0 && state.minute >= 70
+            ? 'protect_lead'
+            : 'tactical';
+
+      const result = makeSubstitution(state, team, outgoing.id, incoming.id, {
+        reason,
+      });
+      if (result.success) {
+        executedSub = true;
+        break;
+      }
+    }
+
+    if (!executedSub) break;
+  }
 }
 
 // Pick a set piece scorer (weighted by heading + positioning for corners, shooting for free kicks)
@@ -621,6 +783,8 @@ function pickSetPieceScorer(
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
   applyLiveEnergyDrain(state);
+  evaluateAiSubstitutions(state, config, 'home');
+  evaluateAiSubstitutions(state, config, 'away');
 
   const homeFormationImpact = calculateFormationMatchupImpact(
     state.homeTactics.formation,
@@ -738,6 +902,10 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         scorer,
         attackingImpact,
         defendingImpact,
+        attackingLiveEnergyByPlayerId:
+          attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+        defendingLiveEnergyByPlayerId:
+          attackingTeam === 'home' ? state.awayLiveEnergy : state.homeLiveEnergy,
       },
     );
 
@@ -1174,6 +1342,8 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       homeTactics,
       awayTactics,
       fixtureId: fixture.id,
+      homeControl: fixture.homeTeamId === playerTeamId ? 'human' : 'ai',
+      awayControl: fixture.awayTeamId === playerTeamId ? 'human' : 'ai',
     };
 
     const state = createMatchState(matchConfig);
@@ -1182,6 +1352,8 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       fixtureId: fixture.id,
       homeTeam,
       awayTeam,
+      homeControl: matchConfig.homeControl ?? 'ai',
+      awayControl: matchConfig.awayControl ?? 'ai',
       state,
       attendance: sampleAttendance(homeTeam, awayTeam, homeTeam.capacity, {
         round: currentRound,
@@ -1219,6 +1391,8 @@ export function simulateAllMatchesStep(matches: LiveMatchState[]): {
     const config: MatchConfig = {
       homeTeam,
       awayTeam,
+      homeControl: match.homeControl,
+      awayControl: match.awayControl,
       homeTactics: state.homeTactics,
       awayTactics: state.awayTactics,
       fixtureId: match.fixtureId,
@@ -1251,12 +1425,7 @@ export function matchStateToResult(match: LiveMatchState): MatchResult {
 
 // Helper to create default tactics for AI teams
 function createDefaultTactics(team: Team): Tactics {
-  // Simple best 11 selection
-  const sorted = [...team.players].sort(
-    (a, b) => calculateOverall(b) - calculateOverall(a),
-  );
-  const lineup = sorted.slice(0, 11).map((p) => p.id);
-  const substitutes = sorted.slice(11, 18).map((p) => p.id);
+  const { lineup, substitutes } = selectBestLineup(team, '4-3-3');
 
   return {
     formation: '4-3-3',

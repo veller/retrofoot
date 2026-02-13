@@ -10,6 +10,7 @@ import {
   evaluateFormationEligibility,
   getEligibleFormations,
   getRequiredPositionForSlot,
+  isLineupCompatibleWithFormation,
   normalizeFormation,
   calculateRoundSponsorship,
   calculateStadiumMaintenance,
@@ -281,12 +282,22 @@ export function GamePage() {
           playerIds.has(id),
         );
         const rebuilt = selectBestLineup(playerTeam, selectedFormation);
+        const lineupIsCompatible = isLineupCompatibleWithFormation(
+          playerTeam,
+          selectedFormation,
+          lineup,
+        );
+        const hydratedLineup = lineupIsCompatible ? lineup : rebuilt.lineup;
+        const hydratedLineupSet = new Set(hydratedLineup);
+        const hydratedSubs = substitutes.filter(
+          (id) => !hydratedLineupSet.has(id),
+        );
         const hydrated: Tactics = {
           formation: selectedFormation,
           posture: persisted.posture,
-          lineup: lineup.length >= 11 ? lineup : rebuilt.lineup,
+          lineup: hydratedLineup,
           substitutes:
-            substitutes.length > 0 ? substitutes : rebuilt.substitutes,
+            hydratedSubs.length > 0 ? hydratedSubs : rebuilt.substitutes,
         };
         if (!cancelled) {
           setTactics(hydrated);

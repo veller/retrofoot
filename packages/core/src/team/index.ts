@@ -19,6 +19,7 @@ export const FORMATION_OPTIONS: FormationType[] = [
 
 export const DEFAULT_FORMATION: FormationType = '4-3-3';
 export const MIN_FITNESS_FOR_AVAILABILITY = 50;
+const AI_STARTER_HARD_FLOOR = 35;
 
 export interface FormationAvailabilityCounts {
   GK: number;
@@ -227,17 +228,30 @@ export function selectBestLineup(
   const usedPlayerIds = new Set<string>();
   const lineup: string[] = [];
 
-  // For each position in formation, find best available player
+  // For each position in formation, find best available player in the same role.
   for (const position of positions) {
-    const candidates = availablePlayers
-      .filter((p) => !usedPlayerIds.has(p.id))
+    const roleCandidates = availablePlayers.filter(
+      (p) => !usedPlayerIds.has(p.id) && p.position === position,
+    );
+    const hasReadyRoleAlternative = roleCandidates.some(
+      (p) => (p.energy ?? 100) >= AI_STARTER_HARD_FLOOR,
+    );
+    const candidatesForSelection = roleCandidates.filter(
+      (p) =>
+        !hasReadyRoleAlternative || (p.energy ?? 100) >= AI_STARTER_HARD_FLOOR,
+    );
+    const candidates = (candidatesForSelection.length > 0
+      ? candidatesForSelection
+      : roleCandidates)
       .map((p) => ({
         player: p,
         score:
-          getPositionScore(p, position) *
-          (1 - calculateSelectionEnergyPenalty(p.energy ?? 100)),
+          calculateOverall(p) * (1 - calculateSelectionEnergyPenalty(p.energy ?? 100)),
       }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.player.id.localeCompare(b.player.id);
+      });
 
     if (candidates.length > 0) {
       lineup.push(candidates[0].player.id);
@@ -245,18 +259,40 @@ export function selectBestLineup(
     }
   }
 
-  // Substitutes are next best players not in lineup
-  const substitutes = availablePlayers
+  // Substitutes are next best players not in lineup, with baseline role coverage when possible.
+  const remainingPlayers = availablePlayers
     .filter((p) => !usedPlayerIds.has(p.id))
-    .sort(
-      (a, b) =>
-        calculateOverall(b) * (1 - calculateSelectionEnergyPenalty(b.energy ?? 100)) -
-        calculateOverall(a) * (1 - calculateSelectionEnergyPenalty(a.energy ?? 100)),
-    )
-    .slice(0, 7) // 7 subs on bench
-    .map((p) => p.id);
+    .map((p) => ({
+      player: p,
+      score:
+        calculateOverall(p) * (1 - calculateSelectionEnergyPenalty(p.energy ?? 100)),
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.player.id.localeCompare(b.player.id);
+    });
 
-  return { lineup, substitutes };
+  const bench: string[] = [];
+  const benchSet = new Set<string>();
+  const ensureCoverageOrder: Position[] = ['GK', 'DEF', 'MID', 'ATT'];
+  for (const position of ensureCoverageOrder) {
+    const candidate = remainingPlayers.find(
+      ({ player }) => player.position === position && !benchSet.has(player.id),
+    );
+    if (!candidate) continue;
+    bench.push(candidate.player.id);
+    benchSet.add(candidate.player.id);
+    if (bench.length >= 7) break;
+  }
+
+  for (const { player } of remainingPlayers) {
+    if (bench.length >= 7) break;
+    if (benchSet.has(player.id)) continue;
+    bench.push(player.id);
+    benchSet.add(player.id);
+  }
+
+  return { lineup, substitutes: bench };
 }
 
 // Auto-select lineup prioritizing readiness (energy) while still respecting role fit.
@@ -274,13 +310,17 @@ export function selectMostReadyLineup(
 
   for (const position of positions) {
     const candidates = availablePlayers
-      .filter((p) => !usedPlayerIds.has(p.id))
+      .filter((p) => !usedPlayerIds.has(p.id) && p.position === position)
       .map((p) => ({
         player: p,
-        score:
-          (p.energy ?? 100) * 1.4 + getPositionScore(p, position) * 0.6,
+        score: p.energy ?? 100,
       }))
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const overallDelta = calculateOverall(b.player) - calculateOverall(a.player);
+        if (overallDelta !== 0) return overallDelta;
+        return a.player.id.localeCompare(b.player.id);
+      });
 
     if (candidates.length > 0) {
       lineup.push(candidates[0].player.id);
@@ -297,40 +337,37 @@ export function selectMostReadyLineup(
   return { lineup, substitutes };
 }
 
+export function isLineupCompatibleWithFormation(
+  team: Team,
+  formation: FormationType,
+  lineup: string[],
+): boolean {
+  const safeFormation = normalizeFormation(formation);
+  const requiredPositions = FORMATION_POSITIONS[safeFormation];
+  if (lineup.length !== requiredPositions.length) return false;
+  if (new Set(lineup).size !== lineup.length) return false;
+
+  const playersById = new Map(team.players.map((player) => [player.id, player]));
+
+  for (let index = 0; index < requiredPositions.length; index++) {
+    const playerId = lineup[index];
+    const player = playersById.get(playerId);
+    const requiredPosition = requiredPositions[index];
+    if (!player) return false;
+    if (player.injured) return false;
+    if (player.position !== requiredPosition) return false;
+  }
+
+  return true;
+}
+
 function calculateSelectionEnergyPenalty(energy: number): number {
   const e = Math.max(0, Math.min(100, energy));
   if (e >= 70) return 0;
-  return ((70 - e) / 70) * 0.28;
-}
-
-// Calculate how well a player fits a position (simplified 4 positions)
-function getPositionScore(player: Player, targetPosition: Position): number {
-  const overall = calculateOverall(player);
-
-  // Perfect position match
-  if (player.position === targetPosition) {
-    return overall + 10;
-  }
-
-  // GK is unique - can't play other positions well
-  if (targetPosition === 'GK' || player.position === 'GK') {
-    return overall - 30;
-  }
-
-  // Adjacent positions have small penalty
-  const adjacentPositions: Record<Position, Position[]> = {
-    GK: [],
-    DEF: ['MID'],
-    MID: ['DEF', 'ATT'],
-    ATT: ['MID'],
-  };
-
-  if (adjacentPositions[targetPosition]?.includes(player.position)) {
-    return overall - 5;
-  }
-
-  // DEF playing ATT or vice versa - bigger penalty
-  return overall - 15;
+  if (e >= 65) return ((70 - e) / 5) * 0.05;
+  if (e >= 50) return 0.05 + ((65 - e) / 15) * 0.19;
+  if (e >= 35) return 0.24 + ((50 - e) / 15) * 0.16;
+  return Math.min(0.48, 0.4 + ((35 - e) / 35) * 0.08);
 }
 
 /**

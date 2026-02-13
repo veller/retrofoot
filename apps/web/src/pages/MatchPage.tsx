@@ -19,6 +19,7 @@ import {
   formatCurrency,
   BASE_TICKET_PRICE,
   evaluateFormationEligibility,
+  isLineupCompatibleWithFormation,
 } from '@retrofoot/core';
 import { apiFetch } from '../lib/api';
 import { useSaveMatchData, fetchTeamTactics, saveTeamTactics } from '../hooks';
@@ -405,12 +406,20 @@ export function MatchPage() {
     const rebuilt = selectBestLineup(team, formation);
     const lineup = candidate.lineup.filter((id) => playerIds.has(id));
     const substitutes = candidate.substitutes.filter((id) => playerIds.has(id));
+    const lineupIsCompatible = isLineupCompatibleWithFormation(
+      team,
+      formation,
+      lineup,
+    );
+    const sanitizedLineup = lineupIsCompatible ? lineup : rebuilt.lineup;
+    const sanitizedLineupSet = new Set(sanitizedLineup);
+    const sanitizedSubs = substitutes.filter((id) => !sanitizedLineupSet.has(id));
 
-    if (lineup.length < 11) {
+    if (!lineupIsCompatible) {
       return {
         formation,
         posture: candidate.posture ?? 'balanced',
-        lineup: rebuilt.lineup,
+        lineup: sanitizedLineup,
         substitutes: rebuilt.substitutes,
       };
     }
@@ -418,8 +427,8 @@ export function MatchPage() {
     return {
       formation,
       posture: candidate.posture ?? 'balanced',
-      lineup,
-      substitutes: substitutes.length > 0 ? substitutes : rebuilt.substitutes,
+      lineup: sanitizedLineup,
+      substitutes: sanitizedSubs.length > 0 ? sanitizedSubs : rebuilt.substitutes,
     };
   }
 
@@ -729,7 +738,11 @@ export function MatchPage() {
         ? nextTactics.lineup.filter((id) => playerIds.has(id))
         : [];
       const uniqueProvidedLineup = Array.from(new Set(providedLineup));
-      const canUseProvidedLineup = uniqueProvidedLineup.length === 11;
+      const canUseProvidedLineup = isLineupCompatibleWithFormation(
+        playerTeam,
+        normalizedFormation,
+        uniqueProvidedLineup,
+      );
       const lineup = canUseProvidedLineup
         ? uniqueProvidedLineup
         : autoSelection.lineup;
