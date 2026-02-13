@@ -28,6 +28,7 @@ import { FormStatusBadge } from '../components/FormStatusBadge';
 import { PitchView, type PitchSlot } from '../components/PitchView';
 import { PlayerActionModal } from '../components/PlayerActionModal';
 import { PositionBadge } from '../components/PositionBadge';
+import { TeamShield } from '../components/TeamShield';
 import { TransferMarketPanel } from '../components/TransferMarket';
 import {
   useSaveData,
@@ -1206,11 +1207,17 @@ function SquadPanel({
               <div className="flex flex-col gap-2">
                 <select
                   value={formation}
-                  onChange={(e) => setFormation(e.target.value as FormationType)}
+                  onChange={(e) =>
+                    setFormation(e.target.value as FormationType)
+                  }
                   className="select-chevron h-10 bg-slate-700 text-white text-sm px-3 rounded-lg border border-slate-600 font-medium"
                 >
                   {formationEligibility.map(({ formation: option, info }) => (
-                    <option key={option} value={option} disabled={!info.eligible}>
+                    <option
+                      key={option}
+                      value={option}
+                      disabled={!info.eligible}
+                    >
                       {option}
                     </option>
                   ))}
@@ -1287,6 +1294,10 @@ function SquadPanel({
           <h3 className="text-sm font-bold text-slate-400 uppercase mb-2">
             Team Info
           </h3>
+          <div className="mb-3 flex items-center gap-2">
+            <TeamShield team={playerTeam} />
+            <span className="text-white font-medium">{playerTeam.name}</span>
+          </div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Stadium:</span>

@@ -15,9 +15,13 @@ interface PreMatchOverviewImmersiveDesktopProps {
 
 interface TeamLineupData {
   lineup: Player[];
+  bench: Player[];
   avgOverall: number;
   displayFormation: string;
 }
+
+const STARTING_XI_SIZE = 11;
+const BENCH_SIZE = 7;
 
 function parseExpectedAttendanceMidpoint(expectedAttendance: string): number {
   const values = expectedAttendance
@@ -42,21 +46,33 @@ function resolveTeamLineup(
   const players = team.players || [];
   const playersById = new Map(players.map((player) => [player.id, player]));
 
-  function lineupFromIds(ids: string[]): Player[] {
+  function playersFromIds(ids: string[], limit: number): Player[] {
     return ids
       .map((id) => playersById.get(id))
       .filter((player): player is Player => Boolean(player))
-      .slice(0, 11);
+      .slice(0, limit);
   }
 
   let lineup: Player[] = [];
+  let bench: Player[] = [];
   if (tactics?.lineup?.length) {
-    lineup = lineupFromIds(tactics.lineup);
+    lineup = playersFromIds(tactics.lineup, STARTING_XI_SIZE);
+    if (tactics.substitutes?.length) {
+      bench = playersFromIds(tactics.substitutes, BENCH_SIZE);
+    }
   } else if (players.length >= 11) {
     const selected = selectBestLineup(team, displayFormation as FormationType);
-    lineup = lineupFromIds(selected.lineup);
+    lineup = playersFromIds(selected.lineup, STARTING_XI_SIZE);
+    bench = playersFromIds(selected.substitutes, BENCH_SIZE);
   } else {
-    lineup = players.slice(0, 11);
+    lineup = players.slice(0, STARTING_XI_SIZE);
+  }
+
+  if (bench.length === 0) {
+    const lineupIds = new Set(lineup.map((player) => player.id));
+    bench = players
+      .filter((player) => !lineupIds.has(player.id))
+      .slice(0, BENCH_SIZE);
   }
 
   const avgOverall =
@@ -67,7 +83,7 @@ function resolveTeamLineup(
         )
       : 0;
 
-  return { lineup, avgOverall, displayFormation };
+  return { lineup, bench, avgOverall, displayFormation };
 }
 
 function ResultBadge({ result }: { result: 'W' | 'D' | 'L' }) {
@@ -83,6 +99,66 @@ function ResultBadge({ result }: { result: 'W' | 'D' | 'L' }) {
     >
       {result}
     </span>
+  );
+}
+
+function LineupPlayerRow({
+  player,
+  ratingClassName,
+}: {
+  player: Player;
+  ratingClassName: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded bg-slate-800/70 px-2 py-1 text-xs">
+      <span className="mr-2 w-8 shrink-0 text-slate-400">
+        {player.position}
+      </span>
+      <span className="flex-1 truncate text-slate-100">
+        {player.nickname || player.name}
+      </span>
+      <span className={`ml-2 shrink-0 ${ratingClassName}`}>
+        {calculateOverall(player)}
+      </span>
+    </div>
+  );
+}
+
+function BenchSection({
+  bench,
+  ratingClassName,
+}: {
+  bench: Player[];
+  ratingClassName: string;
+}) {
+  return (
+    <>
+      <div className="mt-3 h-px bg-gradient-to-r from-transparent via-slate-600/70 to-transparent" />
+      <div className="pt-3">
+        <div className="mb-2 flex items-center justify-between text-[10px] uppercase text-slate-400">
+          <span>Bench</span>
+          <span className="text-slate-500">{bench.length}</span>
+        </div>
+        <div className="space-y-1">
+          {bench.map((player) => (
+            <div
+              key={`bench-${player.id}`}
+              className="flex items-center justify-between rounded bg-slate-800/45 px-2 py-1 text-xs"
+            >
+              <span className="mr-2 w-8 shrink-0 text-slate-500">
+                {player.position}
+              </span>
+              <span className="flex-1 truncate text-slate-300">
+                {player.nickname || player.name}
+              </span>
+              <span className={`ml-2 shrink-0 ${ratingClassName}`}>
+                {calculateOverall(player)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -114,11 +190,11 @@ export function PreMatchOverviewImmersiveDesktop({
   );
 
   const homeLineupIds = useMemo(
-    () => homeData.lineup.slice(0, 11).map((player) => player.id),
+    () => homeData.lineup.slice(0, STARTING_XI_SIZE).map((player) => player.id),
     [homeData.lineup],
   );
   const awayLineupIds = useMemo(
-    () => awayData.lineup.slice(0, 11).map((player) => player.id),
+    () => awayData.lineup.slice(0, STARTING_XI_SIZE).map((player) => player.id),
     [awayData.lineup],
   );
   const pitchPlayersById = useMemo(() => {
@@ -136,9 +212,16 @@ export function PreMatchOverviewImmersiveDesktop({
   const hostLineupIds = isPlayerHome ? homeLineupIds : awayLineupIds;
   const opponentLineupIds = isPlayerHome ? awayLineupIds : homeLineupIds;
   const hostPrimaryColor = hostTeam.primaryColor;
-  const homePosture = (
-    isPlayerHome ? playerTactics.posture : 'balanced'
-  ).replace('attacking', 'offensive');
+  const playerPostureLabel = playerTactics.posture.replace(
+    'attacking',
+    'offensive',
+  );
+  const homeFormationLabel = isPlayerHome
+    ? `${homeData.displayFormation} (${playerPostureLabel})`
+    : homeData.displayFormation;
+  const awayFormationLabel = isPlayerHome
+    ? awayData.displayFormation
+    : `${awayData.displayFormation} (${playerPostureLabel})`;
   const expectedAttendanceMidpoint = useMemo(
     () => parseExpectedAttendanceMidpoint(expectedAttendance),
     [expectedAttendance],
@@ -191,28 +274,21 @@ export function PreMatchOverviewImmersiveDesktop({
                 className="mb-2 flex items-center justify-between text-[10px] uppercase text-slate-400"
               >
                 <span>Home Lineup</span>
-                <span className="text-white">
-                  {homeData.displayFormation} ({homePosture})
-                </span>
+                <span className="text-white">{homeFormationLabel}</span>
               </div>
               <div className="space-y-1">
-                {homeData.lineup.slice(0, 11).map((player) => (
-                  <div
+                {homeData.lineup.slice(0, STARTING_XI_SIZE).map((player) => (
+                  <LineupPlayerRow
                     key={`home-lineup-${player.id}`}
-                    className="flex items-center justify-between rounded bg-slate-800/70 px-2 py-1 text-xs"
-                  >
-                    <span className="mr-2 w-8 shrink-0 text-slate-400">
-                      {player.position}
-                    </span>
-                    <span className="flex-1 truncate text-slate-100">
-                      {player.nickname || player.name}
-                    </span>
-                    <span className="ml-2 shrink-0 text-cyan-300">
-                      {calculateOverall(player)}
-                    </span>
-                  </div>
+                    player={player}
+                    ratingClassName="text-cyan-300"
+                  />
                 ))}
               </div>
+              <BenchSection
+                bench={homeData.bench}
+                ratingClassName="text-cyan-400/90"
+              />
               {homeTeam.lastFiveResults?.length ? (
                 <div className="mt-3 border-t border-slate-700 pt-3">
                   <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
@@ -313,26 +389,21 @@ export function PreMatchOverviewImmersiveDesktop({
                 className="mb-2 flex items-center justify-between text-[10px] uppercase text-slate-400"
               >
                 <span>Away</span>
-                <span className="text-white">{awayData.displayFormation}</span>
+                <span className="text-white">{awayFormationLabel}</span>
               </div>
               <div className="space-y-1">
-                {awayData.lineup.slice(0, 11).map((player) => (
-                  <div
+                {awayData.lineup.slice(0, STARTING_XI_SIZE).map((player) => (
+                  <LineupPlayerRow
                     key={`away-lineup-${player.id}`}
-                    className="flex items-center justify-between rounded bg-slate-800/70 px-2 py-1 text-xs"
-                  >
-                    <span className="mr-2 w-8 shrink-0 text-slate-400">
-                      {player.position}
-                    </span>
-                    <span className="flex-1 truncate text-slate-100">
-                      {player.nickname || player.name}
-                    </span>
-                    <span className="ml-2 shrink-0 text-amber-300">
-                      {calculateOverall(player)}
-                    </span>
-                  </div>
+                    player={player}
+                    ratingClassName="text-amber-300"
+                  />
                 ))}
               </div>
+              <BenchSection
+                bench={awayData.bench}
+                ratingClassName="text-amber-300/90"
+              />
               {awayTeam.lastFiveResults?.length ? (
                 <div className="mt-3 border-t border-slate-700 pt-3">
                   <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
