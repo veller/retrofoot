@@ -1,3 +1,4 @@
+Original prompt: Build a release-to-free-market feature for both human and AI clubs, with a realistic dynamic release compensation model (can be zero), UI actions in Squad modal and Transfers > My Transfers, no negotiation flow, and immediate free-agent state updates after release.
 
 Feature work (formation persistence + live tactics + eligibility + tactical engine):
 - Added core formation helpers in `packages/core/src/team/index.ts`:
@@ -101,3 +102,37 @@ Posture UX simplification pass:
 - Restored posture as subtle visual-only cue in pitch:
   - `PitchView` now accepts posture and applies small line shifts by role (DEF/MID/ATT) without badges/arrows/text.
 - Re-validated: no "Tactical Impact" text present (`TACTICAL_IMPACT_COUNT 0` in probe output), screenshots show clean defensive vs attacking posture visuals.
+
+Release-to-free-market feature (in progress):
+- Added shared release compensation model in `packages/core/src/transfer/index.ts` via `calculateReleaseCompensation(...)`.
+  - Inputs include current season/round, contract years remaining, weekly wage, age/overall profile, and season minutes utilization.
+  - Supports mutual termination (fee = 0) for underused younger players under specific conditions.
+- Added unit coverage in `packages/core/src/transfer/release-compensation.test.ts`.
+- Added backend release service methods in `apps/api/src/services/transfer.service.ts`:
+  - `getReleaseFeeQuote(...)`
+  - `releasePlayerToFreeAgency(...)`
+  - Includes listing/offer cleanup, player team removal, optional compensation expense transaction, and wage-cache adjustment.
+- Added transfer API endpoints in `apps/api/src/routes/transfer.ts`:
+  - `GET /api/transfer/release-fee/:saveId/:playerId`
+  - `POST /api/transfer/release/:saveId`
+- Extended AI transfer cycle in `apps/api/src/services/ai-transfer.service.ts`:
+  - New `processAIReleases(...)` runs each round and can release fringe/underused players when compensation is financially sensible.
+- Frontend wiring started:
+  - `PlayerActionModal` now supports release action and confirmation.
+  - `GamePage` squad flow now computes preview fee and calls release endpoint.
+  - `TransferMarketPanel` now includes release actions in `My Transfers` for both listed and listable players.
+- Also fixed squad API payload to include `contractEndSeason` and save scoping (`apps/api/src/routes/save.ts`), and mapped it in `apps/web/src/hooks/useSaveData.ts`.
+
+TODO:
+- Run typecheck and resolve any compile errors from new imports/types.
+- Execute targeted Playwright verification for Squad modal + Transfers tab release flows.
+- Tune AI release thresholds if behavior is too aggressive or too passive.
+
+Release feature verification update:
+- Typechecks now pass:
+  - `pnpm -C packages/core exec tsc --noEmit`
+  - `pnpm -C apps/api exec tsc --noEmit`
+  - `pnpm -C apps/web exec tsc --noEmit`
+- Unit tests added and passing:
+  - `pnpm -C packages/core exec vitest run src/transfer/release-compensation.test.ts`
+- Ran the `$WEB_GAME_CLIENT` loop command once against `http://localhost:5173`; command exited successfully, but no fresh screenshot artifacts were produced in `output/playwright`, so targeted visual verification for the new release UI still needs a focused headed probe.

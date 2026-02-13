@@ -61,7 +61,7 @@ export const DEFAULT_TRANSFER_CONFIG: TransferConfig = {
   buyQualityThreshold: -15,
   baseOfferProbability: 0.7,
   allowPositionUpgrades: true,
-  upgradeQualityThreshold: 6,
+  upgradeQualityThreshold: 5,
   acceptThreshold: 0.995, // 0.5% tolerance for display rounding
   overstaffedAcceptThreshold: 0.8,
   counterThreshold: 0.75,

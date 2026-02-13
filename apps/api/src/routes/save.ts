@@ -547,6 +547,7 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
       energy: players.energy,
       injured: players.injured,
       form: players.form,
+      contractEndSeason: players.contractEndSeason,
       wage: players.wage,
       marketValue: players.marketValue,
       // Season stats
@@ -557,7 +558,7 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
       seasonAvgRating: players.seasonAvgRating,
     })
     .from(players)
-    .where(eq(players.teamId, teamId));
+    .where(and(eq(players.teamId, teamId), eq(players.saveId, saveId)));
 
   return c.json({ squad });
 });

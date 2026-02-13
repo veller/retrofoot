@@ -4,8 +4,8 @@
 
 import { Hono, type Context } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq } from 'drizzle-orm';
-import { saves } from '@retrofoot/db/schema';
+import { eq, and, inArray, ne } from 'drizzle-orm';
+import { saves, teams, players, transferListings, transferOffers } from '@retrofoot/db/schema';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
 import {
@@ -14,6 +14,8 @@ import {
   getTeamListings,
   getTeamOffers,
   listPlayerForSale,
+  getReleaseFeeQuote,
+  releasePlayerToFreeAgency,
   removePlayerListing,
   makeOffer,
   respondToOffer,
@@ -115,7 +117,7 @@ transferRoutes.post('/negotiate-incoming/:saveId/:offerId', async (c) => {
 
   const body = await c.req.json<{
     action: 'accept' | 'reject' | 'counter';
-    counterOffer?: { fee: number; wage: number };
+    counterOffer?: { fee: number };
     negotiationId?: string;
   }>();
 
@@ -124,7 +126,7 @@ transferRoutes.post('/negotiate-incoming/:saveId/:offerId', async (c) => {
   }
 
   if (body.action === 'counter' && !body.counterOffer) {
-    return c.json({ error: 'Counter action requires counterOffer with fee and wage' }, 400);
+    return c.json({ error: 'Counter action requires counterOffer with fee' }, 400);
   }
 
   if (body.counterOffer) {
@@ -133,12 +135,6 @@ transferRoutes.post('/negotiate-incoming/:saveId/:offerId', async (c) => {
     }
     if (body.counterOffer.fee > 1_000_000_000) {
       return c.json({ error: 'Counter fee exceeds maximum allowed (1 billion)' }, 400);
-    }
-    if (body.counterOffer.wage < 0) {
-      return c.json({ error: 'Counter wage cannot be negative' }, 400);
-    }
-    if (body.counterOffer.wage > 10_000_000) {
-      return c.json({ error: 'Counter wage exceeds maximum allowed (10 million/week)' }, 400);
     }
   }
 
@@ -224,6 +220,160 @@ transferRoutes.get('/market/:saveId', async (c) => {
   } catch (error) {
     console.error('Failed to get market players:', error);
     return c.json({ error: 'Failed to get market players' }, 500);
+  }
+});
+
+/**
+ * GET /transfer/diagnostics/:saveId
+ * Debug market behavior for balancing and QA
+ */
+transferRoutes.get('/diagnostics/:saveId', async (c) => {
+  const saveId = c.req.param('saveId');
+  const ownership = await verifySaveOwnership(c, saveId);
+
+  if (!ownership) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const db = drizzle(c.env.DB);
+
+  try {
+    const saveResult = await db
+      .select({ currentRound: saves.currentRound })
+      .from(saves)
+      .where(eq(saves.id, saveId))
+      .limit(1);
+
+    const currentRound = saveResult[0]?.currentRound || 1;
+
+    const aiTeamRows = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(and(eq(teams.saveId, saveId), ne(teams.id, ownership.playerTeamId)));
+    const aiTeamIds = aiTeamRows.map((row) => row.id);
+
+    const listings = await db
+      .select({
+        playerId: transferListings.playerId,
+        listedRound: transferListings.listedRound,
+      })
+      .from(transferListings)
+      .where(eq(transferListings.saveId, saveId));
+
+    const listingPlayerIds = listings.map((listing) => listing.playerId);
+    const listingPlayers =
+      listingPlayerIds.length > 0
+        ? await db
+            .select({
+              id: players.id,
+              age: players.age,
+            })
+            .from(players)
+            .where(and(eq(players.saveId, saveId), inArray(players.id, listingPlayerIds)))
+        : [];
+
+    const listingAgeByPlayerId = new Map(
+      listingPlayers.map((player) => [player.id, player.age]),
+    );
+
+    const activeListingsByAgeBucket = {
+      under24: 0,
+      from24To29: 0,
+      age30plus: 0,
+      unknown: 0,
+    };
+
+    const listingDurationBuckets = {
+      lessThan3Rounds: 0,
+      from3To6Rounds: 0,
+      over6Rounds: 0,
+    };
+
+    for (const listing of listings) {
+      const age = listingAgeByPlayerId.get(listing.playerId);
+      if (age === undefined) {
+        activeListingsByAgeBucket.unknown++;
+      } else if (age < 24) {
+        activeListingsByAgeBucket.under24++;
+      } else if (age < 30) {
+        activeListingsByAgeBucket.from24To29++;
+      } else {
+        activeListingsByAgeBucket.age30plus++;
+      }
+
+      const listedForRounds = Math.max(0, currentRound - listing.listedRound);
+      if (listedForRounds < 3) {
+        listingDurationBuckets.lessThan3Rounds++;
+      } else if (listedForRounds <= 6) {
+        listingDurationBuckets.from3To6Rounds++;
+      } else {
+        listingDurationBuckets.over6Rounds++;
+      }
+    }
+
+    const allOffers = await db
+      .select({
+        status: transferOffers.status,
+        fromTeamId: transferOffers.fromTeamId,
+        respondedRound: transferOffers.respondedRound,
+      })
+      .from(transferOffers)
+      .where(eq(transferOffers.saveId, saveId));
+
+    const offerStatusCounts = {
+      pending: 0,
+      counter: 0,
+      expired: 0,
+      completed: 0,
+      rejected: 0,
+      accepted: 0,
+      cancelled: 0,
+      other: 0,
+    };
+
+    let aiOfferResponses = 0;
+    let aiAutoCompletedTransfers = 0;
+    let aiRejectedOffers = 0;
+    let aiCounterOffers = 0;
+
+    const aiTeamIdSet = new Set(aiTeamIds);
+
+    for (const offer of allOffers) {
+      if (offer.status in offerStatusCounts) {
+        const key = offer.status as keyof typeof offerStatusCounts;
+        offerStatusCounts[key] += 1;
+      } else {
+        offerStatusCounts.other += 1;
+      }
+
+      const isAIResponse =
+        offer.fromTeamId !== null &&
+        aiTeamIdSet.has(offer.fromTeamId) &&
+        offer.respondedRound === currentRound;
+
+      if (!isAIResponse) continue;
+
+      aiOfferResponses++;
+      if (offer.status === 'completed') aiAutoCompletedTransfers++;
+      if (offer.status === 'rejected') aiRejectedOffers++;
+      if (offer.status === 'counter') aiCounterOffers++;
+    }
+
+    return c.json({
+      currentRound,
+      activeListingsByAgeBucket,
+      listingDurationBuckets,
+      offerStatusCounts,
+      aiResponseCountsLastRound: {
+        aiOfferResponses,
+        aiAutoCompletedTransfers,
+        aiRejectedOffers,
+        aiCounterOffers,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to get transfer diagnostics:', error);
+    return c.json({ error: 'Failed to get transfer diagnostics' }, 500);
   }
 });
 
@@ -325,6 +475,72 @@ transferRoutes.delete('/list/:saveId/:playerId', async (c) => {
   } catch (error) {
     console.error('Failed to remove listing:', error);
     return c.json({ error: 'Failed to remove listing' }, 500);
+  }
+});
+
+/**
+ * GET /transfer/release-fee/:saveId/:playerId
+ * Get release compensation quote
+ */
+transferRoutes.get('/release-fee/:saveId/:playerId', async (c) => {
+  const saveId = c.req.param('saveId');
+  const playerId = c.req.param('playerId');
+  const ownership = await verifySaveOwnership(c, saveId);
+
+  if (!ownership) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const db = drizzle(c.env.DB);
+
+  try {
+    const quote = await getReleaseFeeQuote(
+      db,
+      saveId,
+      playerId,
+      ownership.playerTeamId,
+    );
+    return c.json(quote);
+  } catch (error) {
+    console.error('Failed to get release quote:', error);
+    const message =
+      error instanceof Error ? error.message : 'Failed to get release quote';
+    return c.json({ error: message }, 400);
+  }
+});
+
+/**
+ * POST /transfer/release/:saveId
+ * Release a player to free agency
+ */
+transferRoutes.post('/release/:saveId', async (c) => {
+  const saveId = c.req.param('saveId');
+  const ownership = await verifySaveOwnership(c, saveId);
+
+  if (!ownership) {
+    return c.json({ error: 'Unauthorized' }, 403);
+  }
+
+  const body = await c.req.json<{ playerId: string }>();
+  if (!body.playerId) {
+    return c.json({ error: 'playerId is required' }, 400);
+  }
+
+  const db = drizzle(c.env.DB);
+
+  try {
+    const released = await releasePlayerToFreeAgency(
+      db,
+      saveId,
+      body.playerId,
+      ownership.playerTeamId,
+    );
+    return c.json({ success: true, ...released });
+  } catch (error) {
+    console.error('Failed to release player:', error);
+    const message =
+      error instanceof Error ? error.message : 'Failed to release player';
+    return c.json({ error: message }, 400);
   }
 });
 

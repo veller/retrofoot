@@ -27,7 +27,6 @@ interface CounterOfferModalProps {
 interface NegotiationRound {
   type: 'offer' | 'response';
   fee: number;
-  wage: number;
   action?: 'accept' | 'reject' | 'counter';
   reason?: string;
 }
@@ -43,9 +42,6 @@ export function CounterOfferModal({
   const [counterFee, setCounterFee] = useState(
     roundToThousand(offer.offerAmount * 1.2),
   );
-  const [counterWage, setCounterWage] = useState(
-    roundToThousand(offer.offeredWage),
-  );
   const [error, setError] = useState<string | null>(null);
 
   // Negotiation state
@@ -53,7 +49,6 @@ export function CounterOfferModal({
   const [negotiationId, setNegotiationId] = useState<string | null>(null);
   const [aiCounter, setAiCounter] = useState<{
     fee: number;
-    wage: number;
   } | null>(null);
   const [canCounter, setCanCounter] = useState(true);
   const [round, setRound] = useState(0);
@@ -91,10 +86,7 @@ export function CounterOfferModal({
       try {
         // Add our counter to history (unless accepting or rejecting outright)
         if (action === 'counter') {
-          setHistory((prev) => [
-            ...prev,
-            { type: 'offer', fee: counterFee, wage: counterWage },
-          ]);
+          setHistory((prev) => [...prev, { type: 'offer', fee: counterFee }]);
         }
 
         const result = await negotiateIncomingOffer(
@@ -102,7 +94,7 @@ export function CounterOfferModal({
           offer.id,
           action,
           action === 'counter'
-            ? { fee: counterFee, wage: counterWage }
+            ? { fee: counterFee }
             : undefined,
           negotiationId ?? undefined,
         );
@@ -127,7 +119,6 @@ export function CounterOfferModal({
           {
             type: 'response',
             fee: neg.aiResponse.counterFee ?? counterFee,
-            wage: neg.aiResponse.counterWage ?? counterWage,
             action: neg.aiResponse.action,
             reason: neg.aiResponse.reason,
           },
@@ -135,19 +126,14 @@ export function CounterOfferModal({
 
         if (
           neg.aiResponse.action === 'counter' &&
-          neg.aiResponse.counterFee !== undefined &&
-          neg.aiResponse.counterWage !== undefined
+          neg.aiResponse.counterFee !== undefined
         ) {
           setAiCounter({
             fee: neg.aiResponse.counterFee,
-            wage: neg.aiResponse.counterWage,
           });
           // Pre-fill with midpoint for next counter (rounded to nearest thousand)
           setCounterFee(
             roundToThousand((counterFee + neg.aiResponse.counterFee) / 2),
-          );
-          setCounterWage(
-            roundToThousand((counterWage + neg.aiResponse.counterWage) / 2),
           );
         } else if (neg.aiResponse.action === 'reject') {
           // AI walked away - negotiation is OVER
@@ -172,7 +158,6 @@ export function CounterOfferModal({
       saveId,
       offer.id,
       counterFee,
-      counterWage,
       negotiationId,
       onComplete,
       onRejected,
@@ -266,13 +251,10 @@ export function CounterOfferModal({
                 {formatCurrency(offer.offerAmount)}
               </span>
             </div>
-            <div>
-              <span className="text-slate-500 text-sm">Wage: </span>
-              <span className="text-amber-400 font-medium">
-                {formatCurrency(offer.offeredWage)}/wk
-              </span>
-            </div>
           </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Wage is handled automatically by the buying club.
+          </p>
         </div>
 
         {/* Negotiation History */}
@@ -334,10 +316,6 @@ export function CounterOfferModal({
                         <span className="text-pitch-400 font-medium">
                           {formatCurrency(entry.fee)}
                         </span>
-                        <span className="text-slate-500">•</span>
-                        <span className="text-amber-400 font-medium">
-                          {formatCurrency(entry.wage)}/wk
-                        </span>
                       </div>
                       {entry.reason && (
                         <div className="text-xs text-slate-400 mt-2 italic border-t border-slate-600/50 pt-2">
@@ -367,12 +345,6 @@ export function CounterOfferModal({
                 <span className="text-slate-500">Fee: </span>
                 <span className="text-pitch-400 font-medium">
                   {formatCurrency(completed.finalFee)}
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-500">Wage: </span>
-                <span className="text-amber-400 font-medium">
-                  {formatCurrency(completed.finalWage)}/wk
                 </span>
               </div>
             </div>
@@ -495,47 +467,6 @@ export function CounterOfferModal({
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 Their offer: {formatCurrency(offer.offerAmount)}
-              </p>
-            </div>
-
-            {/* Counter Wage */}
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Your Counter Wage (per week)
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCounterWage(
-                      Math.max(0, counterWage - getSmartIncrement(counterWage)),
-                    )
-                  }
-                  className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
-                >
-                  −
-                </button>
-                <input
-                  type="text"
-                  value={formatCurrency(counterWage)}
-                  onChange={(e) =>
-                    setCounterWage(parseMonetaryInput(e.target.value))
-                  }
-                  className="flex-1 bg-slate-700 text-white px-3 py-2 rounded border border-slate-600 focus:border-pitch-500 focus:outline-none text-center"
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCounterWage(counterWage + getSmartIncrement(counterWage))
-                  }
-                  className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold"
-                >
-                  +
-                </button>
-                <span className="text-slate-500">/wk</span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Their offer: {formatCurrency(offer.offeredWage)}/wk
               </p>
             </div>
 

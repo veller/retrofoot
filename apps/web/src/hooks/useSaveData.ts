@@ -66,6 +66,7 @@ interface ApiPlayerResponse {
   form: number;
   wage: number;
   marketValue: number;
+  contractEndSeason?: number;
   // Season stats
   lastFiveRatings?: number[];
   seasonGoals?: number;
@@ -138,7 +139,7 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
     energy: apiPlayer.energy ?? 100,
     injured: apiPlayer.injured ?? false,
     injuryWeeks: 0,
-    contractEndSeason: 2028, // Default - API doesn't return this in squad endpoint
+    contractEndSeason: apiPlayer.contractEndSeason ?? 2028,
     wage: apiPlayer.wage,
     marketValue: apiPlayer.marketValue,
     status: 'active',

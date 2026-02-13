@@ -78,6 +78,14 @@ export interface NegotiationResult {
   };
 }
 
+export interface ReleaseFeeQuote {
+  playerId: string;
+  fee: number;
+  hasFee: boolean;
+  yearsRemaining: number;
+  utilizationRatio: number;
+}
+
 // ============================================================================
 // Hook: useTransferMarket
 // ============================================================================
@@ -339,6 +347,61 @@ export async function makeTransferOffer(
   }
 }
 
+export async function getReleaseFeeQuote(
+  saveId: string,
+  playerId: string,
+): Promise<{ success: boolean; quote?: ReleaseFeeQuote; error?: string }> {
+  try {
+    const response = await apiFetch(`/api/transfer/release-fee/${saveId}/${playerId}`);
+    const json = await response.json();
+    if (!response.ok) {
+      return {
+        success: false,
+        error: json.error || 'Failed to get release fee',
+      };
+    }
+    return { success: true, quote: json as ReleaseFeeQuote };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
+export async function releasePlayer(
+  saveId: string,
+  playerId: string,
+): Promise<{ success: boolean; quote?: ReleaseFeeQuote; error?: string }> {
+  try {
+    const response = await apiFetch(`/api/transfer/release/${saveId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerId }),
+    });
+    const json = await response.json();
+    if (!response.ok) {
+      return {
+        success: false,
+        error: json.error || 'Failed to release player',
+      };
+    }
+    const quote: ReleaseFeeQuote = {
+      playerId: json.playerId,
+      fee: json.fee,
+      hasFee: json.hasFee,
+      yearsRemaining: json.yearsRemaining,
+      utilizationRatio: json.utilizationRatio,
+    };
+    return { success: true, quote };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
+  }
+}
+
 export async function respondToOffer(
   saveId: string,
   offerId: string,
@@ -470,7 +533,7 @@ export async function negotiateIncomingOffer(
   saveId: string,
   offerId: string,
   action: 'accept' | 'reject' | 'counter',
-  counterOffer?: { fee: number; wage: number },
+  counterOffer?: { fee: number },
   negotiationId?: string,
 ): Promise<{ success: boolean; result?: NegotiationResult; error?: string }> {
   try {

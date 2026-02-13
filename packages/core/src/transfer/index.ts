@@ -14,7 +14,7 @@ import type {
   TransferListingStatus,
   TransferNegotiation,
 } from '../types';
-import { calculateOverall } from '../types';
+import { calculateOverall, createPlayerForCalc } from '../types';
 import { DEFAULT_TRANSFER_CONFIG, type TransferConfig } from './config';
 
 // ============================================================================
@@ -45,6 +45,7 @@ export const CONTRACT_EXPIRY_THRESHOLD = 1;
 
 /** Ideal squad size for AI decisions */
 export const IDEAL_SQUAD_SIZE = 28;
+export const TOTAL_LEAGUE_ROUNDS = 38;
 
 // ============================================================================
 // VALUATION FUNCTIONS
@@ -83,6 +84,114 @@ export function calculateAskingPrice(
   }
 
   return Math.round(price);
+}
+
+export interface ReleaseCompensationInput {
+  player: Pick<
+    Player,
+    'age' | 'wage' | 'marketValue' | 'contractEndSeason' | 'form' | 'attributes' | 'position'
+  >;
+  currentSeason: number;
+  currentRound: number;
+  totalRounds?: number;
+}
+
+export interface ReleaseCompensationResult {
+  fee: number;
+  hasFee: boolean;
+  yearsRemaining: number;
+  remainingSalaryEstimate: number;
+  utilizationRatio: number;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Estimate compensation to terminate a contract early and release a player.
+ *
+ * Model notes:
+ * - Base from remaining salary (wage x years left), with a settlement ratio
+ * - Older/low-rated players tend to demand higher compensation
+ * - Young/underused players are more likely to leave for little or no fee
+ */
+export function calculateReleaseCompensation({
+  player,
+  currentSeason,
+  currentRound,
+  totalRounds = TOTAL_LEAGUE_ROUNDS,
+}: ReleaseCompensationInput): ReleaseCompensationResult {
+  const yearsRemaining = Math.max(0, player.contractEndSeason - currentSeason);
+  const clampedRoundProgress = clamp(
+    currentRound / Math.max(1, totalRounds),
+    0.05,
+    1,
+  );
+  const projectedStarterMinutes = 2_700 * clampedRoundProgress;
+  const seasonMinutes = player.form?.seasonMinutes ?? 0;
+  const utilizationRatio = clamp(
+    seasonMinutes / Math.max(1, projectedStarterMinutes),
+    0,
+    1.75,
+  );
+
+  const remainingSalaryEstimate = Math.round(player.wage * yearsRemaining * 52);
+  if (remainingSalaryEstimate <= 0 || yearsRemaining <= 0) {
+    return {
+      fee: 0,
+      hasFee: false,
+      yearsRemaining,
+      remainingSalaryEstimate: 0,
+      utilizationRatio,
+    };
+  }
+
+  const overall = calculateOverall(
+    createPlayerForCalc({
+      age: player.age,
+      wage: player.wage,
+      marketValue: player.marketValue,
+      contractEndSeason: player.contractEndSeason,
+      attributes: player.attributes as unknown as Record<string, number>,
+      position: player.position,
+    }),
+  );
+  let settlementRatio = 0.3; // baseline: ~30% of residual salary
+
+  if (player.age >= 33) settlementRatio += 0.08;
+  if (player.age >= 36) settlementRatio += 0.1;
+  if (overall <= 64) settlementRatio += 0.1;
+  if (overall <= 58) settlementRatio += 0.08;
+
+  const underuseFactor = clamp((0.55 - utilizationRatio) / 0.55, 0, 1);
+  const youthExitWeight =
+    player.age <= 22 ? 1 : player.age <= 25 ? 0.8 : player.age <= 28 ? 0.45 : 0.15;
+  const roundFlexibility = clampedRoundProgress >= 0.75 ? 1.12 : 1;
+  settlementRatio -= underuseFactor * youthExitWeight * 0.28 * roundFlexibility;
+  settlementRatio = clamp(settlementRatio, 0, 0.7);
+
+  let fee = Math.round(remainingSalaryEstimate * settlementRatio);
+
+  const veryLikelyMutualExit =
+    player.age <= 24 &&
+    yearsRemaining <= 2 &&
+    utilizationRatio < 0.25 &&
+    settlementRatio < 0.12;
+
+  if (veryLikelyMutualExit || fee < player.wage * 6) {
+    fee = 0;
+  } else {
+    fee = Math.round(fee / 10_000) * 10_000;
+  }
+
+  return {
+    fee,
+    hasFee: fee > 0,
+    yearsRemaining,
+    remainingSalaryEstimate,
+    utilizationRatio,
+  };
 }
 
 /**

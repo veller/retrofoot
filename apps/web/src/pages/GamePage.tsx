@@ -15,6 +15,7 @@ import {
   calculateRoundSponsorship,
   calculateStadiumMaintenance,
   calculateOperatingCosts,
+  calculateReleaseCompensation,
   formatCurrency,
   getFormDisplayStatus,
   type FormationType,
@@ -45,6 +46,7 @@ import {
   saveTeamTactics,
   listPlayerForSale,
   removePlayerListing,
+  releasePlayer,
   useTouchDrag,
   type LeaderboardEntry,
   type SeasonHistoryEntry,
@@ -176,7 +178,8 @@ export function GamePage() {
   const playerTeam = data?.playerTeam ?? null;
 
   // Fetch offers for badge notification
-  const { incoming: incomingOffers } = useTeamOffers(saveId, playerTeam?.id);
+  const { incoming: incomingOffers, refetch: refetchIncomingOffers } =
+    useTeamOffers(saveId, playerTeam?.id);
   const pendingIncomingOffers = useMemo(
     () => incomingOffers?.filter((o) => o.status === 'pending').length || 0,
     [incomingOffers],
@@ -753,6 +756,9 @@ export function GamePage() {
               tactics={tactics}
               setTactics={setTactics}
               saveId={saveId}
+              currentSeason={data.currentSeason}
+              currentRound={data.currentRound}
+              onSquadChanged={refetchSaveData}
             />
           )}
           {activeTab === 'table' && (
@@ -767,8 +773,12 @@ export function GamePage() {
             <TransfersPanel
               saveId={saveId}
               playerTeam={playerTeam}
+              currentSeason={data.currentSeason}
               currentRound={data.currentRound}
-              onTransferComplete={refetchSaveData}
+              onTransferComplete={() => {
+                refetchSaveData();
+                refetchIncomingOffers();
+              }}
             />
           )}
           {activeTab === 'finances' && (
@@ -890,6 +900,9 @@ interface SquadPanelProps {
   tactics: Tactics;
   setTactics: React.Dispatch<React.SetStateAction<Tactics | null>>;
   saveId: string;
+  currentSeason: string;
+  currentRound: number;
+  onSquadChanged?: () => void;
 }
 
 function SquadPanel({
@@ -897,6 +910,9 @@ function SquadPanel({
   tactics,
   setTactics,
   saveId,
+  currentSeason,
+  currentRound,
+  onSquadChanged,
 }: SquadPanelProps) {
   const [mobileView, setMobileView] = useState<MobileSquadView>('squad');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -1089,6 +1105,16 @@ function SquadPanel({
   const selectedPlayer = selectedPlayerId
     ? playersById.get(selectedPlayerId)
     : undefined;
+  const releaseFee = useMemo(() => {
+    if (!selectedPlayer) return 0;
+    const currentSeasonNum = parseInt(currentSeason, 10);
+    if (Number.isNaN(currentSeasonNum)) return 0;
+    return calculateReleaseCompensation({
+      player: selectedPlayer,
+      currentSeason: currentSeasonNum,
+      currentRound,
+    }).fee;
+  }, [selectedPlayer, currentSeason, currentRound]);
 
   const handleListForSale = async (askingPrice?: number) => {
     if (!selectedPlayerId) return;
@@ -1122,6 +1148,22 @@ function SquadPanel({
     }
   };
 
+  const handleReleasePlayer = async () => {
+    if (!selectedPlayerId) return;
+    setIsSubmitting(true);
+    try {
+      const result = await releasePlayer(saveId, selectedPlayerId);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to release player');
+      }
+      refetchListings();
+      setSelectedPlayerId(null);
+      onSquadChanged?.();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col lg:flex-row h-full min-h-0">
       {/* Player Action Modal */}
@@ -1139,6 +1181,9 @@ function SquadPanel({
           onClose={() => setSelectedPlayerId(null)}
           onListForSale={handleListForSale}
           onRemoveListing={handleRemoveListing}
+          onReleasePlayer={handleReleasePlayer}
+          releaseFee={releaseFee}
+          teamBalance={playerTeam.balance}
           onAddToBench={() => addToBench(selectedPlayer.id)}
           isSubmitting={isSubmitting}
         />
@@ -1765,11 +1810,13 @@ function LeaderboardRow({ entry, rank, isPlayerTeam }: LeaderboardRowProps) {
 function TransfersPanel({
   saveId,
   playerTeam,
+  currentSeason,
   currentRound,
   onTransferComplete,
 }: {
   saveId: string;
   playerTeam: Team;
+  currentSeason: string;
   currentRound: number;
   onTransferComplete?: () => void;
 }) {
@@ -1777,6 +1824,7 @@ function TransfersPanel({
     <TransferMarketPanel
       saveId={saveId}
       playerTeam={playerTeam}
+      currentSeason={currentSeason}
       currentRound={currentRound}
       onTransferComplete={onTransferComplete}
     />

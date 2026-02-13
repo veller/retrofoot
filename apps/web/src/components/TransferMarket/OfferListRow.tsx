@@ -93,19 +93,23 @@ export function OfferListRow({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
+        <div
+          className={`grid gap-2 text-center ${direction === 'incoming' ? 'grid-cols-2' : 'grid-cols-3'}`}
+        >
           <div>
             <div className="text-pitch-400 font-bold text-xs">
               {formatCurrency(offer.offerAmount)}
             </div>
             <div className="text-[10px] text-slate-500">Fee</div>
           </div>
-          <div>
-            <div className="text-amber-400 font-bold text-xs">
-              {formatCurrency(offer.offeredWage)}/wk
+          {direction !== 'incoming' && (
+            <div>
+              <div className="text-amber-400 font-bold text-xs">
+                {formatCurrency(offer.offeredWage)}/wk
+              </div>
+              <div className="text-[10px] text-slate-500">Wage</div>
             </div>
-            <div className="text-[10px] text-slate-500">Wage</div>
-          </div>
+          )}
           <div>
             <div className="text-white font-bold text-xs">{offer.contractYears}y</div>
             <div className="text-[10px] text-slate-500">Term</div>
@@ -137,12 +141,14 @@ export function OfferListRow({
           <div className="text-xs text-slate-500">Fee</div>
         </div>
 
-        <div className="text-right">
-          <div className="text-amber-400 font-bold text-sm">
-            {formatCurrency(offer.offeredWage)}/wk
+        {direction !== 'incoming' && (
+          <div className="text-right">
+            <div className="text-amber-400 font-bold text-sm">
+              {formatCurrency(offer.offeredWage)}/wk
+            </div>
+            <div className="text-xs text-slate-500">Wage</div>
           </div>
-          <div className="text-xs text-slate-500">Wage</div>
-        </div>
+        )}
 
         <div className="text-right w-12">
           <div className="text-white font-bold text-sm">{offer.contractYears}y</div>
@@ -154,10 +160,14 @@ export function OfferListRow({
       {offer.status === 'counter' && offer.counterAmount !== null && (
         <div className="mt-2 p-2 bg-blue-900/20 border border-blue-700/50 rounded text-sm">
           <span className="text-blue-400 font-medium">Counter: </span>
-          <span className="text-white">
-            {formatCurrency(offer.counterAmount)} fee,{' '}
-            {formatCurrency(offer.counterWage || 0)}/wk wage
-          </span>
+          {direction === 'incoming' ? (
+            <span className="text-white">{formatCurrency(offer.counterAmount)} fee</span>
+          ) : (
+            <span className="text-white">
+              {formatCurrency(offer.counterAmount)} fee,{' '}
+              {formatCurrency(offer.counterWage || 0)}/wk wage
+            </span>
+          )}
         </div>
       )}
 

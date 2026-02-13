@@ -104,19 +104,23 @@ export function OfferCard({
       </div>
 
       {/* Offer Details */}
-      <div className="grid grid-cols-3 gap-4 text-center p-3 bg-slate-800/50 rounded mb-3">
+      <div
+        className={`grid gap-4 text-center p-3 bg-slate-800/50 rounded mb-3 ${direction === 'incoming' ? 'grid-cols-2' : 'grid-cols-3'}`}
+      >
         <div>
           <div className="text-pitch-400 font-bold">
             {formatCurrency(offer.offerAmount)}
           </div>
           <div className="text-xs text-slate-500">Fee</div>
         </div>
-        <div>
-          <div className="text-amber-400 font-bold">
-            {formatCurrency(offer.offeredWage)}/wk
+        {direction !== 'incoming' && (
+          <div>
+            <div className="text-amber-400 font-bold">
+              {formatCurrency(offer.offeredWage)}/wk
+            </div>
+            <div className="text-xs text-slate-500">Wage</div>
           </div>
-          <div className="text-xs text-slate-500">Wage</div>
-        </div>
+        )}
         <div>
           <div className="text-white font-bold">{offer.contractYears}y</div>
           <div className="text-xs text-slate-500">Contract</div>
@@ -129,19 +133,23 @@ export function OfferCard({
           <p className="text-blue-400 text-sm font-medium mb-2">
             Counter Offer:
           </p>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div
+            className={`grid gap-4 text-sm ${direction === 'incoming' ? 'grid-cols-1' : 'grid-cols-2'}`}
+          >
             <div>
               <span className="text-slate-400">Fee: </span>
               <span className="text-white">
                 {formatCurrency(offer.counterAmount)}
               </span>
             </div>
-            <div>
-              <span className="text-slate-400">Wage: </span>
-              <span className="text-white">
-                {formatCurrency(offer.counterWage || 0)}/wk
-              </span>
-            </div>
+            {direction !== 'incoming' && (
+              <div>
+                <span className="text-slate-400">Wage: </span>
+                <span className="text-white">
+                  {formatCurrency(offer.counterWage || 0)}/wk
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

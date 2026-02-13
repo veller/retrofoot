@@ -1,5 +1,10 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { formatCurrency, type Team, calculateOverall } from '@retrofoot/core';
+import {
+  formatCurrency,
+  type Team,
+  calculateOverall,
+  calculateReleaseCompensation,
+} from '@retrofoot/core';
 import {
   useTransferMarket,
   useTeamListings,
@@ -7,6 +12,7 @@ import {
   respondToOffer,
   listPlayerForSale,
   removePlayerListing,
+  releasePlayer,
   type MarketPlayer,
   type ActiveOffer,
 } from '../../hooks';
@@ -24,6 +30,7 @@ type PlayerStatusFilter = 'all' | 'listed' | 'free_agents';
 interface TransferMarketPanelProps {
   saveId: string;
   playerTeam: Team;
+  currentSeason: string;
   currentRound: number;
   onTransferComplete?: () => void;
 }
@@ -31,6 +38,7 @@ interface TransferMarketPanelProps {
 export function TransferMarketPanel({
   saveId,
   playerTeam,
+  currentSeason,
   currentRound,
   onTransferComplete,
 }: TransferMarketPanelProps) {
@@ -43,6 +51,9 @@ export function TransferMarketPanel({
   const [counterOfferTarget, setCounterOfferTarget] =
     useState<ActiveOffer | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [releaseConfirmPlayerId, setReleaseConfirmPlayerId] = useState<
+    string | null
+  >(null);
   const [actionMessage, setActionMessage] = useState<{
     type: 'success' | 'error';
     text: string;
@@ -70,6 +81,12 @@ export function TransferMarketPanel({
       return () => clearTimeout(timer);
     }
   }, [actionMessage]);
+
+  useEffect(() => {
+    if (!releaseConfirmPlayerId) return;
+    const timer = setTimeout(() => setReleaseConfirmPlayerId(null), 5000);
+    return () => clearTimeout(timer);
+  }, [releaseConfirmPlayerId]);
 
   // Filter players
   const filterPlayers = useCallback(
@@ -232,6 +249,97 @@ export function TransferMarketPanel({
     }
   };
 
+  const getReleaseFeeForPlayer = useCallback(
+    (playerId: string): number => {
+      const player = playerTeam.players.find((p) => p.id === playerId);
+      if (!player) return 0;
+      const season = parseInt(currentSeason, 10);
+      if (Number.isNaN(season)) return 0;
+      return calculateReleaseCompensation({
+        player,
+        currentSeason: season,
+        currentRound,
+      }).fee;
+    },
+    [playerTeam.players, currentSeason, currentRound],
+  );
+
+  const handleReleasePlayer = async (playerId: string) => {
+    const fee = getReleaseFeeForPlayer(playerId);
+    const player = playerTeam.players.find((p) => p.id === playerId);
+    if (!player) return;
+    const displayName = player.nickname || player.name;
+    const hasBalanceInfo = typeof playerTeam.balance === 'number';
+    const cannotAffordRelease =
+      fee > 0 && hasBalanceInfo && (playerTeam.balance as number) < fee;
+    if (cannotAffordRelease) {
+      setActionMessage({
+        type: 'error',
+        text: `Not enough cash to release ${displayName}: need ${formatCurrency(fee)}, have ${formatCurrency(playerTeam.balance as number)}.`,
+      });
+      setReleaseConfirmPlayerId(null);
+      return;
+    }
+    if (releaseConfirmPlayerId !== playerId) {
+      setReleaseConfirmPlayerId(playerId);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const result = await releasePlayer(saveId, playerId);
+    setIsSubmitting(false);
+    setReleaseConfirmPlayerId(null);
+
+    if (result.success) {
+      const releasedFee = result.quote?.fee ?? fee;
+      setActionMessage({
+        type: 'success',
+        text:
+          releasedFee > 0
+            ? `${displayName} released for ${formatCurrency(releasedFee)}.`
+            : `${displayName} released by mutual termination.`,
+      });
+      refetchListings();
+      refetchMarket();
+      onTransferComplete?.();
+    } else {
+      setActionMessage({
+        type: 'error',
+        text: result.error || 'Failed to release player',
+      });
+    }
+  };
+
+  const getReleaseButtonLabel = useCallback(
+    (playerId: string): string => {
+      const fee = getReleaseFeeForPlayer(playerId);
+      if (releaseConfirmPlayerId === playerId) {
+        return fee > 0
+          ? `Yes, Release (-${formatCurrency(fee)})`
+          : 'Yes, Release Player';
+      }
+      return fee > 0
+        ? `Release (-${formatCurrency(fee)})`
+        : 'Release (No Fee)';
+    },
+    [getReleaseFeeForPlayer, releaseConfirmPlayerId],
+  );
+
+  const getReleaseButtonClassName = useCallback(
+    (playerId: string, isMobile: boolean): string => {
+      const isArmed = releaseConfirmPlayerId === playerId;
+      if (isMobile) {
+        return `w-full py-1.5 text-white text-xs rounded disabled:opacity-50 ${
+          isArmed ? 'bg-rose-500 hover:bg-rose-400 animate-pulse' : 'bg-rose-700 hover:bg-rose-600'
+        }`;
+      }
+      return `px-3 py-1 text-white text-sm rounded transition-colors disabled:opacity-50 ${
+        isArmed ? 'bg-rose-500 hover:bg-rose-400 animate-pulse' : 'bg-rose-700 hover:bg-rose-600'
+      }`;
+    },
+    [releaseConfirmPlayerId],
+  );
+
   // Tab content
   const renderTabContent = () => {
     switch (activeTab) {
@@ -353,6 +461,16 @@ export function TransferMarketPanel({
                           >
                             Unlist
                           </button>
+                          <button
+                            onClick={() => handleReleasePlayer(listing.playerId)}
+                            disabled={isSubmitting}
+                            className={getReleaseButtonClassName(
+                              listing.playerId,
+                              false,
+                            )}
+                          >
+                            {getReleaseButtonLabel(listing.playerId)}
+                          </button>
                         </div>
                       </div>
 
@@ -373,6 +491,16 @@ export function TransferMarketPanel({
                           className="px-3 py-1 text-red-400 hover:text-red-300 text-sm border border-red-500/50 rounded hover:border-red-400 transition-colors disabled:opacity-50"
                         >
                           Unlist
+                        </button>
+                        <button
+                          onClick={() => handleReleasePlayer(listing.playerId)}
+                          disabled={isSubmitting}
+                          className={getReleaseButtonClassName(
+                            listing.playerId,
+                            false,
+                          )}
+                        >
+                          {getReleaseButtonLabel(listing.playerId)}
                         </button>
                       </div>
                     </div>
@@ -417,6 +545,13 @@ export function TransferMarketPanel({
                         >
                           List
                         </button>
+                        <button
+                          onClick={() => handleReleasePlayer(player.id)}
+                          disabled={isSubmitting}
+                          className={getReleaseButtonClassName(player.id, true)}
+                        >
+                          {getReleaseButtonLabel(player.id)}
+                        </button>
                       </div>
 
                       <div className="hidden md:flex items-center gap-3">
@@ -436,6 +571,16 @@ export function TransferMarketPanel({
                           className="px-3 py-1 bg-pitch-600 hover:bg-pitch-500 text-white text-sm rounded disabled:opacity-50"
                         >
                           List
+                        </button>
+                        <button
+                          onClick={() => handleReleasePlayer(player.id)}
+                          disabled={isSubmitting}
+                          className={getReleaseButtonClassName(
+                            player.id,
+                            false,
+                          )}
+                        >
+                          {getReleaseButtonLabel(player.id)}
                         </button>
                       </div>
                     </div>

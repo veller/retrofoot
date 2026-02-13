@@ -8,11 +8,12 @@ import type {
   D1PreparedStatement,
 } from '@cloudflare/workers-types';
 import type { drizzle } from 'drizzle-orm/d1';
-import { eq, and, or, isNull, lt, inArray } from 'drizzle-orm';
+import { eq, and, or, isNull, lt, inArray, sql } from 'drizzle-orm';
 import {
   teams,
   players,
   saves,
+  transactions,
   transferListings,
   transferOffers,
 } from '@retrofoot/db/schema';
@@ -29,6 +30,9 @@ import {
   OFFER_EXPIRY_ROUNDS,
   getContractWageMultiplier,
   DEFAULT_FREE_AGENT_CONFIG,
+  calculateReleaseCompensation,
+  type PlayerAttributes,
+  type Position,
 } from '@retrofoot/core';
 
 // ============================================================================
@@ -70,6 +74,14 @@ export interface ActiveOffer {
   createdRound: number;
   expiresRound: number;
   respondedRound: number | null;
+}
+
+export interface ReleaseFeeQuote {
+  playerId: string;
+  fee: number;
+  hasFee: boolean;
+  yearsRemaining: number;
+  utilizationRatio: number;
 }
 
 // ============================================================================
@@ -454,6 +466,195 @@ export async function removePlayerListing(
         eq(transferListings.teamId, teamId),
       ),
     );
+}
+
+/**
+ * Get release compensation quote for a player
+ */
+export async function getReleaseFeeQuote(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  playerId: string,
+  teamId: string,
+): Promise<ReleaseFeeQuote> {
+  const saveResult = await db
+    .select({
+      currentSeason: saves.currentSeason,
+      currentRound: saves.currentRound,
+    })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+
+  if (saveResult.length === 0) {
+    throw new Error('Save not found');
+  }
+
+  const playerResult = await db
+    .select({
+      id: players.id,
+      teamId: players.teamId,
+      age: players.age,
+      wage: players.wage,
+      marketValue: players.marketValue,
+      contractEndSeason: players.contractEndSeason,
+      attributes: players.attributes,
+      position: players.position,
+      seasonMinutes: players.seasonMinutes,
+    })
+    .from(players)
+    .where(and(eq(players.saveId, saveId), eq(players.id, playerId)))
+    .limit(1);
+
+  if (playerResult.length === 0) {
+    throw new Error('Player not found');
+  }
+
+  const player = playerResult[0];
+  if (player.teamId !== teamId) {
+    throw new Error('Player does not belong to this team');
+  }
+
+  const currentSeason = parseInt(saveResult[0].currentSeason || '2026', 10);
+  const currentRound = saveResult[0].currentRound || 1;
+  const quote = calculateReleaseCompensation({
+    player: {
+      age: player.age,
+      wage: player.wage,
+      marketValue: player.marketValue,
+      contractEndSeason: player.contractEndSeason,
+      attributes: player.attributes as unknown as PlayerAttributes,
+      position: player.position as Position,
+      form: {
+        form: 70,
+        lastFiveRatings: [],
+        seasonGoals: 0,
+        seasonAssists: 0,
+        seasonMinutes: player.seasonMinutes ?? 0,
+        seasonAvgRating: 0,
+      },
+    },
+    currentSeason,
+    currentRound,
+  });
+
+  return {
+    playerId: player.id,
+    fee: quote.fee,
+    hasFee: quote.hasFee,
+    yearsRemaining: quote.yearsRemaining,
+    utilizationRatio: quote.utilizationRatio,
+  };
+}
+
+/**
+ * Release player to free agency (immediate contract termination)
+ */
+export async function releasePlayerToFreeAgency(
+  db: ReturnType<typeof drizzle>,
+  saveId: string,
+  playerId: string,
+  teamId: string,
+): Promise<ReleaseFeeQuote> {
+  const quote = await getReleaseFeeQuote(db, saveId, playerId, teamId);
+
+  if (quote.fee > 0) {
+    const teamFinance = await db
+      .select({ balance: teams.balance })
+      .from(teams)
+      .where(and(eq(teams.id, teamId), eq(teams.saveId, saveId)))
+      .limit(1);
+
+    if (teamFinance.length === 0) {
+      throw new Error('Team not found');
+    }
+
+    const currentBalance = teamFinance[0].balance ?? 0;
+    if (currentBalance < quote.fee) {
+      throw new Error(
+        `Insufficient funds to release player (need ${quote.fee}, available ${currentBalance})`,
+      );
+    }
+  }
+
+  const saveResult = await db
+    .select({
+      currentRound: saves.currentRound,
+    })
+    .from(saves)
+    .where(eq(saves.id, saveId))
+    .limit(1);
+  const currentRound = saveResult[0]?.currentRound || 1;
+
+  const playerResult = await db
+    .select({ wage: players.wage })
+    .from(players)
+    .where(and(eq(players.saveId, saveId), eq(players.id, playerId)))
+    .limit(1);
+  const playerWage = playerResult[0]?.wage ?? 0;
+
+  await db
+    .update(players)
+    .set({
+      teamId: null,
+      morale: 55,
+    })
+    .where(and(eq(players.saveId, saveId), eq(players.id, playerId)));
+
+  // Remove all transfer listings and open offers tied to this player
+  await db
+    .delete(transferListings)
+    .where(
+      and(eq(transferListings.saveId, saveId), eq(transferListings.playerId, playerId)),
+    );
+  await db
+    .update(transferOffers)
+    .set({ status: 'cancelled', respondedRound: currentRound })
+    .where(
+      and(
+        eq(transferOffers.saveId, saveId),
+        eq(transferOffers.playerId, playerId),
+        or(
+          eq(transferOffers.status, 'pending'),
+          eq(transferOffers.status, 'counter'),
+          eq(transferOffers.status, 'accepted'),
+        ),
+      ),
+    );
+
+  if (quote.fee > 0) {
+    await db
+      .update(teams)
+      .set({
+        budget: sql`${teams.budget} - ${quote.fee}`,
+        balance: sql`${teams.balance} - ${quote.fee}`,
+      })
+      .where(and(eq(teams.id, teamId), eq(teams.saveId, saveId)));
+
+    const transactionId = generateTransactionId();
+    await db.insert(transactions).values({
+      id: transactionId,
+      saveId,
+      teamId,
+      type: 'expense',
+      category: 'operations',
+      amount: quote.fee,
+      description: 'Player contract termination',
+      round: currentRound,
+      createdAt: new Date(),
+    });
+  }
+
+  if (playerWage > 0) {
+    await db
+      .update(teams)
+      .set({
+        roundWages: sql`CASE WHEN ${teams.roundWages} - ${playerWage} < 0 THEN 0 ELSE ${teams.roundWages} - ${playerWage} END`,
+      })
+      .where(and(eq(teams.id, teamId), eq(teams.saveId, saveId)));
+  }
+
+  return quote;
 }
 
 // ============================================================================
@@ -1563,7 +1764,7 @@ export async function negotiateIncomingOffer(
   saveId: string,
   offerId: string,
   action: 'accept' | 'reject' | 'counter',
-  counterOffer?: { fee: number; wage: number },
+  counterOffer?: { fee: number },
   negotiationId?: string,
 ): Promise<NegotiationResult> {
   const saveResult = await db
@@ -1648,7 +1849,7 @@ export async function negotiateIncomingOffer(
 
   // Counter offer
   if (!counterOffer) {
-    throw new Error('Counter offer requires fee and wage');
+    throw new Error('Counter offer requires fee');
   }
 
   // Validate meaningful increase
@@ -1672,7 +1873,8 @@ export async function negotiateIncomingOffer(
   const aiWillingness = Math.max(0.7, 1.0 - (round - 1) * 0.1);
   const effectiveAsk = counterOffer.fee * aiWillingness;
 
-  let aiDecision: { action: 'accept' | 'reject' | 'counter'; fee?: number; wage?: number };
+  const fixedWage = offer.offeredWage;
+  let aiDecision: { action: 'accept' | 'reject' | 'counter'; fee?: number };
 
   // AI evaluates the counter
   if (offer.offerAmount >= effectiveAsk) {
@@ -1690,7 +1892,6 @@ export async function negotiateIncomingOffer(
     aiDecision = {
       action: 'counter',
       fee: midpoint,
-      wage: Math.round((offer.offeredWage + counterOffer.wage) / 2),
     };
   }
 
@@ -1700,7 +1901,7 @@ export async function negotiateIncomingOffer(
       .set({
         status: 'accepted',
         offerAmount: counterOffer.fee,
-        offeredWage: counterOffer.wage,
+        offeredWage: fixedWage,
         respondedRound: currentRound,
       })
       .where(eq(transferOffers.id, offerId));
@@ -1717,7 +1918,7 @@ export async function negotiateIncomingOffer(
       completed: {
         transferId: transferResult.transferId,
         finalFee: counterOffer.fee,
-        finalWage: counterOffer.wage,
+        finalWage: fixedWage,
       },
     };
   }
@@ -1740,8 +1941,8 @@ export async function negotiateIncomingOffer(
   }
 
   // Store negotiation state for next round - only if we have valid counter values
-  if (aiDecision.fee === undefined || aiDecision.wage === undefined) {
-    throw new Error('AI counter decision missing fee or wage');
+  if (aiDecision.fee === undefined) {
+    throw new Error('AI counter decision missing fee');
   }
   // Store hardening factor for next round (add 5% for the next iteration)
   const nextHardeningFactor = hardeningFactor + 0.05;
@@ -1750,8 +1951,8 @@ export async function negotiateIncomingOffer(
     fromTeamId: offer.fromTeamId,
     toTeamId: offer.toTeamId,
     round,
-    lastOffer: { fee: counterOffer.fee, wage: counterOffer.wage, years: offer.contractYears },
-    lastAiOffer: { fee: aiDecision.fee, wage: aiDecision.wage },
+    lastOffer: { fee: counterOffer.fee, wage: fixedWage, years: offer.contractYears },
+    lastAiOffer: { fee: aiDecision.fee, wage: fixedWage },
     hardeningFactor: nextHardeningFactor,
     createdAt: Date.now(),
   });
@@ -1762,7 +1963,7 @@ export async function negotiateIncomingOffer(
     .set({
       status: 'counter',
       counterAmount: aiDecision.fee,
-      counterWage: aiDecision.wage,
+      counterWage: fixedWage,
       respondedRound: currentRound,
     })
     .where(eq(transferOffers.id, offerId));
@@ -1774,7 +1975,7 @@ export async function negotiateIncomingOffer(
     aiResponse: {
       action: 'counter',
       counterFee: aiDecision.fee,
-      counterWage: aiDecision.wage,
+      counterWage: fixedWage,
       reason: 'We can meet in the middle',
     },
     canCounter: round < MAX_NEGOTIATION_ROUNDS,

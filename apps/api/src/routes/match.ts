@@ -555,6 +555,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     // Process AI transfer activity (kept alive with waitUntil)
     const transferPromise = processAITransfers(
       db,
+      c.env.DB,
       saveId,
       save.playerTeamId,
       save.currentSeason,

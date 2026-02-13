@@ -32,6 +32,8 @@ export {
   completeTransfer,
   negotiateTransfer,
   negotiateIncomingOffer,
+  getReleaseFeeQuote,
+  releasePlayer,
 } from './useTransfers';
 export type {
   MarketPlayer,
@@ -40,6 +42,7 @@ export type {
   OffersData,
   NegotiationOffer,
   NegotiationResult,
+  ReleaseFeeQuote,
 } from './useTransfers';
 export {
   useSeasonSummary,
