@@ -280,10 +280,10 @@ export const TEAMS: TeamSeed[] = [
   },
   {
     id: 'laranjamecanica',
-    name: 'AS Laranja Mecânica',
+    name: 'Submarino Amarelo',
     shortName: 'LAR',
     realInspiration: 'Mirassol',
-    primaryColor: '#FF6600',
+    primaryColor: '#FFD400',
     secondaryColor: '#000000',
     stadium: 'Estádio Maião',
     capacity: 15000,

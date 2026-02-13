@@ -24,6 +24,7 @@ import { COXAVERDE_PLAYERS } from './coxaverde';
 import { CHAPAQUENTE_PLAYERS } from './chapaquente';
 import { LEAOAZUL_PLAYERS } from './leaoazul';
 import { LARANJAMECANICA_PLAYERS } from './laranjamecanica';
+import { DEPTH_PLAYERS } from './depth';
 
 export {
   MENGALVIO_PLAYERS,
@@ -46,6 +47,7 @@ export {
   CHAPAQUENTE_PLAYERS,
   LEAOAZUL_PLAYERS,
   LARANJAMECANICA_PLAYERS,
+  DEPTH_PLAYERS,
 };
 
 /** All players from all teams */
@@ -70,4 +72,5 @@ export const ALL_PLAYERS = [
   ...CHAPAQUENTE_PLAYERS,
   ...LEAOAZUL_PLAYERS,
   ...LARANJAMECANICA_PLAYERS,
+  ...DEPTH_PLAYERS,
 ];
