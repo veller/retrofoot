@@ -43,8 +43,8 @@ export const RED_CARD_STRENGTH_PENALTY = 8;
 
 // Event thresholds (cumulative probabilities)
 export const EVENT_THRESHOLD_ATTACKING_CHANCE = 0.4;
-export const EVENT_THRESHOLD_YELLOW_CARD = 0.55;
-export const EVENT_THRESHOLD_RED_CARD = 0.58;
-export const EVENT_THRESHOLD_CORNER = 0.65;
-export const EVENT_THRESHOLD_FREE_KICK = 0.72;
-export const EVENT_THRESHOLD_SAVE = 0.8;
+export const EVENT_THRESHOLD_YELLOW_CARD = 0.7;
+export const EVENT_THRESHOLD_RED_CARD = 0.713;
+export const EVENT_THRESHOLD_CORNER = 0.78;
+export const EVENT_THRESHOLD_FREE_KICK = 0.85;
+export const EVENT_THRESHOLD_SAVE = 0.92;

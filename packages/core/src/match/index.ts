@@ -85,6 +85,10 @@ export interface MatchState {
   homeSubsUsed: number;
   awaySubsUsed: number;
   stoppageTime: number;
+  homeBookings: Record<string, number>;
+  awayBookings: Record<string, number>;
+  homeSentOff: Record<string, true>;
+  awaySentOff: Record<string, true>;
   homeRedCards: number;
   awayRedCards: number;
   homeLiveEnergy: Record<string, number>;
@@ -133,6 +137,27 @@ function weightedRandom(weights: number[]): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function getDisciplineMaps(
+  state: MatchState,
+  team: 'home' | 'away',
+): {
+  bookings: Record<string, number>;
+  sentOff: Record<string, true>;
+} {
+  return team === 'home'
+    ? { bookings: state.homeBookings, sentOff: state.homeSentOff }
+    : { bookings: state.awayBookings, sentOff: state.awaySentOff };
+}
+
+function isSentOff(
+  state: MatchState,
+  team: 'home' | 'away',
+  playerId: string,
+): boolean {
+  const { sentOff } = getDisciplineMaps(state, team);
+  return Boolean(sentOff[playerId]);
 }
 
 // Goal type distribution based on real-world stats:
@@ -367,6 +392,10 @@ function calculateTeamStrength(
   }
 
   let avgStrength = totalStrength / lineupPlayers.length;
+  const lineupDeficit = Math.max(0, 11 - lineupPlayers.length);
+  if (lineupDeficit > 0) {
+    avgStrength -= lineupDeficit * 2.8;
+  }
 
   // Apply team momentum modifier (±8%)
   if (options?.team?.momentum !== undefined) {
@@ -533,6 +562,10 @@ export function createMatchState(config: MatchConfig): MatchState {
     homeSubsUsed: 0,
     awaySubsUsed: 0,
     stoppageTime: randomInt(1, 5),
+    homeBookings: {},
+    awayBookings: {},
+    homeSentOff: {},
+    awaySentOff: {},
     homeRedCards: 0,
     awayRedCards: 0,
     homeLiveEnergy,
@@ -594,6 +627,9 @@ export function makeSubstitution(
   }
 
   const playerOut = lineup[playerOutIndex];
+  if (isSentOff(state, team, playerOutId) || isSentOff(state, team, playerInId)) {
+    return { success: false };
+  }
   if (playerOut.position !== playerIn.position) {
     return { success: false };
   }
@@ -778,6 +814,84 @@ function pickSetPieceScorer(
   );
   const idx = weightedRandom(weights);
   return outfield[idx];
+}
+
+function pickFoulerForCard(
+  lineup: Player[],
+  bookings: Record<string, number>,
+  sentOff: Record<string, true>,
+  options: { minute: number; liveEnergyByPlayerId: Record<string, number>; red: boolean },
+): Player | undefined {
+  const available = lineup.filter((player) => !sentOff[player.id]);
+  if (available.length === 0) return undefined;
+  const weights = available.map((player) => {
+    const aggression = player.attributes.aggression;
+    const tackling = player.attributes.tackling;
+    const composureRisk = 100 - player.attributes.composure;
+    const energy = options.liveEnergyByPlayerId[player.id] ?? player.energy ?? 100;
+    const fatigueRisk = clamp((100 - energy) * 0.7, 0, 35);
+    const bookingRisk = (bookings[player.id] ?? 0) * (options.red ? 14 : 24);
+    const minuteRisk = options.minute > 75 ? 8 : options.minute > 60 ? 4 : 0;
+    const base = options.red
+      ? aggression * 1.8 + composureRisk * 1.6 + tackling * 0.6
+      : aggression * 1.1 + composureRisk * 0.9 + tackling * 1.0;
+    return Math.max(1, base + fatigueRisk + bookingRisk + minuteRisk);
+  });
+  return available[weightedRandom(weights)];
+}
+
+function applyAutoRedCardTacticalAdjustment(
+  state: MatchState,
+  team: 'home' | 'away',
+): void {
+  const isHome = team === 'home';
+  const scoreDiff = isHome
+    ? state.homeScore - state.awayScore
+    : state.awayScore - state.homeScore;
+  const tactics = isHome ? state.homeTactics : state.awayTactics;
+  tactics.posture = scoreDiff <= -2 ? 'balanced' : 'defensive';
+}
+
+function sendOffPlayer(
+  state: MatchState,
+  team: 'home' | 'away',
+  player: Player,
+  reason: 'straight_red' | 'second_yellow',
+): void {
+  const lineup = team === 'home' ? state.homeLineup : state.awayLineup;
+  const tactics = team === 'home' ? state.homeTactics : state.awayTactics;
+  const { sentOff } = getDisciplineMaps(state, team);
+  sentOff[player.id] = true;
+
+  const lineupIdx = lineup.findIndex((p) => p.id === player.id);
+  if (lineupIdx >= 0) {
+    lineup.splice(lineupIdx, 1);
+  }
+  const tacticsIdx = tactics.lineup.indexOf(player.id);
+  if (tacticsIdx >= 0) {
+    tactics.lineup.splice(tacticsIdx, 1);
+  }
+
+  if (team === 'home') {
+    state.homeRedCards++;
+  } else {
+    state.awayRedCards++;
+  }
+
+  applyAutoRedCardTacticalAdjustment(state, team);
+
+  state.events.push({
+    minute: state.minute,
+    type: 'red_card',
+    cardReason: reason,
+    team,
+    playerId: player.id,
+    playerName: player.nickname || player.name || 'Unknown',
+    description:
+      reason === 'second_yellow'
+        ? `Second yellow! ${player.nickname || player.name} is sent off!`
+        : `RED CARD! ${player.nickname || player.name} is sent off!`,
+  });
 }
 
 // Simulate a single minute
@@ -984,42 +1098,42 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       });
     }
   } else if (eventRoll < EVENT_THRESHOLD_YELLOW_CARD) {
-    // Yellow card
-    const allPlayers =
-      attackingTeam === 'home' ? state.awayLineup : state.homeLineup;
-    if (allPlayers.length === 0) return;
-    const fouler = allPlayers[randomInt(0, allPlayers.length - 1)];
+    const foulingTeam = attackingTeam === 'home' ? 'away' : 'home';
+    const allPlayers = foulingTeam === 'home' ? state.homeLineup : state.awayLineup;
+    const { bookings, sentOff } = getDisciplineMaps(state, foulingTeam);
+    const liveEnergyByPlayerId =
+      foulingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy;
+    const fouler = pickFoulerForCard(allPlayers, bookings, sentOff, {
+      minute: state.minute,
+      liveEnergyByPlayerId,
+      red: false,
+    });
+    if (!fouler) return;
+    bookings[fouler.id] = (bookings[fouler.id] ?? 0) + 1;
     state.events.push({
       minute: state.minute,
       type: 'yellow_card',
-      team: attackingTeam === 'home' ? 'away' : 'home',
+      team: foulingTeam,
       playerId: fouler?.id,
       playerName: fouler?.nickname || fouler?.name || 'Unknown',
       description: `Yellow card for ${fouler?.nickname || fouler?.name}`,
     });
-  } else if (eventRoll < EVENT_THRESHOLD_RED_CARD) {
-    // Red card (rare)
-    const foulingTeam = attackingTeam === 'home' ? 'away' : 'home';
-    const allPlayers =
-      attackingTeam === 'home' ? state.awayLineup : state.homeLineup;
-    if (allPlayers.length === 0) return;
-    const fouler = allPlayers[randomInt(0, allPlayers.length - 1)];
-
-    // Increment red card counter
-    if (foulingTeam === 'home') {
-      state.homeRedCards++;
-    } else {
-      state.awayRedCards++;
+    if (bookings[fouler.id] >= 2) {
+      sendOffPlayer(state, foulingTeam, fouler, 'second_yellow');
     }
-
-    state.events.push({
+  } else if (eventRoll < EVENT_THRESHOLD_RED_CARD) {
+    const foulingTeam = attackingTeam === 'home' ? 'away' : 'home';
+    const allPlayers = foulingTeam === 'home' ? state.homeLineup : state.awayLineup;
+    const { bookings, sentOff } = getDisciplineMaps(state, foulingTeam);
+    const liveEnergyByPlayerId =
+      foulingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy;
+    const fouler = pickFoulerForCard(allPlayers, bookings, sentOff, {
       minute: state.minute,
-      type: 'red_card',
-      team: foulingTeam,
-      playerId: fouler?.id,
-      playerName: fouler?.nickname || fouler?.name || 'Unknown',
-      description: `RED CARD! ${fouler?.nickname || fouler?.name} is sent off!`,
+      liveEnergyByPlayerId,
+      red: true,
     });
+    if (!fouler) return;
+    sendOffPlayer(state, foulingTeam, fouler, 'straight_red');
   } else if (eventRoll < EVENT_THRESHOLD_CORNER) {
     // Corner with goal chance
     state.events.push({

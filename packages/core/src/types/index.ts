@@ -75,6 +75,10 @@ export interface Player {
   // New fields
   status: PlayerStatus; // active, retiring, retired, etc.
   form: PlayerForm; // Form tracking for match performance
+  yellowAccumulation?: number; // Current accumulation for suspension rules
+  suspensionMatchesRemaining?: number; // Number of upcoming matches suspended
+  seasonYellowCards?: number; // Season discipline tracking
+  seasonRedCards?: number; // Season discipline tracking
 }
 
 // Team/Club entity
@@ -150,6 +154,7 @@ export interface MatchEvent {
   playerName?: string;
   assistPlayerId?: string;
   assistPlayerName?: string;
+  cardReason?: 'straight_red' | 'second_yellow';
   description?: string;
 }
 

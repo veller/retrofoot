@@ -34,6 +34,11 @@ const FORM_HISTORY_LENGTH = 5;
 const D1_BATCH_STATEMENT_LIMIT = 250;
 const DEFAULT_ROUND = 1;
 const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
+const DEFAULT_DISCIPLINE_PRESET = 'domestic_5yc';
+const YELLOW_ACCUMULATION_BY_PRESET: Record<string, number> = {
+  domestic_5yc: 5,
+  uefa_3yc: 3,
+};
 
 export const matchRoutes = new Hono<{ Bindings: Env }>();
 
@@ -60,6 +65,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
       currentRound: saves.currentRound,
       currentSeason: saves.currentSeason,
       playerTeamId: saves.playerTeamId,
+      disciplinePreset: saves.disciplinePreset,
     })
     .from(saves)
     .where(eq(saves.id, saveId))
@@ -133,6 +139,10 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
         seasonAssists: players.seasonAssists,
         seasonMinutes: players.seasonMinutes,
         seasonAvgRating: players.seasonAvgRating,
+        yellowAccumulation: players.yellowAccumulation,
+        suspensionMatchesRemaining: players.suspensionMatchesRemaining,
+        seasonYellowCards: players.seasonYellowCards,
+        seasonRedCards: players.seasonRedCards,
       })
       .from(players)
       .where(eq(players.saveId, saveId)),
@@ -171,6 +181,10 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
       wage: p.wage,
       marketValue: p.marketValue,
       status: p.status ?? 'active',
+      yellowAccumulation: p.yellowAccumulation ?? 0,
+      suspensionMatchesRemaining: p.suspensionMatchesRemaining ?? 0,
+      seasonYellowCards: p.seasonYellowCards ?? 0,
+      seasonRedCards: p.seasonRedCards ?? 0,
       form: {
         form: p.form ?? 70,
         lastFiveRatings: (p.lastFiveRatings as number[]) ?? [],
@@ -194,6 +208,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
     currentRound: save.currentRound,
     currentSeason: save.currentSeason,
     playerTeamId: save.playerTeamId,
+    disciplinePreset: save.disciplinePreset ?? 'domestic_5yc',
     fixtures: enrichedFixtures,
     teams: teamsWithPlayers,
   });
@@ -222,6 +237,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       currentRound: saves.currentRound,
       currentSeason: saves.currentSeason,
       playerTeamId: saves.playerTeamId,
+      disciplinePreset: saves.disciplinePreset,
     })
     .from(saves)
     .where(eq(saves.id, saveId))
@@ -321,11 +337,32 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
     const playerGoals = new Map<string, number>();
     const playerAssists = new Map<string, number>();
+    const playerYellowCards = new Map<string, number>();
+    const playerRedCards = new Map<string, number>();
+    const secondYellowSendOffs = new Set<string>();
+    const straightRedSendOffs = new Set<string>();
     const formUpdates = new Map<string, ('W' | 'D' | 'L')[]>();
     const standingsUpdates: StandingsUpdate[] = [];
 
     for (const result of body.results) {
       for (const event of result.events) {
+        if (event.playerId && event.type === 'yellow_card') {
+          playerYellowCards.set(
+            event.playerId,
+            (playerYellowCards.get(event.playerId) ?? 0) + 1,
+          );
+        }
+        if (event.playerId && event.type === 'red_card') {
+          playerRedCards.set(
+            event.playerId,
+            (playerRedCards.get(event.playerId) ?? 0) + 1,
+          );
+          if (event.cardReason === 'second_yellow') {
+            secondYellowSendOffs.add(event.playerId);
+          } else {
+            straightRedSendOffs.add(event.playerId);
+          }
+        }
         allMatchEvents.push({
           id: nanoid(),
           fixtureId: result.fixtureId,
@@ -463,6 +500,86 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         ).bind(JSON.stringify(form), teamId),
     );
 
+    const suspensionRollOffStatements = teamIdArray.map((teamId) =>
+      c.env.DB.prepare(
+        `UPDATE players
+         SET suspension_matches_remaining = CASE
+           WHEN suspension_matches_remaining > 0 THEN suspension_matches_remaining - 1
+           ELSE 0
+         END,
+         status = CASE
+           WHEN suspension_matches_remaining - 1 > 0 THEN 'suspended'
+           WHEN status = 'suspended' THEN 'active'
+           ELSE status
+         END
+         WHERE save_id = ? AND team_id = ? AND suspension_matches_remaining > 0`,
+      ).bind(saveId, teamId),
+    );
+    if (suspensionRollOffStatements.length > 0) {
+      await c.env.DB.batch(suspensionRollOffStatements);
+    }
+
+    const disciplinePreset = save.disciplinePreset ?? DEFAULT_DISCIPLINE_PRESET;
+    const yellowThreshold =
+      YELLOW_ACCUMULATION_BY_PRESET[disciplinePreset] ??
+      YELLOW_ACCUMULATION_BY_PRESET[DEFAULT_DISCIPLINE_PRESET];
+    const cardedPlayerIds = Array.from(
+      new Set([...playerYellowCards.keys(), ...playerRedCards.keys()]),
+    );
+    const cardedPlayerRows =
+      cardedPlayerIds.length > 0
+        ? await db
+            .select({
+              id: players.id,
+              yellowAccumulation: players.yellowAccumulation,
+              suspensionMatchesRemaining: players.suspensionMatchesRemaining,
+            })
+            .from(players)
+            .where(
+              and(eq(players.saveId, saveId), inArray(players.id, cardedPlayerIds)),
+            )
+        : [];
+
+    const disciplineStatements = cardedPlayerRows.map((row) => {
+      const playerId = row.id;
+      const yellowInc = playerYellowCards.get(playerId) ?? 0;
+      const redInc = playerRedCards.get(playerId) ?? 0;
+      const isSecondYellow = secondYellowSendOffs.has(playerId);
+      const isStraightRed = straightRedSendOffs.has(playerId);
+
+      let yellowAccum = (row.yellowAccumulation ?? 0) + yellowInc;
+      let suspensionMatchesRemaining = row.suspensionMatchesRemaining ?? 0;
+
+      if (isSecondYellow || isStraightRed) {
+        suspensionMatchesRemaining += 1;
+        yellowAccum = 0;
+      } else if (yellowAccum >= yellowThreshold) {
+        suspensionMatchesRemaining += 1;
+        yellowAccum = 0;
+      }
+
+      return c.env.DB.prepare(
+        `UPDATE players
+         SET season_yellow_cards = season_yellow_cards + ?,
+             season_red_cards = season_red_cards + ?,
+             yellow_accumulation = ?,
+             suspension_matches_remaining = ?,
+             status = CASE
+               WHEN ? > 0 THEN 'suspended'
+               WHEN status = 'suspended' THEN 'active'
+               ELSE status
+             END
+         WHERE id = ?`,
+      ).bind(
+        yellowInc,
+        redInc,
+        yellowAccum,
+        suspensionMatchesRemaining,
+        suspensionMatchesRemaining,
+        playerId,
+      );
+    });
+
     const matchEventStatements = allMatchEvents.map((ev) =>
       c.env.DB.prepare(
         'INSERT INTO match_events (id, fixture_id, minute, type, team, player_id, player_name, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -504,6 +621,9 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         : Promise.resolve(),
       formStatements.length > 0
         ? c.env.DB.batch(formStatements)
+        : Promise.resolve(),
+      disciplineStatements.length > 0
+        ? c.env.DB.batch(disciplineStatements)
         : Promise.resolve(),
     ]);
 

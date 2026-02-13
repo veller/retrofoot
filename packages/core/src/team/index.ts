@@ -176,11 +176,12 @@ export function getRequiredPositionForSlot(
 }
 
 export function getAvailablePlayerCounts(
-  players: Pick<Player, 'position' | 'injured' | 'fitness'>[],
+  players: Pick<Player, 'position' | 'injured' | 'fitness' | 'status'>[],
 ): FormationAvailabilityCounts {
   const counts = buildZeroCounts();
   for (const player of players) {
     if (player.injured) continue;
+    if (player.status === 'suspended') continue;
     if ((player.fitness ?? 0) <= MIN_FITNESS_FOR_AVAILABILITY) continue;
     counts[player.position] += 1;
   }
@@ -189,7 +190,7 @@ export function getAvailablePlayerCounts(
 
 export function evaluateFormationEligibility(
   formation: FormationType,
-  players: Pick<Player, 'position' | 'injured' | 'fitness'>[],
+  players: Pick<Player, 'position' | 'injured' | 'fitness' | 'status'>[],
 ): FormationEligibility {
   const required = getFormationRequirements(formation);
   const available = getAvailablePlayerCounts(players);
@@ -223,7 +224,10 @@ export function selectBestLineup(
   const safeFormation = normalizeFormation(formation);
   const positions = FORMATION_POSITIONS[safeFormation];
   const availablePlayers = team.players.filter(
-    (p) => !p.injured && p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
+    (p) =>
+      !p.injured &&
+      p.status !== 'suspended' &&
+      p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
   );
   const usedPlayerIds = new Set<string>();
   const lineup: string[] = [];
@@ -303,7 +307,10 @@ export function selectMostReadyLineup(
   const safeFormation = normalizeFormation(formation);
   const positions = FORMATION_POSITIONS[safeFormation];
   const availablePlayers = team.players.filter(
-    (p) => !p.injured && p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
+    (p) =>
+      !p.injured &&
+      p.status !== 'suspended' &&
+      p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
   );
   const usedPlayerIds = new Set<string>();
   const lineup: string[] = [];
@@ -355,6 +362,7 @@ export function isLineupCompatibleWithFormation(
     const requiredPosition = requiredPositions[index];
     if (!player) return false;
     if (player.injured) return false;
+    if (player.status === 'suspended') return false;
     if (player.position !== requiredPosition) return false;
   }
 

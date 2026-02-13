@@ -281,7 +281,13 @@ export function GamePage() {
           ? normalizedFormation
           : fallbackFormation;
         const playerIds = new Set(
-          playerTeam.players.map((player) => player.id),
+          playerTeam.players
+            .filter(
+              (player) =>
+                player.status !== 'suspended' &&
+                (player.suspensionMatchesRemaining ?? 0) <= 0,
+            )
+            .map((player) => player.id),
         );
         const lineup = persisted.lineup.filter((id) => playerIds.has(id));
         const substitutes = persisted.substitutes.filter((id) =>
@@ -1012,6 +1018,13 @@ function SquadPanel({
         if (!prev) return null;
         if (prev.substitutes.includes(playerId)) return prev;
         if (prev.substitutes.length >= BENCH_LIMIT) return prev;
+        const player = playersById.get(playerId);
+        if (
+          player?.status === 'suspended' ||
+          (player?.suspensionMatchesRemaining ?? 0) > 0
+        ) {
+          return prev;
+        }
 
         const lineupIndex = prev.lineup.indexOf(playerId);
         const newLineup = [...prev.lineup];
@@ -1226,12 +1239,18 @@ function SquadPanel({
           {sortedPlayers.map((player) => {
             const inLineup = lineupSet.has(player.id);
             const onBench = substitutesSet.has(player.id);
+            const suspensionMatches = player.suspensionMatchesRemaining ?? 0;
+            const isSuspended =
+              player.status === 'suspended' || suspensionMatches > 0;
             const canSendToBench =
-              !inLineup && !onBench && substitutes.length < BENCH_LIMIT;
+              !isSuspended &&
+              !inLineup &&
+              !onBench &&
+              substitutes.length < BENCH_LIMIT;
             const rowStyle = getSquadRowStyle(inLineup, onBench);
             const playerDisplayName = player.nickname ?? player.name;
             const isListed = listedPlayerIds.has(player.id);
-            const canDrag = inLineup || onBench;
+            const canDrag = (inLineup || onBench) && !isSuspended;
             const slot: PitchSlot = inLineup
               ? { type: 'lineup', index: lineup.indexOf(player.id) }
               : { type: 'bench', index: substitutes.indexOf(player.id) };
@@ -1304,6 +1323,11 @@ function SquadPanel({
                   {isListed && (
                     <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
                       LISTED
+                    </span>
+                  )}
+                  {isSuspended && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-700/30 text-rose-300 border border-rose-600/50 flex-shrink-0">
+                      SUSP {suspensionMatches > 0 ? `(${suspensionMatches})` : ''}
                     </span>
                   )}
                 </div>

@@ -397,7 +397,15 @@ export function MatchPage() {
     team: Team,
     candidate: Tactics,
   ): Tactics | null {
-    const playerIds = new Set(team.players.map((player) => player.id));
+    const playerIds = new Set(
+      team.players
+        .filter(
+          (player) =>
+            player.status !== 'suspended' &&
+            (player.suspensionMatchesRemaining ?? 0) <= 0,
+        )
+        .map((player) => player.id),
+    );
     const formationEligible = evaluateFormationEligibility(
       candidate.formation,
       team.players,
@@ -733,7 +741,15 @@ export function MatchPage() {
       if (!eligibility.eligible) return;
 
       const autoSelection = selectBestLineup(playerTeam, normalizedFormation);
-      const playerIds = new Set(playerTeam.players.map((player) => player.id));
+      const playerIds = new Set(
+        playerTeam.players
+          .filter(
+            (player) =>
+              player.status !== 'suspended' &&
+              (player.suspensionMatchesRemaining ?? 0) <= 0,
+          )
+          .map((player) => player.id),
+      );
       const providedLineup = Array.isArray(nextTactics.lineup)
         ? nextTactics.lineup.filter((id) => playerIds.has(id))
         : [];
@@ -850,6 +866,7 @@ export function MatchPage() {
                   playerName: e.playerName,
                   assistPlayerId: e.assistPlayerId,
                   assistPlayerName: e.assistPlayerName,
+                  cardReason: e.cardReason,
                   description: e.description,
                 })),
             };
