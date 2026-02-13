@@ -77,6 +77,7 @@ export interface Player {
   form: PlayerForm; // Form tracking for match performance
   yellowAccumulation?: number; // Current accumulation for suspension rules
   suspensionMatchesRemaining?: number; // Number of upcoming matches suspended
+  suspensionReason?: 'straight_red' | 'second_yellow' | 'yellow_accumulation';
   seasonYellowCards?: number; // Season discipline tracking
   seasonRedCards?: number; // Season discipline tracking
 }

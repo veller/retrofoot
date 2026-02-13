@@ -141,6 +141,7 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
         seasonAvgRating: players.seasonAvgRating,
         yellowAccumulation: players.yellowAccumulation,
         suspensionMatchesRemaining: players.suspensionMatchesRemaining,
+        suspensionReason: players.suspensionReason,
         seasonYellowCards: players.seasonYellowCards,
         seasonRedCards: players.seasonRedCards,
       })
@@ -183,6 +184,12 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
       status: p.status ?? 'active',
       yellowAccumulation: p.yellowAccumulation ?? 0,
       suspensionMatchesRemaining: p.suspensionMatchesRemaining ?? 0,
+      suspensionReason:
+        (p.suspensionReason as
+          | 'straight_red'
+          | 'second_yellow'
+          | 'yellow_accumulation'
+          | null) ?? null,
       seasonYellowCards: p.seasonYellowCards ?? 0,
       seasonRedCards: p.seasonRedCards ?? 0,
       form: {
@@ -511,6 +518,10 @@ matchRoutes.post('/:saveId/complete', async (c) => {
            WHEN suspension_matches_remaining - 1 > 0 THEN 'suspended'
            WHEN status = 'suspended' THEN 'active'
            ELSE status
+         END,
+         suspension_reason = CASE
+           WHEN suspension_matches_remaining - 1 > 0 THEN suspension_reason
+           ELSE NULL
          END
          WHERE save_id = ? AND team_id = ? AND suspension_matches_remaining > 0`,
       ).bind(saveId, teamId),
@@ -533,6 +544,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
               id: players.id,
               yellowAccumulation: players.yellowAccumulation,
               suspensionMatchesRemaining: players.suspensionMatchesRemaining,
+              suspensionReason: players.suspensionReason,
             })
             .from(players)
             .where(
@@ -549,13 +561,20 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
       let yellowAccum = (row.yellowAccumulation ?? 0) + yellowInc;
       let suspensionMatchesRemaining = row.suspensionMatchesRemaining ?? 0;
+      let suspensionReason = row.suspensionReason as
+        | 'straight_red'
+        | 'second_yellow'
+        | 'yellow_accumulation'
+        | null;
 
       if (isSecondYellow || isStraightRed) {
         suspensionMatchesRemaining += 1;
         yellowAccum = 0;
+        suspensionReason = isSecondYellow ? 'second_yellow' : 'straight_red';
       } else if (yellowAccum >= yellowThreshold) {
         suspensionMatchesRemaining += 1;
         yellowAccum = 0;
+        suspensionReason = 'yellow_accumulation';
       }
 
       return c.env.DB.prepare(
@@ -564,6 +583,10 @@ matchRoutes.post('/:saveId/complete', async (c) => {
              season_red_cards = season_red_cards + ?,
              yellow_accumulation = ?,
              suspension_matches_remaining = ?,
+             suspension_reason = CASE
+               WHEN ? > 0 THEN ?
+               ELSE NULL
+             END,
              status = CASE
                WHEN ? > 0 THEN 'suspended'
                WHEN status = 'suspended' THEN 'active'
@@ -575,6 +598,8 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         redInc,
         yellowAccum,
         suspensionMatchesRemaining,
+        suspensionMatchesRemaining,
+        suspensionReason,
         suspensionMatchesRemaining,
         playerId,
       );

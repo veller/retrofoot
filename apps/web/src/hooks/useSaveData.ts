@@ -66,6 +66,7 @@ interface ApiPlayerResponse {
   status?: string;
   yellowAccumulation?: number;
   suspensionMatchesRemaining?: number;
+  suspensionReason?: 'straight_red' | 'second_yellow' | 'yellow_accumulation';
   seasonYellowCards?: number;
   seasonRedCards?: number;
   form: number;
@@ -156,6 +157,7 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
         | 'suspended') ?? 'active',
     yellowAccumulation: apiPlayer.yellowAccumulation ?? 0,
     suspensionMatchesRemaining: apiPlayer.suspensionMatchesRemaining ?? 0,
+    suspensionReason: apiPlayer.suspensionReason ?? undefined,
     seasonYellowCards: apiPlayer.seasonYellowCards ?? 0,
     seasonRedCards: apiPlayer.seasonRedCards ?? 0,
     form: {
@@ -224,6 +226,7 @@ interface ApiMatchPlayerResponse {
   status: string;
   yellowAccumulation?: number;
   suspensionMatchesRemaining?: number;
+  suspensionReason?: 'straight_red' | 'second_yellow' | 'yellow_accumulation';
   seasonYellowCards?: number;
   seasonRedCards?: number;
   form: {
@@ -303,6 +306,7 @@ function transformMatchPlayer(apiPlayer: ApiMatchPlayerResponse): Player {
         | 'suspended') ?? 'active',
     yellowAccumulation: apiPlayer.yellowAccumulation ?? 0,
     suspensionMatchesRemaining: apiPlayer.suspensionMatchesRemaining ?? 0,
+    suspensionReason: apiPlayer.suspensionReason ?? undefined,
     seasonYellowCards: apiPlayer.seasonYellowCards ?? 0,
     seasonRedCards: apiPlayer.seasonRedCards ?? 0,
     form: {

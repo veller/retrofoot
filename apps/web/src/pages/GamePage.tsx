@@ -69,9 +69,12 @@ function SquadEnergyDisplay({ energy }: { energy: number }) {
   const value = Math.max(0, Math.min(100, energy));
   return (
     <div
-      className="flex items-center gap-1.5 flex-shrink-0"
+      className="flex flex-col items-end gap-0.5 flex-shrink-0 min-w-[44px]"
       title={`Energy ${Math.round(value)}%`}
     >
+      <span className="text-slate-400 text-[10px] tabular-nums leading-none">
+        {Math.round(value)}%
+      </span>
       <div className="w-10 h-1.5 rounded-full bg-slate-700 overflow-hidden">
         <div
           className={`h-full rounded-full ${getSquadEnergyBarColor(value)}`}
@@ -79,9 +82,6 @@ function SquadEnergyDisplay({ energy }: { energy: number }) {
           aria-hidden
         />
       </div>
-      <span className="text-slate-400 text-xs tabular-nums w-7">
-        {Math.round(value)}%
-      </span>
     </div>
   );
 }
@@ -1191,6 +1191,8 @@ function SquadPanel({
           isInLineup={lineupSet.has(selectedPlayer.id)}
           isOnBench={substitutesSet.has(selectedPlayer.id)}
           canAddToBench={
+            (selectedPlayer.suspensionMatchesRemaining ?? 0) <= 0 &&
+            selectedPlayer.status !== 'suspended' &&
             !lineupSet.has(selectedPlayer.id) &&
             !substitutesSet.has(selectedPlayer.id) &&
             substitutes.length < BENCH_LIMIT
@@ -1242,11 +1244,6 @@ function SquadPanel({
             const suspensionMatches = player.suspensionMatchesRemaining ?? 0;
             const isSuspended =
               player.status === 'suspended' || suspensionMatches > 0;
-            const canSendToBench =
-              !isSuspended &&
-              !inLineup &&
-              !onBench &&
-              substitutes.length < BENCH_LIMIT;
             const rowStyle = getSquadRowStyle(inLineup, onBench);
             const playerDisplayName = player.nickname ?? player.name;
             const isListed = listedPlayerIds.has(player.id);
@@ -1272,7 +1269,7 @@ function SquadPanel({
               <div
                 key={player.id}
                 data-pitch-slot={canDrag ? JSON.stringify(slot) : undefined}
-                className={`${rowStyle} group relative px-3 lg:px-4 py-2 lg:py-3 flex justify-between items-center ${rowDragClass} hover:bg-slate-600/50 ${rowOpacityClass} ${rowDropTargetClass}`}
+                className={`${rowStyle} group relative px-3 lg:px-4 py-2 ${rowDragClass} hover:bg-slate-600/50 ${rowOpacityClass} ${rowDropTargetClass}`}
                 onClick={() => setSelectedPlayerId(player.id)}
                 role="button"
                 draggable={canDrag}
@@ -1309,42 +1306,51 @@ function SquadPanel({
                 onPointerUp={canDrag ? touchDrag.getPointerUp() : undefined}
                 onPointerMove={canDrag ? touchDrag.getPointerMove() : undefined}
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  {isDropTarget && <SquadListReplaceIcon />}
-                  <PositionBadge position={player.position} />
-                  <span
-                    className={`text-white ${getNameSizeClass(playerDisplayName)} truncate`}
-                  >
-                    {playerDisplayName}
-                  </span>
-                  <span className="text-slate-400 text-xs flex-shrink-0">
-                    {player.age}y
-                  </span>
-                  {isListed && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
-                      LISTED
+                <div className="flex items-center justify-between gap-3 min-w-0">
+                  <div className="min-w-0 flex items-center gap-2 flex-1">
+                    {isDropTarget && <SquadListReplaceIcon />}
+                    <PositionBadge position={player.position} />
+                    <span
+                      className={`text-white ${getNameSizeClass(playerDisplayName)} truncate`}
+                    >
+                      {playerDisplayName}
                     </span>
-                  )}
-                  {isSuspended && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-700/30 text-rose-300 border border-rose-600/50 flex-shrink-0">
-                      SUSP {suspensionMatches > 0 ? `(${suspensionMatches})` : ''}
+                    <span className="hidden sm:inline text-slate-400 text-xs flex-shrink-0">
+                      {player.age}y
                     </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
-                  {canSendToBench && (
-                    <span className="hidden lg:inline text-xs font-medium bg-pitch-600 hover:bg-pitch-500 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity mr-1">
-                      Tap for actions
+                    {isListed && (
+                      <>
+                        <span className="sm:hidden px-1 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
+                          L
+                        </span>
+                        <span className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-600/30 text-amber-400 border border-amber-500/50 flex-shrink-0">
+                          LISTED
+                        </span>
+                      </>
+                    )}
+                    {isSuspended && (
+                      <>
+                        <span className="sm:hidden px-1 py-0.5 text-[10px] font-bold rounded bg-rose-700/30 text-rose-300 border border-rose-600/50 flex-shrink-0">
+                          S
+                        </span>
+                        <span className="hidden sm:inline px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-700/30 text-rose-300 border border-rose-600/50 flex-shrink-0">
+                          SUSP
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+                    <span className="hidden sm:inline">
+                      <FormTrendIcon player={player} />
                     </span>
-                  )}
-                  <FormTrendIcon player={player} />
-                  <SquadEnergyDisplay energy={player.energy ?? 100} />
-                  <span className="text-amber-400 text-xs lg:text-sm hidden sm:inline">
-                    {formatCurrency(player.wage)}
-                  </span>
-                  <span className="text-pitch-400 font-medium text-xs lg:text-sm">
-                    OVR {calculateOverall(player)}
-                  </span>
+                    <SquadEnergyDisplay energy={player.energy ?? 100} />
+                    <span className="hidden md:inline text-amber-400 text-xs lg:text-sm">
+                      {formatCurrency(player.wage)}
+                    </span>
+                    <span className="text-pitch-400 font-medium text-xs lg:text-sm">
+                      OVR {calculateOverall(player)}
+                    </span>
+                  </div>
                 </div>
               </div>
             );

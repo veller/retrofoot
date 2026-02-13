@@ -153,6 +153,7 @@ export const players = sqliteTable('players', {
   status: text('status').default('active'), // active, retiring, retired, deceased, suspended
   yellowAccumulation: integer('yellow_accumulation').default(0),
   suspensionMatchesRemaining: integer('suspension_matches_remaining').default(0),
+  suspensionReason: text('suspension_reason'),
   seasonYellowCards: integer('season_yellow_cards').default(0),
   seasonRedCards: integer('season_red_cards').default(0),
   form: integer('form').default(70), // 1-100

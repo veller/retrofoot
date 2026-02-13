@@ -47,6 +47,17 @@ export function PlayerActionModal({
   const overall = calculateOverall(player);
   const suggestedPrice = player.marketValue;
   const playerDisplayName = player.nickname ?? player.name;
+  const yellowAccumulation = Math.max(0, player.yellowAccumulation ?? 0);
+  const suspensionMatches = Math.max(0, player.suspensionMatchesRemaining ?? 0);
+  const isSuspended = player.status === 'suspended' || suspensionMatches > 0;
+  const suspensionReasonLabel =
+    player.suspensionReason === 'straight_red'
+      ? 'red card'
+      : player.suspensionReason === 'second_yellow'
+        ? 'second yellow'
+        : player.suspensionReason === 'yellow_accumulation'
+          ? 'yellow accumulation'
+          : 'disciplinary ban';
 
   // Close on Escape
   useEffect(() => {
@@ -244,6 +255,21 @@ export function PlayerActionModal({
             </span>
           </div>
 
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-slate-400">Season Cards</span>
+              <span className="text-white font-medium">
+                {player.seasonYellowCards ?? 0}Y · {player.seasonRedCards ?? 0}R
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-400">Accumulated Yellows</span>
+              <span className="text-white font-medium">
+                {yellowAccumulation}
+              </span>
+            </div>
+          </div>
+
           {/* Form trend */}
           <div className="mt-4 pt-4 border-t border-slate-700">
             <div className="flex items-center gap-2 mb-1">
@@ -262,12 +288,20 @@ export function PlayerActionModal({
           </div>
         </div>
 
-        {/* Status Badge - only when listed for sale */}
-        {isListed && (
+        {(isListed || isSuspended) && (
           <div className="px-5 py-3 border-b border-slate-700">
-            <span className="px-2 py-1 bg-amber-600/30 text-amber-400 text-xs font-bold rounded border border-amber-500/50">
-              LISTED FOR SALE
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isListed && (
+                <span className="px-2 py-1 bg-amber-600/30 text-amber-400 text-xs font-bold rounded border border-amber-500/50">
+                  LISTED FOR SALE
+                </span>
+              )}
+              {isSuspended && (
+                <span className="px-2 py-1 bg-rose-700/30 text-rose-300 text-xs font-bold rounded border border-rose-600/50">
+                  SUSPENDED ({suspensionReasonLabel})
+                </span>
+              )}
+            </div>
           </div>
         )}
 
