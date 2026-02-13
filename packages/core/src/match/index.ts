@@ -10,6 +10,7 @@ import type {
   MatchEvent,
   MatchResult,
   Fixture,
+  TacticalPosture,
 } from '../types';
 import { calculateOverall } from '../types';
 import { sampleAttendance } from '../attendance';
@@ -31,8 +32,8 @@ import {
   FITNESS_THRESHOLD,
   FITNESS_PENALTY_FACTOR,
   LATE_GAME_FITNESS_MINUTE,
-  ENERGY_PENALTY_CAP,
-  SEASON_FATIGUE,
+  LIVE_ENERGY_DRAIN_BASE_PER_MINUTE,
+  ENERGY_PENALTY_MAX,
   CORNER_GOAL_RATE,
   FREE_KICK_GOAL_RATE,
   RED_CARD_STRENGTH_PENALTY,
@@ -81,6 +82,8 @@ export interface MatchState {
   stoppageTime: number;
   homeRedCards: number;
   awayRedCards: number;
+  homeLiveEnergy: Record<string, number>;
+  awayLiveEnergy: Record<string, number>;
   homeTacticalImpact: TacticalImpact;
   awayTacticalImpact: TacticalImpact;
 }
@@ -112,6 +115,10 @@ function weightedRandom(weights: number[]): number {
     if (r <= 0) return i;
   }
   return weights.length - 1;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 // Goal type distribution based on real-world stats:
@@ -203,21 +210,56 @@ function calculateFitnessModifier(fitness: number, minute: number): number {
   return Math.min(0.3, penalty);
 }
 
-// Energy modifier: 0% penalty at 100 energy, up to ENERGY_PENALTY_CAP at 0 energy
-export function calculateEnergyModifier(energy: number): number {
-  const e = Math.max(0, Math.min(100, energy));
-  return ((100 - e) / 100) * ENERGY_PENALTY_CAP;
+function getPostureEnergyMultiplier(posture: TacticalPosture): number {
+  switch (posture) {
+    case 'defensive':
+      return 0.92;
+    case 'attacking':
+      return 1.22;
+    case 'balanced':
+    default:
+      return 1.0;
+  }
 }
 
-// Round-based effective energy for opponent (AI) teams; no DB persistence
-export function getOpponentEffectiveEnergy(
-  round: number,
-  totalRounds: number,
+function getAgeEnergyMultiplier(age: number): number {
+  if (age <= 28) return 1;
+  if (age <= 34) return 1 + (age - 28) * 0.03;
+  return clamp(1.22 + (age - 35) * 0.06, 1.22, 1.46);
+}
+
+function getStaminaEnergyMultiplier(stamina: number): number {
+  return clamp(1.25 - ((stamina - 40) / 60) * 0.43, 0.82, 1.25);
+}
+
+function getPositionEnergyMultiplier(position: Player['position']): number {
+  return position === 'GK' ? 0.68 : 1.0;
+}
+
+export function calculateLiveEnergyDrainPerMinute(
+  player: Pick<Player, 'age' | 'position' | 'attributes'>,
+  posture: TacticalPosture,
 ): number {
-  if (totalRounds <= 0) return 100;
-  const progress = Math.max(0, Math.min(1, round / totalRounds));
-  const effective = 100 - SEASON_FATIGUE * progress;
-  return Math.max(1, Math.min(100, Math.round(effective)));
+  const drain =
+    LIVE_ENERGY_DRAIN_BASE_PER_MINUTE *
+    getPostureEnergyMultiplier(posture) *
+    getAgeEnergyMultiplier(player.age) *
+    getStaminaEnergyMultiplier(player.attributes.stamina) *
+    getPositionEnergyMultiplier(player.position);
+  return Math.round(drain * 1000) / 1000;
+}
+
+// Energy modifier with threshold curve
+export function calculateEnergyModifier(energy: number): number {
+  const e = clamp(energy, 0, 100);
+  if (e >= 85) return 0;
+  if (e >= 70) return ((85 - e) / 15) * 0.06;
+  if (e >= 55) return 0.06 + ((70 - e) / 15) * 0.1;
+  if (e >= 40) return 0.16 + ((55 - e) / 15) * 0.12;
+  return Math.min(
+    ENERGY_PENALTY_MAX,
+    0.28 + ((40 - e) / 40) * (ENERGY_PENALTY_MAX - 0.28),
+  );
 }
 
 // Calculate striker streak modifier based on recent performance
@@ -272,6 +314,7 @@ interface TeamStrengthOptions {
   team?: Team;
   redCards?: number;
   minute?: number;
+  liveEnergyByPlayerId?: Record<string, number>;
 }
 
 // Calculate team strength from lineup
@@ -301,8 +344,9 @@ function calculateTeamStrength(
     );
     playerStrength *= 1 - fitnessPenalty;
 
-    // Apply energy penalty (0-60%): low energy = exhausted
-    const energyPenalty = calculateEnergyModifier(player.energy ?? 100);
+    // Apply energy penalty curve (0-40%): low energy = exhausted
+    const energy = options?.liveEnergyByPlayerId?.[player.id] ?? player.energy ?? 100;
+    const energyPenalty = calculateEnergyModifier(energy);
     playerStrength *= 1 - energyPenalty;
 
     totalStrength += playerStrength;
@@ -423,6 +467,12 @@ function pickScorer(players: Player[], tactics: Tactics): Player | undefined {
 // Create initial match state
 export function createMatchState(config: MatchConfig): MatchState {
   const { homeTeam, awayTeam, homeTactics, awayTactics } = config;
+  const homeLiveEnergy = Object.fromEntries(
+    homeTeam.players.map((p) => [p.id, clamp(p.energy ?? 100, 0, 100)]),
+  );
+  const awayLiveEnergy = Object.fromEntries(
+    awayTeam.players.map((p) => [p.id, clamp(p.energy ?? 100, 0, 100)]),
+  );
 
   return {
     minute: 0,
@@ -450,9 +500,36 @@ export function createMatchState(config: MatchConfig): MatchState {
     stoppageTime: randomInt(1, 5),
     homeRedCards: 0,
     awayRedCards: 0,
+    homeLiveEnergy,
+    awayLiveEnergy,
     homeTacticalImpact: { possession: 0, creation: 0, prevention: 0 },
     awayTacticalImpact: { possession: 0, creation: 0, prevention: 0 },
   };
+}
+
+function applyLineupEnergyDrain(
+  lineup: Player[],
+  posture: TacticalPosture,
+  liveEnergyByPlayerId: Record<string, number>,
+): void {
+  for (const player of lineup) {
+    const current = liveEnergyByPlayerId[player.id] ?? player.energy ?? 100;
+    const drain = calculateLiveEnergyDrainPerMinute(player, posture);
+    liveEnergyByPlayerId[player.id] = Math.round(clamp(current - drain, 0, 100) * 10) / 10;
+  }
+}
+
+function applyLiveEnergyDrain(state: MatchState): void {
+  applyLineupEnergyDrain(
+    state.homeLineup,
+    state.homeTactics.posture,
+    state.homeLiveEnergy,
+  );
+  applyLineupEnergyDrain(
+    state.awayLineup,
+    state.awayTactics.posture,
+    state.awayLiveEnergy,
+  );
 }
 
 // Make a substitution
@@ -491,6 +568,11 @@ export function makeSubstitution(
   const lineupIndex = tactics.lineup.indexOf(playerOutId);
   if (lineupIndex !== -1) {
     tactics.lineup[lineupIndex] = playerInId;
+  }
+
+  const liveEnergyMap = team === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy;
+  if (liveEnergyMap[playerInId] === undefined) {
+    liveEnergyMap[playerInId] = clamp(playerIn.energy ?? 100, 0, 100);
   }
 
   // Increment subs used
@@ -538,6 +620,8 @@ function pickSetPieceScorer(
 
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
+  applyLiveEnergyDrain(state);
+
   const homeFormationImpact = calculateFormationMatchupImpact(
     state.homeTactics.formation,
     state.awayTactics.formation,
@@ -566,6 +650,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       team: config.homeTeam,
       redCards: state.homeRedCards,
       minute: state.minute,
+      liveEnergyByPlayerId: state.homeLiveEnergy,
     },
   );
   const awayStrength = calculateTeamStrength(
@@ -575,6 +660,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       team: config.awayTeam,
       redCards: state.awayRedCards,
       minute: state.minute,
+      liveEnergyByPlayerId: state.awayLiveEnergy,
     },
   );
 
@@ -1033,9 +1119,9 @@ export interface MultiMatchConfig {
   teams: Team[];
   playerTeamId: string;
   playerTactics: Tactics;
-  /** Current round (1-based); used for opponent effective energy. If omitted, opponents use 100. */
+  /** Current round (1-based); used for attendance model. */
   currentRound?: number;
-  /** Total rounds in season (e.g. 38); used with currentRound for opponent fatigue. */
+  /** Total rounds in season (e.g. 38); used for attendance model. */
   totalRounds?: number;
 }
 
@@ -1055,10 +1141,6 @@ export function createMultiMatchState(config: MultiMatchConfig): {
 
   const matches: LiveMatchState[] = [];
   let playerMatchIndex = -1;
-  const opponentEnergy =
-    totalRounds > 0
-      ? getOpponentEffectiveEnergy(currentRound, totalRounds)
-      : 100;
 
   for (let i = 0; i < fixtures.length; i++) {
     const fixture = fixtures[i];
@@ -1071,27 +1153,8 @@ export function createMultiMatchState(config: MultiMatchConfig): {
       fixture.homeTeamId === playerTeamId ||
       fixture.awayTeamId === playerTeamId;
 
-    // Apply round-based effective energy to opponent team (so they are not always 100%)
     if (isPlayerMatch) {
       playerMatchIndex = matches.length;
-      if (fixture.homeTeamId !== playerTeamId) {
-        homeTeam = {
-          ...homeTeam,
-          players: homeTeam.players.map((p) => ({
-            ...p,
-            energy: opponentEnergy,
-          })),
-        };
-      }
-      if (fixture.awayTeamId !== playerTeamId) {
-        awayTeam = {
-          ...awayTeam,
-          players: awayTeam.players.map((p) => ({
-            ...p,
-            energy: opponentEnergy,
-          })),
-        };
-      }
     }
 
     // Use player tactics for their match, generate defaults for others

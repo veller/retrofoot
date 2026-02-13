@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   calculateOverall,
   selectBestLineup,
+  selectMostReadyLineup,
   swapPlayersInTactics,
   FORMATION_OPTIONS,
   DEFAULT_FORMATION,
@@ -879,6 +880,22 @@ function SquadPanel({
     [playerTeam, setTactics],
   );
 
+  const setMostReadyLineup = useCallback(() => {
+    const { lineup: newLineup, substitutes: newSubs } = selectMostReadyLineup(
+      playerTeam,
+      formation,
+    );
+    setTactics((prev) =>
+      prev
+        ? {
+            ...prev,
+            lineup: newLineup,
+            substitutes: newSubs,
+          }
+        : null,
+    );
+  }, [playerTeam, formation, setTactics]);
+
   useEffect(() => {
     const current = formationEligibility.find((e) => e.formation === formation);
     if (current?.info.eligible) return;
@@ -1196,18 +1213,27 @@ function SquadPanel({
             <h2 className="text-lg lg:text-xl font-bold text-white">
               Formation
             </h2>
-            <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-[minmax(120px,160px)_1fr] gap-2 lg:gap-3 items-stretch">
-              <select
-                value={formation}
-                onChange={(e) => setFormation(e.target.value as FormationType)}
-                className="select-chevron h-10 bg-slate-700 text-white text-sm px-3 rounded-lg border border-slate-600 font-medium"
-              >
-                {formationEligibility.map(({ formation: option, info }) => (
-                  <option key={option} value={option} disabled={!info.eligible}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+            <div className="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-[minmax(170px,220px)_1fr] gap-2 lg:gap-3 items-stretch">
+              <div className="flex flex-col gap-2">
+                <select
+                  value={formation}
+                  onChange={(e) => setFormation(e.target.value as FormationType)}
+                  className="select-chevron h-10 bg-slate-700 text-white text-sm px-3 rounded-lg border border-slate-600 font-medium"
+                >
+                  {formationEligibility.map(({ formation: option, info }) => (
+                    <option key={option} value={option} disabled={!info.eligible}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={setMostReadyLineup}
+                  className="h-9 px-3 rounded-lg text-xs sm:text-sm font-semibold transition-colors border bg-slate-700 text-pitch-200 border-slate-600 hover:bg-slate-600"
+                >
+                  Most Ready XI
+                </button>
+              </div>
               <div className="grid grid-cols-3 gap-2">
                 {POSTURE_OPTIONS.map(({ value, label }) => (
                   <button

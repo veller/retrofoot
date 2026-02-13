@@ -14,6 +14,7 @@ import type {
 } from '@retrofoot/core';
 import {
   calculateOverall,
+  selectMostReadyLineup,
   FORMATION_OPTIONS,
   evaluateFormationEligibility,
   getHalfTimeHintsFromState,
@@ -131,12 +132,14 @@ export function SubstitutionPanel({
   const [selectedPosture, setSelectedPosture] = useState<TacticalPosture>(
     currentTactics.posture,
   );
+  const [useMostReadyLineup, setUseMostReadyLineup] = useState(false);
 
   const subsUsed = isHome ? matchState.homeSubsUsed : matchState.awaySubsUsed;
   const subsRemaining = MAX_SUBS - subsUsed;
 
   const lineup = isHome ? matchState.homeLineup : matchState.awayLineup;
   const bench = isHome ? matchState.homeSubs : matchState.awaySubs;
+  const liveEnergy = isHome ? matchState.homeLiveEnergy : matchState.awayLiveEnergy;
   const formationAvailability = FORMATION_OPTIONS.map((formation) => ({
     formation,
     info: evaluateFormationEligibility(formation, playerTeam.players),
@@ -192,10 +195,15 @@ export function SubstitutionPanel({
 
   const handleDone = useCallback(() => {
     if (selectedFormationEligible) {
+      const readySelection = useMostReadyLineup
+        ? selectMostReadyLineup(playerTeam, selectedFormation)
+        : null;
       onApplyTactics({
         ...currentTactics,
         formation: selectedFormation,
         posture: selectedPosture,
+        lineup: readySelection?.lineup ?? currentTactics.lineup,
+        substitutes: readySelection?.substitutes ?? currentTactics.substitutes,
       });
     }
     onClose();
@@ -203,6 +211,8 @@ export function SubstitutionPanel({
     selectedFormationEligible,
     selectedFormation,
     selectedPosture,
+    useMostReadyLineup,
+    playerTeam,
     currentTactics,
     onApplyTactics,
     onClose,
@@ -319,9 +329,10 @@ export function SubstitutionPanel({
                   </p>
                   <select
                     value={selectedFormation}
-                    onChange={(e) =>
-                      setSelectedFormation(e.target.value as FormationType)
-                    }
+                    onChange={(e) => {
+                      setSelectedFormation(e.target.value as FormationType);
+                      setUseMostReadyLineup(false);
+                    }}
                     className="w-full h-10 bg-slate-700 border border-slate-600 rounded pl-3 pr-8 text-white appearance-none bg-no-repeat bg-[length:1.25rem_1.25rem] bg-[right_0.5rem_center]"
                     style={{
                       backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
@@ -341,6 +352,18 @@ export function SubstitutionPanel({
                     <p className="text-xs text-amber-400 mt-2">
                       Unavailable:{' '}
                       {formatFormationUnavailable(selectedFormationInfo.info)}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setUseMostReadyLineup(true)}
+                    className="mt-2 h-9 px-3 rounded text-sm font-medium bg-slate-700 text-pitch-200 hover:bg-slate-600 border border-slate-600"
+                  >
+                    Most Ready XI
+                  </button>
+                  {useMostReadyLineup && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      Ready XI will be applied when you click Done.
                     </p>
                   )}
                 </div>
@@ -395,6 +418,9 @@ export function SubstitutionPanel({
                         <span className="text-white">
                           {player.nickname || player.name}
                         </span>
+                        <span className="text-slate-300 text-xs">
+                          E {Math.round(liveEnergy[player.id] ?? player.energy ?? 100)}%
+                        </span>
                       </div>
                       <span className="text-pitch-400 font-medium">
                         {calculateOverall(player)}
@@ -431,6 +457,9 @@ export function SubstitutionPanel({
                           <PositionBadge position={player.position} />
                           <span className="text-white">
                             {player.nickname || player.name}
+                          </span>
+                          <span className="text-slate-300 text-xs">
+                            E {Math.round(liveEnergy[player.id] ?? player.energy ?? 100)}%
                           </span>
                         </div>
                         <span className="text-pitch-400 font-medium">

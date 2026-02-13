@@ -53,6 +53,18 @@ export const MatchResultInputSchema = z.object({
   substitutionMinutes: z
     .record(z.string(), z.number().int().min(0).max(120))
     .optional(),
+  lineupByTeam: z
+    .object({
+      home: z.array(z.string()),
+      away: z.array(z.string()),
+    })
+    .optional(),
+  substitutionMinutesByTeam: z
+    .object({
+      home: z.record(z.string(), z.number().int().min(0).max(120)),
+      away: z.record(z.string(), z.number().int().min(0).max(120)),
+    })
+    .optional(),
 });
 
 /**

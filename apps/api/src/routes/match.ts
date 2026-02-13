@@ -12,7 +12,6 @@ import {
   fixtures,
   teams,
   players,
-  tactics,
   standings,
 } from '@retrofoot/db/schema';
 import { createAuth } from '../lib/auth';
@@ -34,7 +33,6 @@ import { processAITransfers } from '../services/ai-transfer.service';
 const FORM_HISTORY_LENGTH = 5;
 const D1_BATCH_STATEMENT_LIMIT = 250;
 const DEFAULT_ROUND = 1;
-const RECOVERY_PER_ROUND = 12;
 const DEFAULT_FORM: ('W' | 'D' | 'L')[] = [];
 
 export const matchRoutes = new Hono<{ Bindings: Env }>();
@@ -407,7 +405,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       save.currentSeason,
     );
 
-    // Prefetch data for finance + player-stats in parallel with first writes
+    // Prefetch data for finances in parallel with first writes
     const prefetchPromise = Promise.all([
       db
         .select({
@@ -430,44 +428,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         })
         .from(players)
         .where(eq(players.saveId, saveId)),
-      db
-        .select({
-          id: players.id,
-          name: players.name,
-          nickname: players.nickname,
-          age: players.age,
-          nationality: players.nationality,
-          position: players.position,
-          preferredFoot: players.preferredFoot,
-          attributes: players.attributes,
-          potential: players.potential,
-          morale: players.morale,
-          fitness: players.fitness,
-          energy: players.energy,
-          injured: players.injured,
-          injuryWeeks: players.injuryWeeks,
-          contractEndSeason: players.contractEndSeason,
-          wage: players.wage,
-          marketValue: players.marketValue,
-          status: players.status,
-          form: players.form,
-          lastFiveRatings: players.lastFiveRatings,
-          seasonGoals: players.seasonGoals,
-          seasonAssists: players.seasonAssists,
-          seasonMinutes: players.seasonMinutes,
-          seasonAvgRating: players.seasonAvgRating,
-        })
-        .from(players)
-        .where(
-          and(eq(players.saveId, saveId), eq(players.teamId, save.playerTeamId)),
-        ),
-      db
-        .select({ posture: tactics.posture })
-        .from(tactics)
-        .where(
-          and(eq(tactics.saveId, saveId), eq(tactics.teamId, save.playerTeamId)),
-        )
-        .limit(1),
     ]);
 
     const fixtureStatements = body.results.map((result) =>
@@ -543,8 +503,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
     await recalculateStandingPositions(c.env.DB, saveId, save.currentSeason);
 
-    const [prefetchedTeams, prefetchedPlayers, teamPlayers, tacticsRows] =
-      await prefetchPromise;
+    const [prefetchedTeams, prefetchedPlayers] = await prefetchPromise;
 
     const standingsResult = await db
       .select({
@@ -556,26 +515,12 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         and(eq(standings.saveId, saveId), eq(standings.season, save.currentSeason)),
       );
 
-    const fixtureMap = new Map(
-      roundFixturesData.map((f) => [
-        f.id,
-        { homeTeamId: f.homeTeamId, awayTeamId: f.awayTeamId },
-      ]),
+    const playerStatsPromises = teamIdArray.map((teamId) =>
+      processPlayerStatsAndGrowth(db, c.env.DB, saveId, teamId, body.results),
     );
 
     await Promise.all([
-      processPlayerStatsAndGrowth(
-        db,
-        c.env.DB,
-        saveId,
-        save.playerTeamId,
-        body.results,
-        {
-          teamPlayers,
-          tactics: tacticsRows.length > 0 ? { posture: tacticsRows[0].posture } : null,
-          fixtureMap,
-        },
-      ),
+      Promise.all(playerStatsPromises),
       processRoundFinances(
         db,
         c.env.DB,
@@ -591,13 +536,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         },
       ),
     ]);
-
-    // Energy recovery for player's team (all players gain back some energy each round)
-    await c.env.DB.prepare(
-      'UPDATE players SET energy = MIN(100, COALESCE(energy, 100) + ?) WHERE save_id = ? AND team_id = ?',
-    )
-      .bind(RECOVERY_PER_ROUND, saveId, save.playerTeamId)
-      .run();
 
     const newRound = currentRound + 1;
     await db

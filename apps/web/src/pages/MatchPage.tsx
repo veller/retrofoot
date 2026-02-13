@@ -48,16 +48,10 @@ const SECONDS_PER_TICK = 6; // 6 seconds per tick
 const DRIVER_INTERVAL_MS = 50;
 const MAX_CATCHUP_TICKS = 15; // Cap catch-up so we don't freeze after long background
 
-/**
- * Compute lineupPlayerIds and substitutionMinutes for the API from match state.
- * Used to update player form/ratings after a match.
- */
-function computeLineupForResult(
+function computeTeamParticipationForResult(
   match: LiveMatchState,
-  playerTeamId: string,
+  team: 'home' | 'away',
 ): { lineupPlayerIds: string[]; substitutionMinutes: Record<string, number> } {
-  const isHome = match.homeTeam.id === playerTeamId;
-  const team: 'home' | 'away' = isHome ? 'home' : 'away';
   const lineup =
     team === 'home' ? match.state.homeLineup : match.state.awayLineup;
 
@@ -97,6 +91,28 @@ function computeLineupForResult(
   return {
     lineupPlayerIds: initialLineupIds,
     substitutionMinutes,
+  };
+}
+
+function computeLineupsForResult(match: LiveMatchState): {
+  lineupByTeam: { home: string[]; away: string[] };
+  substitutionMinutesByTeam: {
+    home: Record<string, number>;
+    away: Record<string, number>;
+  };
+} {
+  const home = computeTeamParticipationForResult(match, 'home');
+  const away = computeTeamParticipationForResult(match, 'away');
+
+  return {
+    lineupByTeam: {
+      home: home.lineupPlayerIds,
+      away: away.lineupPlayerIds,
+    },
+    substitutionMinutesByTeam: {
+      home: home.substitutionMinutes,
+      away: away.substitutionMinutes,
+    },
   };
 }
 
@@ -528,17 +544,24 @@ export function MatchPage() {
               // Convert to results, with lineup data for player's match (for form/ratings)
               const matchResults = prevMatches.map((m, i) => {
                 const result = matchStateToResult(m);
+                const withTeamMinutes = computeLineupsForResult(m);
                 if (
                   i === playerMatchIndex &&
                   matchData?.playerTeamId &&
                   (m.homeTeam.id === matchData.playerTeamId ||
                     m.awayTeam.id === matchData.playerTeamId)
                 ) {
-                  const { lineupPlayerIds, substitutionMinutes } =
-                    computeLineupForResult(m, matchData.playerTeamId);
-                  return { ...result, lineupPlayerIds, substitutionMinutes };
+                  const playerTeamSide =
+                    m.homeTeam.id === matchData.playerTeamId ? 'home' : 'away';
+                  return {
+                    ...result,
+                    ...withTeamMinutes,
+                    lineupPlayerIds: withTeamMinutes.lineupByTeam[playerTeamSide],
+                    substitutionMinutes:
+                      withTeamMinutes.substitutionMinutesByTeam[playerTeamSide],
+                  };
                 }
-                return result;
+                return { ...result, ...withTeamMinutes };
               });
               setResults(matchResults);
               setPhase('post_match');
@@ -555,6 +578,8 @@ export function MatchPage() {
               awayLineup: [...m.state.awayLineup],
               homeSubs: [...m.state.homeSubs],
               awaySubs: [...m.state.awaySubs],
+              homeLiveEnergy: { ...m.state.homeLiveEnergy },
+              awayLiveEnergy: { ...m.state.awayLiveEnergy },
             },
           }));
         });
@@ -671,6 +696,8 @@ export function MatchPage() {
                 homeSubs: [...m.state.homeSubs],
                 awaySubs: [...m.state.awaySubs],
                 events: [...m.state.events],
+                homeLiveEnergy: { ...m.state.homeLiveEnergy },
+                awayLiveEnergy: { ...m.state.awayLiveEnergy },
               },
             };
           }
@@ -697,12 +724,29 @@ export function MatchPage() {
       if (!eligibility.eligible) return;
 
       const autoSelection = selectBestLineup(playerTeam, normalizedFormation);
+      const playerIds = new Set(playerTeam.players.map((player) => player.id));
+      const providedLineup = Array.isArray(nextTactics.lineup)
+        ? nextTactics.lineup.filter((id) => playerIds.has(id))
+        : [];
+      const uniqueProvidedLineup = Array.from(new Set(providedLineup));
+      const canUseProvidedLineup = uniqueProvidedLineup.length === 11;
+      const lineup = canUseProvidedLineup
+        ? uniqueProvidedLineup
+        : autoSelection.lineup;
+      const lineupSet = new Set(lineup);
+      const providedSubs = Array.isArray(nextTactics.substitutes)
+        ? nextTactics.substitutes.filter(
+            (id) => playerIds.has(id) && !lineupSet.has(id),
+          )
+        : [];
+      const substitutes =
+        providedSubs.length > 0 ? providedSubs : autoSelection.substitutes;
       const updatedTactics: Tactics = {
         ...playerTactics,
         ...nextTactics,
         formation: normalizedFormation,
-        lineup: autoSelection.lineup,
-        substitutes: autoSelection.substitutes,
+        lineup,
+        substitutes,
       };
 
       setPlayerTactics(updatedTactics);
@@ -747,6 +791,8 @@ export function MatchPage() {
             awayLineup: [...item.state.awayLineup],
             homeSubs: [...item.state.homeSubs],
             awaySubs: [...item.state.awaySubs],
+            homeLiveEnergy: { ...item.state.homeLiveEnergy },
+            awayLiveEnergy: { ...item.state.awayLiveEnergy },
           },
         }));
       });
@@ -798,11 +844,25 @@ export function MatchPage() {
               payload.lineupPlayerIds = r.lineupPlayerIds;
             }
             if (
+              'lineupByTeam' in r &&
+              r.lineupByTeam &&
+              typeof r.lineupByTeam === 'object'
+            ) {
+              payload.lineupByTeam = r.lineupByTeam;
+            }
+            if (
               'substitutionMinutes' in r &&
               r.substitutionMinutes &&
               typeof r.substitutionMinutes === 'object'
             ) {
               payload.substitutionMinutes = r.substitutionMinutes;
+            }
+            if (
+              'substitutionMinutesByTeam' in r &&
+              r.substitutionMinutesByTeam &&
+              typeof r.substitutionMinutesByTeam === 'object'
+            ) {
+              payload.substitutionMinutesByTeam = r.substitutionMinutesByTeam;
             }
             return payload;
           }),

@@ -35,6 +35,70 @@ function getMatchResult(
   return 'draw';
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function getBaseRecoveryByMinutes(minutesPlayed: number): number {
+  if (minutesPlayed === 0) return 19;
+  if (minutesPlayed <= 44) return 6;
+  if (minutesPlayed <= 74) return 4;
+  return 2.5;
+}
+
+function getDnpAgeBaseRecovery(age: number): number {
+  if (age <= 30) return 19;
+  if (age <= 33) return 16;
+  if (age <= 36) return 13;
+  return 10;
+}
+
+function getPlayedAgeRecoveryAdjustment(age: number): number {
+  if (age <= 23) return 1;
+  if (age <= 30) return 0.5;
+  if (age <= 33) return -0.5;
+  if (age <= 36) return -1.5;
+  return -2.5;
+}
+
+export function calculateRoundEnergyRecovery(options: {
+  minutesPlayed: number;
+  age: number;
+  stamina: number;
+  currentEnergy?: number;
+}): number {
+  const { minutesPlayed, age, stamina, currentEnergy = 100 } = options;
+  const missingEnergy = clamp(100 - currentEnergy, 0, 100);
+  if (missingEnergy <= 0) return 0;
+
+  if (minutesPlayed === 0) {
+    // Young-to-prime players fully recharge when they rest for the whole match.
+    if (age <= 30) {
+      return missingEnergy;
+    }
+
+    const dnpBase = getDnpAgeBaseRecovery(age);
+    const staminaRecoveryAdj = clamp((stamina - 55) * 0.14, -3, 4);
+    const dnpRecovery = dnpBase + staminaRecoveryAdj;
+    return clamp(dnpRecovery, 1, missingEnergy);
+  }
+
+  const baseRecovery = getBaseRecoveryByMinutes(minutesPlayed);
+  const ageRecoveryAdj = getPlayedAgeRecoveryAdjustment(age);
+  const staminaRecoveryAdj = clamp((stamina - 55) * 0.09, -2, 3);
+  const olderHeavyLoadPenalty =
+    minutesPlayed >= 75 && age >= 34 ? 1 : minutesPlayed >= 75 && age >= 31 ? 0.5 : 0;
+  return clamp(
+    baseRecovery + ageRecoveryAdj + staminaRecoveryAdj - olderHeavyLoadPenalty,
+    0.5,
+    12,
+  );
+}
+
 /**
  * Process player stats, form updates, and growth after matches
  */
@@ -135,6 +199,8 @@ export async function processPlayerStatsAndGrowth(
 
   const fixture = playerFixtures.find((f) => f.id === playerMatch.fixtureId);
   if (!fixture) return;
+  const teamSide: 'home' | 'away' =
+    fixture.homeTeamId === playerTeamId ? 'home' : 'away';
 
   // Get tactical posture for energy drain (saved tactics for this team)
   let posture: 'defensive' | 'balanced' | 'attacking' = 'balanced';
@@ -178,12 +244,18 @@ export async function processPlayerStatsAndGrowth(
     }
   }
 
-  // Get lineup player IDs from the match or assume all starters played 90 mins
-  const lineupIds = new Set(playerMatch.lineupPlayerIds || []);
-  const subMinutes = playerMatch.substitutionMinutes || {};
+  // Resolve lineup/minutes for this team with compatibility fallback
+  const lineupIds = new Set(
+    playerMatch.lineupByTeam?.[teamSide] ?? playerMatch.lineupPlayerIds ?? [],
+  );
+  const subMinutes =
+    playerMatch.substitutionMinutesByTeam?.[teamSide] ??
+    playerMatch.substitutionMinutes ??
+    {};
 
   // Collect all player updates for batch operation
   const playerUpdates: PlayerStatsUpdate[] = [];
+  const energyOnlyUpdates: Array<{ playerId: string; energy: number }> = [];
 
   // Process each player
   for (const dbPlayer of teamPlayers) {
@@ -211,7 +283,25 @@ export async function processPlayerStatsAndGrowth(
       minutesPlayed = wasInvolved ? MATCH_DURATION : 0;
     }
 
-    if (minutesPlayed === 0) continue;
+    const attributes = dbPlayer.attributes as PlayerAttributes;
+    const stamina = Number.isFinite(attributes.stamina)
+      ? attributes.stamina
+      : 60;
+    const currentEnergy = dbPlayer.energy ?? 100;
+    if (minutesPlayed === 0) {
+      const recovery = calculateRoundEnergyRecovery({
+        minutesPlayed,
+        age: dbPlayer.age,
+        stamina,
+        currentEnergy,
+      });
+      const restedEnergy = clamp(round1(currentEnergy + recovery), 0, 100);
+      energyOnlyUpdates.push({
+        playerId: dbPlayer.id,
+        energy: restedEnergy,
+      });
+      continue;
+    }
 
     const goals = playerGoals.get(dbPlayer.id) || 0;
     const assists = playerAssists.get(dbPlayer.id) || 0;
@@ -225,7 +315,7 @@ export async function processPlayerStatsAndGrowth(
       nationality: dbPlayer.nationality,
       position: dbPlayer.position as 'GK' | 'DEF' | 'MID' | 'ATT',
       preferredFoot: dbPlayer.preferredFoot as 'left' | 'right' | 'both',
-      attributes: dbPlayer.attributes as PlayerAttributes,
+      attributes,
       potential: dbPlayer.potential,
       morale: dbPlayer.morale ?? 70,
       fitness: dbPlayer.fitness ?? 100,
@@ -300,13 +390,16 @@ export async function processPlayerStatsAndGrowth(
       minutesPlayed,
       posture,
       age: dbPlayer.age,
+      stamina,
       position: dbPlayer.position as 'GK' | 'DEF' | 'MID' | 'ATT',
     });
-    const currentEnergy = dbPlayer.energy ?? 100;
-    const newEnergy = Math.max(
-      0,
-      Math.min(100, Math.round((currentEnergy - drain) * 10) / 10),
-    );
+    const recovery = calculateRoundEnergyRecovery({
+      minutesPlayed,
+      age: dbPlayer.age,
+      stamina,
+      currentEnergy,
+    });
+    const newEnergy = clamp(round1(currentEnergy - drain + recovery), 0, 100);
 
     // Collect update for batch operation
     playerUpdates.push({
@@ -321,7 +414,7 @@ export async function processPlayerStatsAndGrowth(
   }
 
   // Batch update all players using D1 batch API
-  if (playerUpdates.length > 0) {
+  if (playerUpdates.length > 0 || energyOnlyUpdates.length > 0) {
     const playerStatements = playerUpdates.map((update) =>
       d1
         .prepare(
@@ -337,6 +430,11 @@ export async function processPlayerStatsAndGrowth(
           update.playerId,
         ),
     );
-    await d1.batch(playerStatements);
+    const energyStatements = energyOnlyUpdates.map((update) =>
+      d1
+        .prepare('UPDATE players SET energy = ? WHERE id = ?')
+        .bind(update.energy, update.playerId),
+    );
+    await d1.batch([...playerStatements, ...energyStatements]);
   }
 }

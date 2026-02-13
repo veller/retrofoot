@@ -233,7 +233,9 @@ export function selectBestLineup(
       .filter((p) => !usedPlayerIds.has(p.id))
       .map((p) => ({
         player: p,
-        score: getPositionScore(p, position),
+        score:
+          getPositionScore(p, position) *
+          (1 - calculateSelectionEnergyPenalty(p.energy ?? 100)),
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -246,11 +248,59 @@ export function selectBestLineup(
   // Substitutes are next best players not in lineup
   const substitutes = availablePlayers
     .filter((p) => !usedPlayerIds.has(p.id))
-    .sort((a, b) => calculateOverall(b) - calculateOverall(a))
+    .sort(
+      (a, b) =>
+        calculateOverall(b) * (1 - calculateSelectionEnergyPenalty(b.energy ?? 100)) -
+        calculateOverall(a) * (1 - calculateSelectionEnergyPenalty(a.energy ?? 100)),
+    )
     .slice(0, 7) // 7 subs on bench
     .map((p) => p.id);
 
   return { lineup, substitutes };
+}
+
+// Auto-select lineup prioritizing readiness (energy) while still respecting role fit.
+export function selectMostReadyLineup(
+  team: Team,
+  formation: FormationType,
+): { lineup: string[]; substitutes: string[] } {
+  const safeFormation = normalizeFormation(formation);
+  const positions = FORMATION_POSITIONS[safeFormation];
+  const availablePlayers = team.players.filter(
+    (p) => !p.injured && p.fitness > MIN_FITNESS_FOR_AVAILABILITY,
+  );
+  const usedPlayerIds = new Set<string>();
+  const lineup: string[] = [];
+
+  for (const position of positions) {
+    const candidates = availablePlayers
+      .filter((p) => !usedPlayerIds.has(p.id))
+      .map((p) => ({
+        player: p,
+        score:
+          (p.energy ?? 100) * 1.4 + getPositionScore(p, position) * 0.6,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    if (candidates.length > 0) {
+      lineup.push(candidates[0].player.id);
+      usedPlayerIds.add(candidates[0].player.id);
+    }
+  }
+
+  const substitutes = availablePlayers
+    .filter((p) => !usedPlayerIds.has(p.id))
+    .sort((a, b) => (b.energy ?? 100) - (a.energy ?? 100))
+    .slice(0, 7)
+    .map((p) => p.id);
+
+  return { lineup, substitutes };
+}
+
+function calculateSelectionEnergyPenalty(energy: number): number {
+  const e = Math.max(0, Math.min(100, energy));
+  if (e >= 70) return 0;
+  return ((70 - e) / 70) * 0.28;
 }
 
 // Calculate how well a player fits a position (simplified 4 positions)

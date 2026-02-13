@@ -917,12 +917,26 @@ function applyAttributeDeclinePoints(
 // ENERGY (match fatigue)
 // ============================================================================
 
-const ENERGY_BASE_DRAIN_PER_90 = 12;
+const ENERGY_BASE_DRAIN_PER_90 = 14;
 const ENERGY_POSTURE: Record<TacticalPosture, number> = {
-  defensive: 0.85,
+  defensive: 0.92,
   balanced: 1.0,
-  attacking: 1.2,
+  attacking: 1.22,
 };
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getEnergyAgeDrainMultiplier(age: number): number {
+  if (age <= 28) return 1;
+  if (age <= 34) return 1 + (age - 28) * 0.03;
+  return clamp(1.22 + (age - 35) * 0.06, 1.22, 1.46);
+}
+
+function getEnergyStaminaDrainMultiplier(stamina: number): number {
+  return clamp(1.25 - ((stamina - 40) / 60) * 0.43, 0.82, 1.25);
+}
 
 /**
  * Calculate energy drain from playing a match.
@@ -932,27 +946,26 @@ export function calculateEnergyDrain(options: {
   minutesPlayed: number;
   posture: TacticalPosture;
   age: number;
+  stamina: number;
   position: Position;
 }): number {
-  const { minutesPlayed, posture, age, position } = options;
-  const minutesFactor = Math.min(1, Math.max(0, minutesPlayed / 90));
+  const { minutesPlayed, posture, age, stamina, position } = options;
+  const minutesFactor = clamp(minutesPlayed / 90, 0, 1.33);
+  const lateMinutesMult = 1 + Math.max(0, minutesPlayed - 70) / 120;
   const postureMult = ENERGY_POSTURE[posture] ?? 1;
-  // Age: 1.0 at 24, linear up to 1.25 at 33, cap 1.35 for 35+
-  let ageMult = 1.0;
-  if (age >= 33) {
-    ageMult = 1.0 + (age - 24) * (0.25 / 9);
-    ageMult = Math.min(1.35, Math.max(1, ageMult));
-  } else if (age > 24) {
-    ageMult = 1.0 + (age - 24) * (0.25 / 9);
-  }
-  const positionMult = position === 'GK' ? 0.6 : 1.0;
+
+  const ageMult = getEnergyAgeDrainMultiplier(age);
+  const staminaMult = getEnergyStaminaDrainMultiplier(stamina);
+  const positionMult = position === 'GK' ? 0.68 : 1.0;
   const drain =
     ENERGY_BASE_DRAIN_PER_90 *
     minutesFactor *
+    lateMinutesMult *
     postureMult *
     ageMult *
+    staminaMult *
     positionMult;
-  return Math.max(0, Math.min(100, Math.round(drain * 10) / 10));
+  return clamp(Math.round(drain * 10) / 10, 0, 100);
 }
 
 // Calculate a match rating for a player based on their performance
