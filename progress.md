@@ -167,3 +167,34 @@ Counter-thread regression fix:
   - Started local dev server on `http://127.0.0.1:5173`.
   - Ran Playwright smoke script (elevated due sandbox browser restriction), reached page title: `Sign In | RetroFoot`.
   - Transfer-flow E2E from this environment is currently gated by auth/session context.
+
+Penalty event feature (current chunk):
+- Implemented real penalty events in match engine (`packages/core/src/match/index.ts`):
+  - Added dedicated event branch emitting `penalty_scored` / `penalty_missed` (previously typed in UI but never generated).
+  - Added best-available penalty taker selection from lineup (shooting/composure/positioning with form/energy adjustments).
+  - Added penalty conversion model with base 0.78 and taker-vs-GK, form, momentum, and fatigue modifiers.
+- Tuned event thresholds and constants in `packages/core/src/match/constants.ts`:
+  - Inserted penalty slot (`EVENT_THRESHOLD_PENALTY`) targeting ~0.28 awards per match.
+  - Added penalty conversion bounds (`PENALTY_BASE_CONVERSION`, min/max).
+- Updated stats aggregation so scored penalties count as goals:
+  - `apps/api/src/routes/match.ts`
+  - `apps/api/src/services/player-stats.service.ts`
+- Updated match UI styling to make penalties visually distinct (similar emphasis to own goals):
+  - `apps/web/src/components/MatchLiveView.tsx`
+  - `apps/web/src/components/MatchEventsModal.tsx`
+  - `apps/web/src/components/EventIcon.tsx`
+  - `apps/web/src/pages/MatchPage.tsx`
+- Added core tests for penalty taker and conversion behavior in `packages/core/src/match/energy.test.ts`.
+
+Validation:
+- `pnpm -C packages/core exec vitest run src/match/energy.test.ts` passed.
+- Typechecks passed:
+  - `pnpm -C packages/core exec tsc --noEmit`
+  - `pnpm -C apps/api exec tsc --noEmit`
+  - `pnpm -C apps/web exec tsc --noEmit`
+
+TODO:
+- Run a headed Playwright pass through live match timeline and post-match summary to visually verify penalty accenting in real flow screenshots.
+
+Playwright note:
+- Attempted `$WEB_GAME_CLIENT` run for this chunk; browser launch required escalation and then run failed because `http://127.0.0.1:5173` was not running (`ERR_CONNECTION_REFUSED`).

@@ -110,6 +110,19 @@ function getEventLabel(type: MatchEvent['type']): string {
   }
 }
 
+function getEventAccentClass(type: MatchEvent['type']): string {
+  switch (type) {
+    case 'own_goal':
+      return 'text-red-300';
+    case 'penalty_scored':
+      return 'text-amber-200';
+    case 'penalty_missed':
+      return 'text-red-300';
+    default:
+      return 'text-white';
+  }
+}
+
 // Icon Components for Mobile
 function PauseIcon({ className }: { className?: string }) {
   return (
@@ -201,11 +214,13 @@ function MatchRow({ match, isPlayerMatch, onClick }: MatchRowProps) {
             {latestEvent.type === 'own_goal' && (
               <span className="text-red-400 text-xs font-bold">OG</span>
             )}
-            <span
-              className={
-                latestEvent.type === 'own_goal' ? 'text-red-300' : 'text-white'
-              }
-            >
+            {latestEvent.type === 'penalty_scored' && (
+              <span className="text-amber-300 text-[10px] font-bold">PEN</span>
+            )}
+            {latestEvent.type === 'penalty_missed' && (
+              <span className="text-red-400 text-[10px] font-bold">PEN</span>
+            )}
+            <span className={getEventAccentClass(latestEvent.type)}>
               {latestEvent.playerName}
             </span>
             {latestEvent.type === 'goal' && latestEvent.assistPlayerName && (
@@ -277,11 +292,13 @@ function MobileMatchCard({
             {latestEvent.type === 'own_goal' && (
               <span className="text-red-400 font-bold">OG</span>
             )}
-            <span
-              className={
-                latestEvent.type === 'own_goal' ? 'text-red-300' : undefined
-              }
-            >
+            {latestEvent.type === 'penalty_scored' && (
+              <span className="text-amber-300 font-bold">PEN</span>
+            )}
+            {latestEvent.type === 'penalty_missed' && (
+              <span className="text-red-400 font-bold">PEN</span>
+            )}
+            <span className={getEventAccentClass(latestEvent.type)}>
               {getEventLabel(latestEvent.type)}
             </span>
           </div>

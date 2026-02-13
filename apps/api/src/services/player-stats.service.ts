@@ -230,7 +230,7 @@ export async function processPlayerStatsAndGrowth(
   const playerAssists = new Map<string, number>();
 
   for (const event of playerMatch.events) {
-    if (event.type === 'goal' && event.playerId) {
+    if ((event.type === 'goal' || event.type === 'penalty_scored') && event.playerId) {
       playerGoals.set(
         event.playerId,
         (playerGoals.get(event.playerId) || 0) + 1,

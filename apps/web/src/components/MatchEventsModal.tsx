@@ -10,6 +10,19 @@ const MATCH_PHASE_EVENTS: MatchEvent['type'][] = [
   'full_time',
 ];
 
+function getEventAccentClass(type: MatchEvent['type']): string {
+  switch (type) {
+    case 'own_goal':
+      return 'text-red-300';
+    case 'penalty_scored':
+      return 'text-amber-200';
+    case 'penalty_missed':
+      return 'text-red-300';
+    default:
+      return 'text-white';
+  }
+}
+
 interface MatchEventsModalProps {
   match: LiveMatchState;
   onClose: () => void;
@@ -60,15 +73,17 @@ function EventRow({
       {event.type === 'own_goal' && (
         <span className="text-red-400 text-xs font-bold flex-shrink-0">OG</span>
       )}
+      {event.type === 'penalty_scored' && (
+        <span className="text-amber-300 text-xs font-bold flex-shrink-0">PEN</span>
+      )}
+      {event.type === 'penalty_missed' && (
+        <span className="text-red-400 text-xs font-bold flex-shrink-0">PEN</span>
+      )}
 
       <div className="flex-1 min-w-0">
         {isSignificant && event.playerName ? (
           <>
-            <span
-              className={`font-medium ${
-                event.type === 'own_goal' ? 'text-red-300' : 'text-white'
-              }`}
-            >
+            <span className={`font-medium ${getEventAccentClass(event.type)}`}>
               {event.playerName}
             </span>
             {event.type === 'goal' && event.assistPlayerName && (

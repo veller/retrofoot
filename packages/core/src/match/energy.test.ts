@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { MatchConfig, MatchState } from './index';
 import {
   calculateChanceSuccessForTesting,
+  calculatePenaltyConversionForTesting,
   calculateEnergyModifier,
   calculateLiveEnergyDrainPerMinute,
   createMatchState,
   makeSubstitution,
+  pickPenaltyTakerForTesting,
   simulateMatchStep,
 } from './index';
 import { createDefaultForm, type Player, type Team, type Tactics } from '../types';
@@ -445,5 +447,51 @@ describe('energy match behavior', () => {
     expect(state.awayBookings).toEqual({});
     expect(state.homeSentOff).toEqual({});
     expect(state.awaySentOff).toEqual({});
+  });
+
+  it('selects the best penalty taker from the current lineup', () => {
+    const { config } = setupMatch();
+    const striker = config.homeTeam.players.find((p) => p.id === 'h-a1');
+    const midfielder = config.homeTeam.players.find((p) => p.id === 'h-m1');
+    expect(striker).toBeDefined();
+    expect(midfielder).toBeDefined();
+    if (!striker || !midfielder) return;
+
+    striker.attributes.shooting = 95;
+    striker.attributes.composure = 93;
+    striker.attributes.positioning = 92;
+    midfielder.attributes.shooting = 60;
+    midfielder.attributes.composure = 61;
+    midfielder.attributes.positioning = 62;
+
+    const taker = pickPenaltyTakerForTesting(
+      config.homeTeam.players,
+      config.homeTactics,
+    );
+    expect(taker?.id).toBe(striker.id);
+  });
+
+  it('raises conversion for elite taker versus weak goalkeeper', () => {
+    const eliteTaker = makePlayer('elite', 'ATT', 100);
+    eliteTaker.attributes.shooting = 95;
+    eliteTaker.attributes.composure = 94;
+    eliteTaker.attributes.positioning = 91;
+
+    const weakGK = makePlayer('weak-gk', 'GK', 100);
+    weakGK.attributes.reflexes = 58;
+    weakGK.attributes.diving = 57;
+    weakGK.attributes.handling = 56;
+
+    const strongGK = makePlayer('strong-gk', 'GK', 100);
+    strongGK.attributes.reflexes = 92;
+    strongGK.attributes.diving = 90;
+    strongGK.attributes.handling = 89;
+
+    const easierPenalty = calculatePenaltyConversionForTesting(eliteTaker, weakGK);
+    const harderPenalty = calculatePenaltyConversionForTesting(eliteTaker, strongGK);
+
+    expect(easierPenalty).toBeGreaterThan(harderPenalty);
+    expect(easierPenalty).toBeGreaterThan(0.78);
+    expect(harderPenalty).toBeLessThan(0.9);
   });
 });

@@ -12,7 +12,7 @@ export function EventIcon({ type, variant = 'default' }: EventIconProps) {
     case 'own_goal':
       return <span className={variant === 'colored' ? 'text-red-400' : ''}>⚽</span>;
     case 'penalty_scored':
-      return <span className={variant === 'colored' ? 'text-green-400' : ''}>⚽</span>;
+      return <span className={variant === 'colored' ? 'text-amber-300' : ''}>⚽</span>;
     case 'penalty_missed':
       return <span className={variant === 'colored' ? 'text-red-400' : ''}>❌</span>;
     case 'yellow_card':

@@ -37,6 +37,9 @@ export const ENERGY_PENALTY_MAX = 0.4;
 // Set pieces
 export const CORNER_GOAL_RATE = 0.03;
 export const FREE_KICK_GOAL_RATE = 0.05;
+export const PENALTY_BASE_CONVERSION = 0.78;
+export const PENALTY_MIN_CONVERSION = 0.6;
+export const PENALTY_MAX_CONVERSION = 0.92;
 
 // Red cards
 export const RED_CARD_STRENGTH_PENALTY = 8;
@@ -45,6 +48,9 @@ export const RED_CARD_STRENGTH_PENALTY = 8;
 export const EVENT_THRESHOLD_ATTACKING_CHANCE = 0.4;
 export const EVENT_THRESHOLD_YELLOW_CARD = 0.7;
 export const EVENT_THRESHOLD_RED_CARD = 0.713;
-export const EVENT_THRESHOLD_CORNER = 0.78;
-export const EVENT_THRESHOLD_FREE_KICK = 0.85;
-export const EVENT_THRESHOLD_SAVE = 0.92;
+// Penalties target roughly ~0.28 awards per 90-minute match:
+// 90 * 0.15 (events/min) * 0.022 (penalty slot width) ≈ 0.30.
+export const EVENT_THRESHOLD_PENALTY = 0.735;
+export const EVENT_THRESHOLD_CORNER = 0.802;
+export const EVENT_THRESHOLD_FREE_KICK = 0.872;
+export const EVENT_THRESHOLD_SAVE = 0.942;

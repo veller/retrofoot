@@ -36,10 +36,14 @@ import {
   ENERGY_PENALTY_MAX,
   CORNER_GOAL_RATE,
   FREE_KICK_GOAL_RATE,
+  PENALTY_BASE_CONVERSION,
+  PENALTY_MIN_CONVERSION,
+  PENALTY_MAX_CONVERSION,
   RED_CARD_STRENGTH_PENALTY,
   EVENT_THRESHOLD_ATTACKING_CHANCE,
   EVENT_THRESHOLD_YELLOW_CARD,
   EVENT_THRESHOLD_RED_CARD,
+  EVENT_THRESHOLD_PENALTY,
   EVENT_THRESHOLD_CORNER,
   EVENT_THRESHOLD_FREE_KICK,
   EVENT_THRESHOLD_SAVE,
@@ -526,6 +530,109 @@ function pickScorer(players: Player[], tactics: Tactics): Player | undefined {
   );
   const idx = weightedRandom(weights);
   return attackers[idx];
+}
+
+function pickPenaltyTaker(
+  players: Player[],
+  tactics: Tactics,
+  liveEnergyByPlayerId?: Record<string, number>,
+): Player | undefined {
+  const lineupPlayers = players.filter(
+    (p) => tactics.lineup.includes(p.id) && p.position !== 'GK',
+  );
+  if (lineupPlayers.length === 0) return undefined;
+
+  const scoreTaker = (player: Player): number => {
+    const baseSkill =
+      player.attributes.shooting * 0.45 +
+      player.attributes.composure * 0.35 +
+      player.attributes.positioning * 0.2;
+    const liveEnergy = liveEnergyByPlayerId?.[player.id] ?? player.energy ?? 100;
+    const energyPenalty = calculateEnergyModifier(liveEnergy);
+    const formModifier = calculateFormModifier(player.form?.form ?? NEUTRAL_FORM);
+    const footBonus = player.preferredFoot === 'both' ? 2 : 0;
+    return baseSkill * (1 - energyPenalty * 0.35) * (1 + formModifier * 0.4) + footBonus;
+  };
+
+  let bestTaker = lineupPlayers[0];
+  let bestScore = scoreTaker(bestTaker);
+  for (let i = 1; i < lineupPlayers.length; i++) {
+    const candidate = lineupPlayers[i];
+    const score = scoreTaker(candidate);
+    if (score > bestScore) {
+      bestTaker = candidate;
+      bestScore = score;
+    }
+  }
+
+  return bestTaker;
+}
+
+function calculatePenaltyConversion(
+  taker: Player | undefined,
+  goalkeeper: Player | undefined,
+  options?: {
+    minute?: number;
+    attackingTeam?: Team;
+    defendingTeam?: Team;
+    attackingLiveEnergyByPlayerId?: Record<string, number>;
+  },
+): number {
+  if (!taker) return PENALTY_BASE_CONVERSION;
+
+  const takerSkill =
+    (taker.attributes.shooting * 0.45 +
+      taker.attributes.composure * 0.35 +
+      taker.attributes.positioning * 0.2) /
+    100;
+  const gkSkill = goalkeeper
+    ? (goalkeeper.attributes.reflexes * 0.45 +
+        goalkeeper.attributes.diving * 0.35 +
+        goalkeeper.attributes.handling * 0.2) /
+      100
+    : 0.68;
+  const minute = options?.minute ?? 0;
+  const liveEnergy =
+    options?.attackingLiveEnergyByPlayerId?.[taker.id] ?? taker.energy ?? 100;
+  const fatiguePenalty =
+    calculateEnergyModifier(liveEnergy) * 0.15 +
+    calculateFitnessModifier(taker.fitness ?? 100, minute) * 0.08;
+  const formModifier = calculateFormModifier(taker.form?.form ?? NEUTRAL_FORM) * 0.18;
+
+  let conversion =
+    PENALTY_BASE_CONVERSION +
+    (takerSkill - gkSkill) * 0.18 +
+    formModifier -
+    fatiguePenalty;
+
+  const attackingMomentum = options?.attackingTeam?.momentum;
+  const defendingMomentum = options?.defendingTeam?.momentum;
+  if (attackingMomentum !== undefined && defendingMomentum !== undefined) {
+    conversion += ((attackingMomentum - defendingMomentum) / 100) * 0.03;
+  }
+
+  return clamp(conversion, PENALTY_MIN_CONVERSION, PENALTY_MAX_CONVERSION);
+}
+
+export function pickPenaltyTakerForTesting(
+  players: Player[],
+  tactics: Tactics,
+  liveEnergyByPlayerId?: Record<string, number>,
+): Player | undefined {
+  return pickPenaltyTaker(players, tactics, liveEnergyByPlayerId);
+}
+
+export function calculatePenaltyConversionForTesting(
+  taker: Player | undefined,
+  goalkeeper: Player | undefined,
+  options?: {
+    minute?: number;
+    attackingTeam?: Team;
+    defendingTeam?: Team;
+    attackingLiveEnergyByPlayerId?: Record<string, number>;
+  },
+): number {
+  return calculatePenaltyConversion(taker, goalkeeper, options);
 }
 
 // Create initial match state
@@ -1134,6 +1241,47 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
     });
     if (!fouler) return;
     sendOffPlayer(state, foulingTeam, fouler, 'straight_red');
+  } else if (eventRoll < EVENT_THRESHOLD_PENALTY) {
+    const penaltyTaker = pickPenaltyTaker(
+      attackingPlayers,
+      attackingTactics,
+      attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+    );
+    const defendingGK = defendingPlayers.find((p) => p.position === 'GK');
+    const conversionChance = calculatePenaltyConversion(penaltyTaker, defendingGK, {
+      minute: state.minute,
+      attackingTeam: teamObj,
+      defendingTeam: defendingTeamObj,
+      attackingLiveEnergyByPlayerId:
+        attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+    });
+    const takerName = penaltyTaker?.nickname || penaltyTaker?.name || 'Penalty taker';
+
+    if (random() < conversionChance) {
+      if (attackingTeam === 'home') {
+        state.homeScore++;
+      } else {
+        state.awayScore++;
+      }
+
+      state.events.push({
+        minute: state.minute,
+        type: 'penalty_scored',
+        team: attackingTeam,
+        playerId: penaltyTaker?.id,
+        playerName: takerName,
+        description: `PENALTY SCORED! ${takerName} converts from the spot for ${teamObj.name}.`,
+      });
+    } else {
+      state.events.push({
+        minute: state.minute,
+        type: 'penalty_missed',
+        team: attackingTeam,
+        playerId: penaltyTaker?.id,
+        playerName: takerName,
+        description: `PENALTY MISSED! ${takerName} fails to score from the spot for ${teamObj.name}.`,
+      });
+    }
   } else if (eventRoll < EVENT_THRESHOLD_CORNER) {
     // Corner with goal chance
     state.events.push({

@@ -430,7 +430,9 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         );
         formUpdates.set(fixture.awayTeamId, newAwayForm);
 
-        const goalEvents = result.events.filter((e) => e.type === 'goal');
+        const goalEvents = result.events.filter(
+          (e) => e.type === 'goal' || e.type === 'penalty_scored',
+        );
         for (const goal of goalEvents) {
           if (goal.playerId) {
             playerGoals.set(

@@ -140,7 +140,7 @@ function EventIcon({ type }: { type: MatchEvent['type'] }) {
     case 'red_card':
       return <span className="text-red-600">🟥</span>;
     case 'penalty_scored':
-      return <span className="text-green-400">⚽</span>;
+      return <span className="text-amber-300">⚽</span>;
     case 'penalty_missed':
       return <span className="text-red-400">❌</span>;
     case 'injury':
@@ -186,6 +186,19 @@ function MatchEventsSummary({
   homeTeamShortName,
   awayTeamShortName,
 }: MatchEventsSummaryProps) {
+  const getEventAccentClass = (type: MatchEvent['type']): string => {
+    switch (type) {
+      case 'own_goal':
+        return 'text-red-300';
+      case 'penalty_scored':
+        return 'text-amber-200';
+      case 'penalty_missed':
+        return 'text-red-300';
+      default:
+        return 'text-white';
+    }
+  };
+
   // Filter to significant events only
   const significantTypes = [
     'goal',
@@ -231,17 +244,17 @@ function MatchEventsSummary({
               >
                 <span className="text-slate-400 w-8">{e.minute}'</span>
                 <EventIcon type={e.type} />
-                <span className="flex-1">
+                <span className={`flex-1 ${getEventAccentClass(e.type)}`}>
                   {e.playerName}
                   {e.type === 'own_goal' && (
                     <span className="text-red-400 text-xs ml-1">(OG)</span>
                   )}
                   {e.type === 'penalty_scored' && (
-                    <span className="text-green-400 text-xs ml-1">(P)</span>
+                    <span className="text-amber-300 text-xs ml-1">(PEN)</span>
                   )}
                   {e.type === 'penalty_missed' && (
                     <span className="text-red-400 text-xs ml-1">
-                      (P missed)
+                      (PEN missed)
                     </span>
                   )}
                   {e.type === 'goal' && e.assistPlayerName && (
