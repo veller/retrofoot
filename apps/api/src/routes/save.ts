@@ -546,6 +546,11 @@ saveRoutes.get('/:id/team/:teamId/squad', async (c) => {
       fitness: players.fitness,
       energy: players.energy,
       injured: players.injured,
+      status: players.status,
+      yellowAccumulation: players.yellowAccumulation,
+      suspensionMatchesRemaining: players.suspensionMatchesRemaining,
+      seasonYellowCards: players.seasonYellowCards,
+      seasonRedCards: players.seasonRedCards,
       form: players.form,
       contractEndSeason: players.contractEndSeason,
       wage: players.wage,
@@ -724,6 +729,13 @@ saveRoutes.put('/:id/tactics/:teamId', async (c) => {
     position: player.position as Position,
     injured: player.injured ?? false,
     fitness: player.fitness ?? 100,
+    status:
+      ((player.status as
+        | 'active'
+        | 'retiring'
+        | 'retired'
+        | 'deceased'
+        | 'suspended') ?? 'active'),
   }));
   const eligibility = evaluateFormationEligibility(
     formation,
@@ -742,13 +754,19 @@ saveRoutes.put('/:id/tactics/:teamId', async (c) => {
     );
   }
 
-  const playerIds = new Set(teamPlayers.map((player) => player.id));
+  const availablePlayerIds = new Set(
+    teamPlayers
+      .filter((player) => (player.status ?? 'active') !== 'suspended')
+      .map((player) => player.id),
+  );
   let lineup = Array.isArray(body.lineup) ? body.lineup : [];
   let substitutes = Array.isArray(body.substitutes) ? body.substitutes : [];
 
-  lineup = lineup.filter((id) => typeof id === 'string' && playerIds.has(id));
+  lineup = lineup.filter(
+    (id) => typeof id === 'string' && availablePlayerIds.has(id),
+  );
   substitutes = substitutes.filter(
-    (id) => typeof id === 'string' && playerIds.has(id),
+    (id) => typeof id === 'string' && availablePlayerIds.has(id),
   );
 
   if (lineup.length < 11) {

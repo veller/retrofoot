@@ -81,6 +81,7 @@ export const saves = sqliteTable('saves', {
   playerTeamId: text('player_team_id').notNull(),
   managerName: text('manager_name').notNull(),
   managerReputation: integer('manager_reputation').default(50),
+  disciplinePreset: text('discipline_preset').default('domestic_5yc'),
   currentSeason: text('current_season').notNull(), // e.g., "2024/25"
   currentRound: integer('current_round').default(1),
   gameOver: integer('game_over', { mode: 'boolean' }).default(false),
@@ -150,6 +151,10 @@ export const players = sqliteTable('players', {
 
   // Player status and form tracking
   status: text('status').default('active'), // active, retiring, retired, deceased, suspended
+  yellowAccumulation: integer('yellow_accumulation').default(0),
+  suspensionMatchesRemaining: integer('suspension_matches_remaining').default(0),
+  seasonYellowCards: integer('season_yellow_cards').default(0),
+  seasonRedCards: integer('season_red_cards').default(0),
   form: integer('form').default(70), // 1-100
   lastFiveRatings: text('last_five_ratings', { mode: 'json' }).default([]),
   seasonGoals: integer('season_goals').default(0),

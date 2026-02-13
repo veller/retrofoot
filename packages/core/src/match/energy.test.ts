@@ -421,4 +421,29 @@ describe('energy match behavior', () => {
     );
     expect(result.success).toBe(false);
   });
+
+  it('rejects substitution when outgoing player was sent off', () => {
+    const { state } = setupMatch();
+    const homeOutId = state.homeLineup.find((p) => p.position === 'MID')?.id;
+    const homeInId = state.homeSubs.find((p) => p.position === 'MID')?.id;
+    expect(homeOutId).toBeDefined();
+    expect(homeInId).toBeDefined();
+    state.homeSentOff[homeOutId as string] = true;
+
+    const result = makeSubstitution(
+      state,
+      'home',
+      homeOutId as string,
+      homeInId as string,
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('initializes booking and sent-off maps', () => {
+    const { state } = setupMatch();
+    expect(state.homeBookings).toEqual({});
+    expect(state.awayBookings).toEqual({});
+    expect(state.homeSentOff).toEqual({});
+    expect(state.awaySentOff).toEqual({});
+  });
 });

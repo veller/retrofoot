@@ -37,6 +37,7 @@ export const MatchEventSchema = z.object({
   playerName: z.string().optional(),
   assistPlayerId: z.string().optional(),
   assistPlayerName: z.string().optional(),
+  cardReason: z.enum(['straight_red', 'second_yellow']).optional(),
   description: z.string().optional(),
 });
 

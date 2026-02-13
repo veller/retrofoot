@@ -63,6 +63,11 @@ interface ApiPlayerResponse {
   fitness: number;
   energy?: number;
   injured: boolean;
+  status?: string;
+  yellowAccumulation?: number;
+  suspensionMatchesRemaining?: number;
+  seasonYellowCards?: number;
+  seasonRedCards?: number;
   form: number;
   wage: number;
   marketValue: number;
@@ -142,7 +147,17 @@ function transformPlayer(apiPlayer: ApiPlayerResponse): Player {
     contractEndSeason: apiPlayer.contractEndSeason ?? 2028,
     wage: apiPlayer.wage,
     marketValue: apiPlayer.marketValue,
-    status: 'active',
+    status:
+      (apiPlayer.status as
+        | 'active'
+        | 'retiring'
+        | 'retired'
+        | 'deceased'
+        | 'suspended') ?? 'active',
+    yellowAccumulation: apiPlayer.yellowAccumulation ?? 0,
+    suspensionMatchesRemaining: apiPlayer.suspensionMatchesRemaining ?? 0,
+    seasonYellowCards: apiPlayer.seasonYellowCards ?? 0,
+    seasonRedCards: apiPlayer.seasonRedCards ?? 0,
     form: {
       form: apiPlayer.form ?? 70,
       lastFiveRatings: (apiPlayer.lastFiveRatings as number[]) ?? [],
@@ -207,6 +222,10 @@ interface ApiMatchPlayerResponse {
   wage: number;
   marketValue: number;
   status: string;
+  yellowAccumulation?: number;
+  suspensionMatchesRemaining?: number;
+  seasonYellowCards?: number;
+  seasonRedCards?: number;
   form: {
     form: number;
     lastFiveRatings: number[];
@@ -282,6 +301,10 @@ function transformMatchPlayer(apiPlayer: ApiMatchPlayerResponse): Player {
         | 'retired'
         | 'deceased'
         | 'suspended') ?? 'active',
+    yellowAccumulation: apiPlayer.yellowAccumulation ?? 0,
+    suspensionMatchesRemaining: apiPlayer.suspensionMatchesRemaining ?? 0,
+    seasonYellowCards: apiPlayer.seasonYellowCards ?? 0,
+    seasonRedCards: apiPlayer.seasonRedCards ?? 0,
     form: {
       form: apiPlayer.form?.form ?? 70,
       lastFiveRatings: apiPlayer.form?.lastFiveRatings ?? [],
