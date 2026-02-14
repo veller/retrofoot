@@ -26,7 +26,10 @@ import { useSaveMatchData, fetchTeamTactics, saveTeamTactics } from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
+import { AiDecisionDevDrawer } from '../components/AiDecisionDevDrawer';
 import { useGameStore } from '../stores/gameStore';
+import { createAiTraceOptionsForDev } from '../lib/aiTraceBridge';
+import { useAiTraceStore } from '../lib/aiTraceStore';
 
 type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
 
@@ -365,6 +368,9 @@ export function MatchPage() {
   const intervalRef = useRef<number | null>(null);
   const lastTickTimeRef = useRef<number>(0);
   const pendingGameSecondsRef = useRef<number>(0);
+  const pushTraceEvent = useAiTraceStore((state) => state.push);
+  const clearTraceEvents = useAiTraceStore((state) => state.clear);
+
 
   // Find the player's fixture and teams
   const { playerFixture, playerHomeTeam, playerAwayTeam } = useMemo(() => {
@@ -519,12 +525,29 @@ export function MatchPage() {
     const unplayedFixtures = matchData.fixtures.filter((f) => !f.played);
     const coreFixtures = unplayedFixtures.map(toCoreFigure);
 
+    if (import.meta.env.DEV) {
+      clearTraceEvents();
+    }
+    const trace = createAiTraceOptionsForDev({
+      enabled: import.meta.env.DEV,
+      onEvent: pushTraceEvent,
+      sampleRates: {
+        energy_tick: 0.6,
+      },
+      throttleMsByType: {
+        minute_context: 0,
+        event_probability: 0,
+        energy_tick: 80,
+      },
+    });
+
     const { matches: matchStates, playerMatchIndex: pmi } =
       createMultiMatchState({
         fixtures: coreFixtures,
         teams: matchData.teams,
         playerTeamId: matchData.playerTeamId,
         playerTactics,
+        trace,
         currentRound: matchData.currentRound ?? 1,
         totalRounds: 38,
       });
@@ -535,7 +558,12 @@ export function MatchPage() {
     setCurrentMinute(0);
     setCurrentSeconds(0);
     setIsPaused(false);
-  }, [matchData, playerTactics]);
+  }, [
+    clearTraceEvents,
+    matchData,
+    playerTactics,
+    pushTraceEvent,
+  ]);
 
   // Simulation tick - advances time by SECONDS_PER_TICK seconds
   const tick = useCallback(() => {
@@ -1096,19 +1124,22 @@ export function MatchPage() {
     matches[playerMatchIndex]?.state.phase || 'first_half';
 
   return (
-    <MatchLiveView
-      matches={matches}
-      playerMatchIndex={playerMatchIndex}
-      currentMinute={currentMinute}
-      currentSeconds={currentSeconds}
-      phase={playerMatchPhase}
-      isPaused={isPaused}
-      onPause={handlePause}
-      onResume={handleResume}
-      onSubstitutions={handleOpenSubstitutions}
-      playbackSpeed={playbackSpeed}
-      onSpeedChange={setPlaybackSpeed}
-      round={matchData.currentRound}
-    />
+    <>
+      <MatchLiveView
+        matches={matches}
+        playerMatchIndex={playerMatchIndex}
+        currentMinute={currentMinute}
+        currentSeconds={currentSeconds}
+        phase={playerMatchPhase}
+        isPaused={isPaused}
+        onPause={handlePause}
+        onResume={handleResume}
+        onSubstitutions={handleOpenSubstitutions}
+        playbackSpeed={playbackSpeed}
+        onSpeedChange={setPlaybackSpeed}
+        round={matchData.currentRound}
+      />
+      <AiDecisionDevDrawer playerMatch={matches[playerMatchIndex] ?? null} />
+    </>
   );
 }

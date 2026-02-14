@@ -11,6 +11,10 @@ import type {
   MatchResult,
   Fixture,
   TacticalPosture,
+  AiTraceEvent,
+  AiTraceEventType,
+  AiTraceOptions,
+  AiTraceSeverity,
 } from '../types';
 import { calculateOverall } from '../types';
 import { sampleAttendance } from '../attendance';
@@ -70,6 +74,7 @@ export interface MatchConfig {
   awayControl?: MatchControl;
   neutralVenue?: boolean;
   fixtureId?: string;
+  trace?: AiTraceOptions;
 }
 
 // Match state exposed to UI
@@ -111,6 +116,7 @@ export interface LiveMatchState {
   state: MatchState;
   attendance: number;
   latestEvent?: MatchEvent;
+  trace?: AiTraceOptions;
 }
 
 const AI_SUB_MINUTE_EARLY = 46;
@@ -119,6 +125,20 @@ const AI_SUB_URGENT_ENERGY = 35;
 const AI_SUB_SITUATIONAL_ENERGY = 45;
 const AI_SUB_PREFERRED_BENCH_ENERGY = 55;
 const AI_SUB_MAX = 5;
+let traceEventCounter = 0;
+
+interface TraceDraft {
+  minute: number;
+  team?: 'home' | 'away' | 'neutral';
+  type: AiTraceEventType;
+  label: string;
+  summary: string;
+  severity?: AiTraceSeverity;
+  inputs?: AiTraceEvent['inputs'];
+  computed?: AiTraceEvent['computed'];
+  outcome?: AiTraceEvent['outcome'];
+  tags?: string[];
+}
 
 // Random number generator (can be seeded for deterministic results)
 function random(): number {
@@ -141,6 +161,44 @@ function weightedRandom(weights: number[]): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function shouldEmitTrace(
+  options: AiTraceOptions | undefined,
+  type: AiTraceEventType,
+): boolean {
+  if (!options?.enabled || !options.sink) return false;
+  const rate = options.sampleRates?.[type];
+  if (rate === undefined) return true;
+  if (rate <= 0) return false;
+  if (rate >= 1) return true;
+  const bucket = traceEventCounter % 1000;
+  const threshold = Math.floor(rate * 1000);
+  return bucket < threshold;
+}
+
+function emitTrace(config: MatchConfig, event: TraceDraft): void {
+  const trace = config.trace;
+  if (!shouldEmitTrace(trace, event.type)) return;
+  const sink = trace?.sink;
+  if (!sink) return;
+  traceEventCounter++;
+  sink({
+    id: `trace-${traceEventCounter}`,
+    ts: new Date().toISOString(),
+    minute: event.minute,
+    matchId: config.fixtureId,
+    team: event.team,
+    type: event.type,
+    label: event.label,
+    summary: event.summary,
+    severity: event.severity ?? 'info',
+    inputs: event.inputs ?? {},
+    computed: event.computed ?? {},
+    outcome: event.outcome ?? {},
+    tags: event.tags ?? [],
+    schemaVersion: 1,
+  });
 }
 
 function getDisciplineMaps(
@@ -695,6 +753,8 @@ function applyLineupEnergyDrain(
 }
 
 function applyLiveEnergyDrain(state: MatchState): void {
+  const homeBefore = Object.values(state.homeLiveEnergy);
+  const awayBefore = Object.values(state.awayLiveEnergy);
   applyLineupEnergyDrain(
     state.homeLineup,
     state.homeTactics.posture,
@@ -705,6 +765,28 @@ function applyLiveEnergyDrain(state: MatchState): void {
     state.awayTactics.posture,
     state.awayLiveEnergy,
   );
+  const homeAfter = Object.values(state.homeLiveEnergy);
+  const awayAfter = Object.values(state.awayLiveEnergy);
+  const summarize = (values: number[]) => {
+    if (values.length === 0) return { min: 0, max: 0, avg: 0 };
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return { min, max, avg: Math.round(avg * 10) / 10 };
+  };
+  (state as MatchState & {
+    __energyTraceSummary?: {
+      homeBefore: ReturnType<typeof summarize>;
+      awayBefore: ReturnType<typeof summarize>;
+      homeAfter: ReturnType<typeof summarize>;
+      awayAfter: ReturnType<typeof summarize>;
+    };
+  }).__energyTraceSummary = {
+    homeBefore: summarize(homeBefore),
+    awayBefore: summarize(awayBefore),
+    homeAfter: summarize(homeAfter),
+    awayAfter: summarize(awayAfter),
+  };
 }
 
 // Make a substitution
@@ -881,7 +963,33 @@ function evaluateAiSubstitutions(
       };
 
       const incoming = pickReplacement(samePositionBench);
-      if (!incoming) continue;
+      if (!incoming) {
+        emitTrace(config, {
+          minute: state.minute,
+          team,
+          type: 'sub_candidate',
+          label: 'Substitution Candidate Rejected',
+          summary: `${outgoing.nickname || outgoing.name} stayed on (no stronger in-role replacement).`,
+          severity: isUrgent ? 'critical' : 'warning',
+          inputs: {
+            outgoingPlayerId: outgoing.id,
+            outgoingEnergy,
+            outgoingScore: Math.round(outgoingScore * 100) / 100,
+            candidateBenchCount: samePositionBench.length,
+            scoreLead,
+          },
+          computed: {
+            urgent: isUrgent,
+            situational: isSituational,
+            minuteCap: maxSubsThisMinute,
+          },
+          outcome: {
+            replacementFound: false,
+          },
+          tags: ['substitution', 'evaluation'],
+        });
+        continue;
+      }
 
       const reason: 'fatigue' | 'tactical' | 'protect_lead' =
         isUrgent
@@ -892,6 +1000,38 @@ function evaluateAiSubstitutions(
 
       const result = makeSubstitution(state, team, outgoing.id, incoming.id, {
         reason,
+      });
+      emitTrace(config, {
+        minute: state.minute,
+        team,
+        type: result.success ? 'sub_executed' : 'sub_candidate',
+        label: result.success
+          ? 'Substitution Executed'
+          : 'Substitution Attempt Failed',
+        summary: result.success
+          ? `${incoming.nickname || incoming.name} replaced ${outgoing.nickname || outgoing.name}.`
+          : `Failed to replace ${outgoing.nickname || outgoing.name}.`,
+        severity: result.success ? 'info' : 'warning',
+        inputs: {
+          outgoingPlayerId: outgoing.id,
+          outgoingEnergy,
+          incomingPlayerId: incoming.id,
+          incomingEnergy: liveEnergy[incoming.id] ?? incoming.energy ?? 100,
+          reason,
+          scoreLead,
+        },
+        computed: {
+          outgoingScore: Math.round(outgoingScore * 100) / 100,
+          maxSubsThisMinute,
+          subsUsedBefore: subsUsed + subAttempt,
+        },
+        outcome: {
+          success: result.success,
+          reason,
+          homeSubsUsed: state.homeSubsUsed,
+          awaySubsUsed: state.awaySubsUsed,
+        },
+        tags: ['substitution', 'decision'],
       });
       if (result.success) {
         executedSub = true;
@@ -949,6 +1089,7 @@ function pickFoulerForCard(
 
 function applyAutoRedCardTacticalAdjustment(
   state: MatchState,
+  config: MatchConfig,
   team: 'home' | 'away',
 ): void {
   const isHome = team === 'home';
@@ -956,11 +1097,33 @@ function applyAutoRedCardTacticalAdjustment(
     ? state.homeScore - state.awayScore
     : state.awayScore - state.homeScore;
   const tactics = isHome ? state.homeTactics : state.awayTactics;
+  const previousPosture = tactics.posture;
   tactics.posture = scoreDiff <= -2 ? 'balanced' : 'defensive';
+  emitTrace(config, {
+    minute: state.minute,
+    team,
+    type: 'posture_adjustment',
+    label: 'Auto Posture Adjustment',
+    summary: `Posture changed from ${previousPosture} to ${tactics.posture} after red card context.`,
+    severity: 'warning',
+    inputs: {
+      scoreDiff,
+      previousPosture,
+      redCards: isHome ? state.homeRedCards : state.awayRedCards,
+    },
+    computed: {
+      trigger: 'red_card',
+    },
+    outcome: {
+      nextPosture: tactics.posture,
+    },
+    tags: ['discipline', 'tactics'],
+  });
 }
 
 function sendOffPlayer(
   state: MatchState,
+  config: MatchConfig,
   team: 'home' | 'away',
   player: Player,
   reason: 'straight_red' | 'second_yellow',
@@ -985,7 +1148,7 @@ function sendOffPlayer(
     state.awayRedCards++;
   }
 
-  applyAutoRedCardTacticalAdjustment(state, team);
+  applyAutoRedCardTacticalAdjustment(state, config, team);
 
   state.events.push({
     minute: state.minute,
@@ -1004,6 +1167,39 @@ function sendOffPlayer(
 // Simulate a single minute
 function simulateMinute(state: MatchState, config: MatchConfig): void {
   applyLiveEnergyDrain(state);
+  const energySummary = (
+    state as MatchState & {
+      __energyTraceSummary?: {
+        homeBefore: { min: number; max: number; avg: number };
+        awayBefore: { min: number; max: number; avg: number };
+        homeAfter: { min: number; max: number; avg: number };
+        awayAfter: { min: number; max: number; avg: number };
+      };
+    }
+  ).__energyTraceSummary;
+  if (energySummary) {
+    emitTrace(config, {
+      minute: state.minute,
+      type: 'energy_tick',
+      label: 'Live Energy Tick',
+      summary: 'Applied per-minute fatigue to active lineups.',
+      inputs: {
+        homeLineupSize: state.homeLineup.length,
+        awayLineupSize: state.awayLineup.length,
+      },
+      computed: {
+        homeAvgBefore: energySummary.homeBefore.avg,
+        homeAvgAfter: energySummary.homeAfter.avg,
+        awayAvgBefore: energySummary.awayBefore.avg,
+        awayAvgAfter: energySummary.awayAfter.avg,
+      },
+      outcome: {
+        homeMinAfter: energySummary.homeAfter.min,
+        awayMinAfter: energySummary.awayAfter.min,
+      },
+      tags: ['energy', 'minute'],
+    });
+  }
   evaluateAiSubstitutions(state, config, 'home');
   evaluateAiSubstitutions(state, config, 'away');
 
@@ -1026,6 +1222,33 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
     awayFormationImpact,
     awayPostureImpact,
   );
+  emitTrace(config, {
+    minute: state.minute,
+    type: 'minute_context',
+    label: 'Minute Tactical Context',
+    summary: 'Merged formation matchup and posture effects for this minute.',
+    inputs: {
+      homeFormation: state.homeTactics.formation,
+      awayFormation: state.awayTactics.formation,
+      homePosture: state.homeTactics.posture,
+      awayPosture: state.awayTactics.posture,
+    },
+    computed: {
+      homeCreation: Math.round(state.homeTacticalImpact.creation * 1000) / 1000,
+      awayCreation: Math.round(state.awayTacticalImpact.creation * 1000) / 1000,
+      homePrevention:
+        Math.round(state.homeTacticalImpact.prevention * 1000) / 1000,
+      awayPrevention:
+        Math.round(state.awayTacticalImpact.prevention * 1000) / 1000,
+    },
+    outcome: {
+      homePossessionImpact:
+        Math.round(state.homeTacticalImpact.possession * 1000) / 1000,
+      awayPossessionImpact:
+        Math.round(state.awayTacticalImpact.possession * 1000) / 1000,
+    },
+    tags: ['tactics', 'minute'],
+  });
 
   // Calculate team strengths with all modifiers
   const homeStrength = calculateTeamStrength(
@@ -1096,6 +1319,27 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         defendingImpact.prevention * 0.1,
     ),
   );
+  emitTrace(config, {
+    minute: state.minute,
+    team: attackingTeam,
+    type: 'event_probability',
+    label: 'Event Probability Gate',
+    summary: `Computed minute event probability for ${attackingTeam} in possession.`,
+    inputs: {
+      baseProbability: EVENT_PROBABILITY_PER_MINUTE,
+      attackingCreation: attackingImpact.creation,
+      defendingPrevention: defendingImpact.prevention,
+    },
+    computed: {
+      clampedProbability: Math.round(eventProbability * 1000) / 1000,
+    },
+    outcome: {
+      possession: attackingTeam,
+      homeScore: state.homeScore,
+      awayScore: state.awayScore,
+    },
+    tags: ['probability', 'minute'],
+  });
 
   // Chance of something happening this minute
   if (random() > eventProbability) return;
@@ -1129,6 +1373,27 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
           attackingTeam === 'home' ? state.awayLiveEnergy : state.homeLiveEnergy,
       },
     );
+    emitTrace(config, {
+      minute: state.minute,
+      team: attackingTeam,
+      type: 'chance_evaluation',
+      label: 'Chance Conversion Evaluation',
+      summary: `Calculated conversion probability for ${attackingTeam} chance.`,
+      inputs: {
+        scorerId: scorer?.id ?? null,
+        homeRedCards: state.homeRedCards,
+        awayRedCards: state.awayRedCards,
+        attackingCreation: attackingImpact.creation,
+        defendingPrevention: defendingImpact.prevention,
+      },
+      computed: {
+        successChance: Math.round(successChance * 1000) / 1000,
+      },
+      outcome: {
+        chanceType: 'open_play',
+      },
+      tags: ['probability', 'chance'],
+    });
 
     if (random() < successChance) {
       // GOAL! Determine the type
@@ -1226,7 +1491,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       description: `Yellow card for ${fouler?.nickname || fouler?.name}`,
     });
     if (bookings[fouler.id] >= 2) {
-      sendOffPlayer(state, foulingTeam, fouler, 'second_yellow');
+      sendOffPlayer(state, config, foulingTeam, fouler, 'second_yellow');
     }
   } else if (eventRoll < EVENT_THRESHOLD_RED_CARD) {
     const foulingTeam = attackingTeam === 'home' ? 'away' : 'home';
@@ -1240,7 +1505,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       red: true,
     });
     if (!fouler) return;
-    sendOffPlayer(state, foulingTeam, fouler, 'straight_red');
+    sendOffPlayer(state, config, foulingTeam, fouler, 'straight_red');
   } else if (eventRoll < EVENT_THRESHOLD_PENALTY) {
     const penaltyTaker = pickPenaltyTaker(
       attackingPlayers,
@@ -1549,6 +1814,7 @@ export interface MultiMatchConfig {
   teams: Team[];
   playerTeamId: string;
   playerTactics: Tactics;
+  trace?: AiTraceOptions;
   /** Current round (1-based); used for attendance model. */
   currentRound?: number;
   /** Total rounds in season (e.g. 38); used for attendance model. */
@@ -1565,6 +1831,7 @@ export function createMultiMatchState(config: MultiMatchConfig): {
     teams,
     playerTeamId,
     playerTactics,
+    trace,
     currentRound = 1,
     totalRounds = 38,
   } = config;
@@ -1621,6 +1888,7 @@ export function createMultiMatchState(config: MultiMatchConfig): {
         round: currentRound,
         totalRounds,
       }),
+      trace: isPlayerMatch ? trace : undefined,
     });
   }
 
@@ -1658,6 +1926,7 @@ export function simulateAllMatchesStep(matches: LiveMatchState[]): {
       homeTactics: state.homeTactics,
       awayTactics: state.awayTactics,
       fixtureId: match.fixtureId,
+      trace: match.trace,
     };
 
     const event = simulateMatchStep(state, config);

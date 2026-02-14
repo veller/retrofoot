@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MatchConfig, MatchState } from './index';
 import {
   calculateChanceSuccessForTesting,
@@ -11,6 +11,10 @@ import {
   simulateMatchStep,
 } from './index';
 import { createDefaultForm, type Player, type Team, type Tactics } from '../types';
+import {
+  EVENT_THRESHOLD_RED_CARD,
+  EVENT_THRESHOLD_YELLOW_CARD,
+} from './constants';
 
 function makePlayer(id: string, position: Player['position'], energy: number): Player {
   return {
@@ -493,5 +497,113 @@ describe('energy match behavior', () => {
     expect(easierPenalty).toBeGreaterThan(harderPenalty);
     expect(easierPenalty).toBeGreaterThan(0.78);
     expect(harderPenalty).toBeLessThan(0.9);
+  });
+
+  it('does not emit traces when tracing is disabled', () => {
+    const traces: Array<{ type: string }> = [];
+    const { config, state } = setupMatch();
+    config.trace = {
+      enabled: false,
+      sink: (event) => traces.push({ type: event.type }),
+    };
+
+    simulateMatchStep(state, config); // kickoff
+    simulateMatchStep(state, config); // minute 1
+
+    expect(traces).toHaveLength(0);
+  });
+
+  it('emits structured probability and minute traces when tracing is enabled', () => {
+    const traces: Array<{ type: string }> = [];
+    const { config, state } = setupMatch();
+    config.trace = {
+      enabled: true,
+      sink: (event) => traces.push({ type: event.type }),
+    };
+
+    simulateMatchStep(state, config); // kickoff
+    simulateMatchStep(state, config); // minute 1
+
+    const traceTypes = new Set(traces.map((trace) => trace.type));
+    expect(traceTypes.has('energy_tick')).toBe(true);
+    expect(traceTypes.has('minute_context')).toBe(true);
+    expect(traceTypes.has('event_probability')).toBe(true);
+  });
+
+  it('captures substitution reasoning in structured trace payload', () => {
+    const traces: Array<{
+      type: string;
+      outcome: Record<string, unknown>;
+      inputs: Record<string, unknown>;
+    }> = [];
+    const home = makeDeepBenchTeam('htrace-sub');
+    const away = makeTeam('atrace-sub');
+    const config: MatchConfig = {
+      homeTeam: home.team,
+      awayTeam: away.team,
+      homeTactics: home.tactics,
+      awayTactics: away.tactics,
+      homeControl: 'ai',
+      awayControl: 'ai',
+      trace: {
+        enabled: true,
+        sink: (event) =>
+          traces.push({
+            type: event.type,
+            outcome: event.outcome,
+            inputs: event.inputs,
+          }),
+      },
+    };
+    const state = createMatchState(config);
+
+    simulateMatchStep(state, config); // kickoff
+    for (let minute = 1; minute <= 46; minute++) {
+      simulateMatchStep(state, config);
+    }
+
+    const executed = traces.find((trace) => trace.type === 'sub_executed');
+    expect(executed).toBeDefined();
+    expect(executed?.outcome.success).toBe(true);
+    expect(['fatigue', 'tactical', 'protect_lead']).toContain(
+      String(executed?.outcome.reason),
+    );
+    expect(executed?.inputs.outgoingPlayerId).toBeTruthy();
+    expect(executed?.inputs.incomingPlayerId).toBeTruthy();
+  });
+
+  it('emits posture adjustment trace when a red card changes posture', () => {
+    const traces: Array<{ type: string; outcome: Record<string, unknown> }> = [];
+    const { config, state } = setupMatch();
+    config.trace = {
+      enabled: true,
+      sink: (event) =>
+        traces.push({
+          type: event.type,
+          outcome: event.outcome,
+        }),
+    };
+
+    const redCardRoll =
+      (EVENT_THRESHOLD_YELLOW_CARD + EVENT_THRESHOLD_RED_CARD) / 2;
+    const randomSpy = vi.spyOn(Math, 'random');
+    let idx = 0;
+    const scripted = [0.5, 0.0, redCardRoll, 0.2];
+    randomSpy.mockImplementation(() => scripted[idx++] ?? 0.01);
+
+    try {
+      simulateMatchStep(state, config); // kickoff
+      simulateMatchStep(state, config); // minute 1 => force red card path
+    } finally {
+      randomSpy.mockRestore();
+    }
+
+    const postureTrace = traces.find(
+      (trace) => trace.type === 'posture_adjustment',
+    );
+    expect(postureTrace).toBeDefined();
+    expect(['balanced', 'defensive']).toContain(
+      String(postureTrace?.outcome.nextPosture),
+    );
   });
 });

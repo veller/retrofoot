@@ -171,6 +171,46 @@ export interface MatchResult {
   date: string; // ISO date
 }
 
+export type AiTraceTeam = 'home' | 'away' | 'neutral';
+
+export type AiTraceEventType =
+  | 'minute_context'
+  | 'event_probability'
+  | 'chance_evaluation'
+  | 'sub_candidate'
+  | 'sub_executed'
+  | 'energy_tick'
+  | 'posture_adjustment';
+
+export type AiTraceSeverity = 'info' | 'warning' | 'critical';
+
+export type AiTraceValue = number | string | boolean | null;
+
+export interface AiTraceEvent {
+  id: string;
+  ts: string;
+  minute: number;
+  matchId?: string;
+  team?: AiTraceTeam;
+  type: AiTraceEventType;
+  label: string;
+  summary: string;
+  severity: AiTraceSeverity;
+  inputs: Record<string, AiTraceValue>;
+  computed: Record<string, AiTraceValue>;
+  outcome: Record<string, AiTraceValue>;
+  tags: string[];
+  schemaVersion: 1;
+}
+
+export type AiTraceSink = (event: AiTraceEvent) => void;
+
+export interface AiTraceOptions {
+  enabled: boolean;
+  sink?: AiTraceSink;
+  sampleRates?: Partial<Record<AiTraceEventType, number>>;
+}
+
 // League standing entry
 export interface StandingEntry {
   position: number;
