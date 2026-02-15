@@ -48,7 +48,7 @@ export const GPA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'yan-dias-costa',
-    name: 'Yan Dias Costa',
+    name: 'Franco Villalba',
     realInspiration: 'Generated',
     teamId: 'gpa',
     position: 'GK',
@@ -88,7 +88,7 @@ export const GPA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'alex-moreira-andrade',
-    name: 'Alex Moreira Andrade',
+    name: 'Lauti Salcedo',
     nickname: 'Giu',
     realInspiration: 'Generated',
     teamId: 'gpa',
@@ -289,7 +289,7 @@ export const GPA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gabriel-moreira-dias',
-    name: 'Gabriel Moreira Dias',
+    name: 'Zaracho',
     realInspiration: 'Generated',
     teamId: 'gpa',
     position: 'MID',
@@ -409,7 +409,7 @@ export const GPA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'jefferson-lima-gomes',
-    name: 'Jefferson Lima Gomes',
+    name: 'Ramiro Arostegui',
     nickname: 'Kiko',
     realInspiration: 'Generated',
     teamId: 'gpa',

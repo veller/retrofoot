@@ -89,7 +89,7 @@ export const COXAVERDE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'marcos-castro-alves',
-    name: 'Marcos Castro Alves',
+    name: 'Dario Funes',
     realInspiration: 'Generated',
     teamId: 'coxaverde',
     position: 'DEF',
@@ -129,7 +129,7 @@ export const COXAVERDE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'vagner-moraes-souza',
-    name: 'Vagner Moraes Souza',
+    name: 'Julian Canales',
     realInspiration: 'Generated',
     teamId: 'coxaverde',
     position: 'DEF',
@@ -169,7 +169,7 @@ export const COXAVERDE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'vagner-araujo-gomes',
-    name: 'Vagner Araujo Gomes',
+    name: 'Mauro Saravia',
     realInspiration: 'Generated',
     teamId: 'coxaverde',
     position: 'DEF',
@@ -412,7 +412,7 @@ export const COXAVERDE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'pedro-vieira-correia',
-    name: 'Pedro Vieira Correia',
+    name: 'Renzo Battaglia',
     realInspiration: 'Generated',
     teamId: 'coxaverde',
     position: 'MID',
@@ -533,7 +533,7 @@ export const COXAVERDE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'oscar-ramos-costa',
-    name: 'Oscar Ramos Costa',
+    name: 'Aimarro',
     nickname: 'Deco',
     realInspiration: 'Generated',
     teamId: 'coxaverde',

@@ -43,7 +43,7 @@ const FRIEND_PLAYERS: Array<{
   { name: 'Jozefa', teamId: 'flordelince', position: 'ATT' },
   { name: 'James Castro', teamId: 'gpa', position: 'DEF' },
   {
-    name: 'Guilherme Mato do Julio',
+    name: 'Pisculi',
     teamId: 'cabuloso',
     position: 'MID',
     nickname: 'Mato',

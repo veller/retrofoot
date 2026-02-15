@@ -38,8 +38,41 @@ function getPreferredFoot(): 'left' | 'right' | 'both' {
   return 'both';
 }
 
-// Brazilian first names for regens (fictional but Brazilian-sounding)
-const FIRST_NAMES = [
+// Keep Brazilian naming dominant, with a smaller LatAm-flavored slice.
+const BRAZILIAN_MONONYM_NAMES = [
+  'Juninho',
+  'Tiquinho',
+  'Pedrinho',
+  'Rafinha',
+  'Paulinho',
+  'Zezinho',
+  'Marquinhos',
+  'Duduzinho',
+  'Rivaldinho',
+  'Leozinho',
+  'Nandinho',
+  'Cacau',
+];
+
+const LATAM_MONONYM_NAMES = [
+  'Arrascaeta',
+  'Dallena',
+  'Canobbio',
+  'Veronel',
+  'Taglia',
+  'Riquela',
+  'Pisculi',
+  'Lodeiro',
+  'Tevezio',
+  'Saviola',
+  'Gallardo',
+  'Palermo',
+  'Boselli',
+  'Montiel',
+  'Aimarro',
+];
+
+const BRAZILIAN_FIRST_NAMES = [
   'Pedro',
   'Lucas',
   'Gabriel',
@@ -76,7 +109,25 @@ const FIRST_NAMES = [
   'Adriano',
 ];
 
-const LAST_NAMES = [
+const LATAM_FIRST_NAMES = [
+  'Nico',
+  'Tomas',
+  'Enzo',
+  'Franco',
+  'Lauti',
+  'Ramiro',
+  'Matias',
+  'Facu',
+  'Julian',
+  'Mauro',
+  'Renzo',
+  'Agustin',
+  'Santi',
+  'Mateo',
+  'Nacho',
+];
+
+const BRAZILIAN_LAST_NAMES = [
   'Silva',
   'Santos',
   'Oliveira',
@@ -103,6 +154,27 @@ const LAST_NAMES = [
   'Freitas',
   'Vieira',
   'Monteiro',
+];
+
+const LATAM_LAST_NAMES = [
+  'Pereyra',
+  'Suarez',
+  'Villalba',
+  'Salcedo',
+  'Menendez',
+  'Cabrera',
+  'Veron',
+  'Duarte',
+  'Roldan',
+  'Mansilla',
+  'Diarte',
+  'Bogado',
+  'Ponzio',
+  'Benavidez',
+  'Saravia',
+  'Battaglia',
+  'Maidana',
+  'Correa',
 ];
 
 const NICKNAMES = [
@@ -134,13 +206,41 @@ const NICKNAMES = [
 ];
 
 // Generate a random player name
-export function generatePlayerName(): { name: string; nickname?: string } {
-  const firstName = randomFromArray(FIRST_NAMES);
-  const lastName = randomFromArray(LAST_NAMES);
+export function generatePlayerName(options?: {
+  usedNames?: Set<string>;
+}): { name: string; nickname?: string } {
+  const usedNames = options?.usedNames;
+  let name: string;
+
+  for (let attempt = 0; attempt < 128; attempt++) {
+    const isMononym = random() < 0.28;
+    const isLatamProfile = random() < 0.2;
+    const mononymPool = isLatamProfile
+      ? LATAM_MONONYM_NAMES
+      : BRAZILIAN_MONONYM_NAMES;
+    const firstPool = isLatamProfile
+      ? LATAM_FIRST_NAMES
+      : BRAZILIAN_FIRST_NAMES;
+    const lastPool = isLatamProfile ? LATAM_LAST_NAMES : BRAZILIAN_LAST_NAMES;
+    const candidate = isMononym
+      ? randomFromArray(mononymPool)
+      : `${randomFromArray(firstPool)} ${randomFromArray(lastPool)}`;
+
+    if (!usedNames || !usedNames.has(candidate)) {
+      name = candidate;
+      if (usedNames) usedNames.add(candidate);
+      break;
+    }
+  }
+
+  if (!name) {
+    throw new Error('Unable to generate a unique player name');
+  }
+
   const nickname = randomFromArray(NICKNAMES);
 
   return {
-    name: `${firstName} ${lastName}`,
+    name,
     nickname: nickname || undefined,
   };
 }
@@ -486,6 +586,7 @@ export function generateYouthPlayer(options: {
   position?: Position;
   nationality?: string;
   teamReputation?: number; // 1-100, affects quality
+  usedNames?: Set<string>;
 }): Player {
   const {
     position = randomFromArray([
@@ -504,6 +605,7 @@ export function generateYouthPlayer(options: {
     ] as Position[]),
     nationality = 'Brazil',
     teamReputation = 50,
+    usedNames,
   } = options;
 
   // Youth players are age 16-19
@@ -515,7 +617,7 @@ export function generateYouthPlayer(options: {
   const baseOverall = randomInt(45, 55);
   const targetOverall = Math.min(70, baseOverall + repBonus);
 
-  const { name, nickname } = generatePlayerName();
+  const { name, nickname } = generatePlayerName({ usedNames });
   const preferredFoot = getPreferredFoot();
 
   // Higher potential for youth (10-25 above current)
@@ -565,6 +667,7 @@ export function processRetirements(
 } {
   const retiredPlayers: Player[] = [];
   const remainingPlayers: Player[] = [];
+  const usedNames = new Set(players.map((p) => p.name));
 
   // Check each player for retirement
   for (const player of players) {
@@ -620,6 +723,7 @@ export function processRetirements(
     const youth = generateYouthPlayer({
       position,
       teamReputation,
+      usedNames,
     });
 
     newYouthPlayers.push(youth);

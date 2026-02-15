@@ -129,7 +129,7 @@ export const PUTFIRE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'davi-correia-andrade',
-    name: 'Davi Correia Andrade',
+    name: 'Gabi Correa',
     realInspiration: 'Generated',
     teamId: 'putfire',
     position: 'DEF',
@@ -330,7 +330,7 @@ export const PUTFIRE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'bruno-alves-vieira',
-    name: 'Bruno Alves Vieira',
+    name: 'Nico Pereyra',
     realInspiration: 'Generated',
     teamId: 'putfire',
     position: 'MID',
@@ -410,7 +410,7 @@ export const PUTFIRE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'yan-melo-castro',
-    name: 'Yan Melo Castro',
+    name: 'Tomas Suarez',
     realInspiration: 'Generated',
     teamId: 'putfire',
     position: 'MID',

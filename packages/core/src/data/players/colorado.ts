@@ -8,7 +8,7 @@ import type { PlayerSeed } from './types';
 export const COLORADO_PLAYERS: PlayerSeed[] = [
   {
     templateId: 'ramon-monteiro-martins',
-    name: 'Ramon Monteiro Martins',
+    name: 'Pablo Sosa',
     realInspiration: 'Generated',
     teamId: 'colorado',
     position: 'GK',
@@ -248,7 +248,7 @@ export const COLORADO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'thiago-carvalho-ribeiro',
-    name: 'Thiago Carvalho Ribeiro',
+    name: 'Agustin Ponzio',
     nickname: 'Lele',
     realInspiration: 'Generated',
     teamId: 'colorado',
@@ -449,7 +449,7 @@ export const COLORADO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'marcos-moraes-goncalves',
-    name: 'Marcos Moraes Gonçalves',
+    name: 'Kevin Ledesma',
     realInspiration: 'Generated',
     teamId: 'colorado',
     position: 'ATT',
@@ -529,7 +529,7 @@ export const COLORADO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'tiago-marques-campos',
-    name: 'Tiago Marques Campos',
+    name: 'Puchero',
     realInspiration: 'Generated',
     teamId: 'colorado',
     position: 'ATT',
@@ -569,7 +569,7 @@ export const COLORADO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'igor-soares-monteiro',
-    name: 'Igor Soares Monteiro',
+    name: 'Santi Benavidez',
     realInspiration: 'Generated',
     teamId: 'colorado',
     position: 'ATT',

@@ -89,7 +89,7 @@ export const LEAOAZUL_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'lucas-moraes-correia',
-    name: 'Lucas Moraes Correia',
+    name: 'Matias Roldan',
     nickname: 'Deco',
     realInspiration: 'Generated',
     teamId: 'leaoazul',
@@ -210,7 +210,7 @@ export const LEAOAZUL_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'guilherme-lima-santana',
-    name: 'Guilherme Lima Santana',
+    name: 'Facu Mansilla',
     nickname: 'Nino',
     realInspiration: 'Generated',
     teamId: 'leaoazul',
@@ -251,7 +251,7 @@ export const LEAOAZUL_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'diego-guimaraes-dias',
-    name: 'Diego Guimarães Dias',
+    name: 'Diego Diarte',
     realInspiration: 'Generated',
     teamId: 'leaoazul',
     position: 'MID',
@@ -574,7 +574,7 @@ export const LEAOAZUL_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'alex-campos-monteiro',
-    name: 'Alex Campos Monteiro',
+    name: 'Mateo Bogado',
     nickname: 'Japa',
     realInspiration: 'Generated',
     teamId: 'leaoazul',

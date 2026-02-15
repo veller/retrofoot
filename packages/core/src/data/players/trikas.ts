@@ -48,7 +48,7 @@ export const TRIKAS_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'eduardo-pereira-mendes',
-    name: 'Eduardo Pereira Mendes',
+    name: 'Lauti Salcedo',
     realInspiration: 'Generated',
     teamId: 'trikas',
     position: 'GK',
@@ -208,7 +208,7 @@ export const TRIKAS_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'kaio-nascimento-pinto',
-    name: 'Kaio Nascimento Pinto',
+    name: 'Ramiro Arostegui',
     realInspiration: 'Generated',
     teamId: 'trikas',
     position: 'DEF',
@@ -248,7 +248,7 @@ export const TRIKAS_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'daniel-santana-rocha',
-    name: 'Daniel Santana Rocha',
+    name: 'Thiago Menendez',
     realInspiration: 'Generated',
     teamId: 'trikas',
     position: 'MID',
@@ -288,7 +288,7 @@ export const TRIKAS_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'leandro-almeida-santana',
-    name: 'Leandro Almeida Santana',
+    name: 'Caio Cabrera',
     realInspiration: 'Generated',
     teamId: 'trikas',
     position: 'MID',
@@ -368,7 +368,7 @@ export const TRIKAS_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'davi-monteiro-soares',
-    name: 'Davi Monteiro Soares',
+    name: 'Frasquito',
     nickname: 'Biro',
     realInspiration: 'Generated',
     teamId: 'trikas',

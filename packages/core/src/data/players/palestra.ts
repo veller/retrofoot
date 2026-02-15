@@ -329,7 +329,7 @@ export const PALESTRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'igor-pinto-ferreira',
-    name: 'Igor Pinto Ferreira',
+    name: 'Ruggeri',
     realInspiration: 'Generated',
     teamId: 'palestra',
     position: 'MID',
@@ -369,7 +369,7 @@ export const PALESTRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'matheus-lima-moreira',
-    name: 'Matheus Lima Moreira',
+    name: 'Rafa Maidana',
     realInspiration: 'Generated',
     teamId: 'palestra',
     position: 'MID',
@@ -409,7 +409,7 @@ export const PALESTRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gustavo-lima-santana',
-    name: 'Gustavo Lima Santana',
+    name: 'Leo Melano',
     realInspiration: 'Generated',
     teamId: 'palestra',
     position: 'MID',
@@ -571,7 +571,7 @@ export const PALESTRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'caio-alves-rodrigues',
-    name: 'Caio Alves Rodrigues',
+    name: 'Palermo',
     realInspiration: 'Generated',
     teamId: 'palestra',
     position: 'ATT',

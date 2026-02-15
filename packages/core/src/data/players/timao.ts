@@ -8,7 +8,7 @@ import type { PlayerSeed } from './types';
 export const TIMAO_PLAYERS: PlayerSeed[] = [
   {
     templateId: 'matheus-campos-pinto',
-    name: 'Matheus Campos Pinto',
+    name: 'Franco Villalba',
     realInspiration: 'Generated',
     teamId: 'timao',
     position: 'GK',
@@ -450,7 +450,7 @@ export const TIMAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'davi-rodrigues-araujo',
-    name: 'Davi Rodrigues Araujo',
+    name: 'Barcos',
     realInspiration: 'Generated',
     teamId: 'timao',
     position: 'ATT',

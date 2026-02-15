@@ -48,7 +48,7 @@ export const TDCOLINA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'julio-lima-fernandes',
-    name: 'Julio Lima Fernandes',
+    name: 'Enzo Montiel',
     realInspiration: 'Generated',
     teamId: 'tdcolina',
     position: 'GK',
@@ -331,7 +331,7 @@ export const TDCOLINA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'thiago-ramos-correia',
-    name: 'Thiago Ramos Correia',
+    name: 'Mouchez',
     realInspiration: 'Generated',
     teamId: 'tdcolina',
     position: 'MID',

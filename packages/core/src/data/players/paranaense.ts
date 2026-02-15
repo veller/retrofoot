@@ -290,7 +290,7 @@ export const PARANAENSE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gustavo-cardoso-machado',
-    name: 'Gustavo Cardoso Machado',
+    name: 'Saviola',
     nickname: 'Fio',
     realInspiration: 'Generated',
     teamId: 'paranaense',
@@ -331,7 +331,7 @@ export const PARANAENSE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'daniel-soares-campos',
-    name: 'Daniel Soares Campos',
+    name: 'Ivan Balerdi',
     realInspiration: 'Generated',
     teamId: 'paranaense',
     position: 'MID',
@@ -371,7 +371,7 @@ export const PARANAENSE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'davi-freitas-batista',
-    name: 'Davi Freitas Batista',
+    name: 'Ciro Formica',
     realInspiration: 'Generated',
     teamId: 'paranaense',
     position: 'MID',
@@ -411,7 +411,7 @@ export const PARANAENSE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'xande-rodrigues-ramos',
-    name: 'Xande Rodrigues Ramos',
+    name: 'Tevezio',
     realInspiration: 'Generated',
     teamId: 'paranaense',
     position: 'MID',
@@ -573,7 +573,7 @@ export const PARANAENSE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'kaio-pereira-costa',
-    name: 'Kaio Pereira Costa',
+    name: 'Nacho Insua',
     realInspiration: 'Generated',
     teamId: 'paranaense',
     position: 'ATT',

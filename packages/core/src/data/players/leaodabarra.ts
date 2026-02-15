@@ -48,7 +48,7 @@ export const LEAODABARRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'lucas-gomes-marques',
-    name: 'Lucas Gomes Marques',
+    name: 'Yuri Gallardo',
     nickname: 'Pato',
     realInspiration: 'Generated',
     teamId: 'leaodabarra',
@@ -89,7 +89,7 @@ export const LEAODABARRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'vinicius-cardoso-mendes',
-    name: 'Vinicius Cardoso Mendes',
+    name: 'Pablo Sosa',
     nickname: 'Teco',
     realInspiration: 'Generated',
     teamId: 'leaodabarra',
@@ -130,7 +130,7 @@ export const LEAODABARRA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'breno-pereira-cardoso',
-    name: 'Breno Pereira Cardoso',
+    name: 'Agustin Ponzio',
     nickname: 'Nando',
     realInspiration: 'Generated',
     teamId: 'leaodabarra',

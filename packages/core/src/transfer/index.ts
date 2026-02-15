@@ -843,9 +843,39 @@ export const FREE_AGENT_DISTRIBUTION: Record<Position, number> = {
 /** Percentage of free agents who are veterans vs younger rejects */
 export const VETERAN_FREE_AGENT_RATIO = 0.7;
 
-// Common first names for procedural generation
-const FIRST_NAMES = [
-  'João',
+// Keep Brazilian naming dominant, with a smaller LatAm-flavored slice.
+const BRAZILIAN_MONONYM_NAMES = [
+  'Juninho',
+  'Tiquinho',
+  'Pedrinho',
+  'Rafinha',
+  'Paulinho',
+  'Zezinho',
+  'Marquinhos',
+  'Duduzinho',
+  'Rivaldinho',
+  'Leozinho',
+  'Nandinho',
+  'Cacau',
+];
+
+const LATAM_MONONYM_NAMES = [
+  'Arrascaeta',
+  'Dallena',
+  'Canobbio',
+  'Veronel',
+  'Taglia',
+  'Riquela',
+  'Pisculi',
+  'Lodeiro',
+  'Tevezio',
+  'Saviola',
+  'Boselli',
+  'Montiel',
+];
+
+const BRAZILIAN_FIRST_NAMES = [
+  'Joao',
   'Pedro',
   'Lucas',
   'Gabriel',
@@ -860,31 +890,39 @@ const FIRST_NAMES = [
   'Marcos',
   'Roberto',
   'Carlos',
-  'André',
+  'Andre',
   'Fernando',
   'Ricardo',
   'Diego',
   'Leandro',
   'Marcelo',
-  'Alessandro',
   'Rodrigo',
   'Vinicius',
   'Paulo',
   'Henrique',
-  'Junior',
   'Sergio',
   'Antonio',
   'Miguel',
   'Leonardo',
   'Fabio',
-  'Claudio',
-  'Jorge',
   'Alex',
   'William',
 ];
 
-// Common last names for procedural generation
-const LAST_NAMES = [
+const LATAM_FIRST_NAMES = [
+  'Nico',
+  'Tomas',
+  'Enzo',
+  'Franco',
+  'Lauti',
+  'Ramiro',
+  'Matias',
+  'Facu',
+  'Julian',
+  'Mauro',
+];
+
+const BRAZILIAN_LAST_NAMES = [
   'Silva',
   'Santos',
   'Oliveira',
@@ -897,7 +935,7 @@ const LAST_NAMES = [
   'Ferreira',
   'Gomes',
   'Martins',
-  'Araújo',
+  'Araujo',
   'Barbosa',
   'Ribeiro',
   'Carvalho',
@@ -908,7 +946,6 @@ const LAST_NAMES = [
   'Correia',
   'Teixeira',
   'Nunes',
-  'Cavalcanti',
   'Monteiro',
   'Campos',
   'Vieira',
@@ -920,20 +957,90 @@ const LAST_NAMES = [
   'Pinto',
   'Castro',
   'Rocha',
-  'Moura',
-  'Bezerra',
   'Fonseca',
   'Melo',
-  'Borges',
+];
+
+const LATAM_LAST_NAMES = [
+  'Pereyra',
+  'Suarez',
+  'Villalba',
+  'Salcedo',
+  'Menendez',
+  'Cabrera',
+  'Veron',
+  'Duarte',
+  'Roldan',
+  'Mansilla',
+  'Diarte',
+  'Bogado',
+  'Gallardo',
+  'Ponzio',
+  'Benavidez',
+  'Saravia',
+  'Battaglia',
+  'Maidana',
+  'Correa',
 ];
 
 /**
  * Generate a random name for a free agent
  */
 function generatePlayerName(): string {
-  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  const isLatamProfile = Math.random() < 0.2;
+  const isMononym = Math.random() < 0.28;
+
+  if (isMononym) {
+    const pool = isLatamProfile
+      ? LATAM_MONONYM_NAMES
+      : BRAZILIAN_MONONYM_NAMES;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  const firstPool = isLatamProfile ? LATAM_FIRST_NAMES : BRAZILIAN_FIRST_NAMES;
+  const lastPool = isLatamProfile ? LATAM_LAST_NAMES : BRAZILIAN_LAST_NAMES;
+  const firstName = firstPool[Math.floor(Math.random() * firstPool.length)];
+  const lastName = lastPool[Math.floor(Math.random() * lastPool.length)];
   return `${firstName} ${lastName}`;
+}
+
+function generateUniquePlayerName(usedNames: Set<string>): string {
+  for (let attempt = 0; attempt < 128; attempt++) {
+    const candidate = generatePlayerName();
+    if (!usedNames.has(candidate)) {
+      usedNames.add(candidate);
+      return candidate;
+    }
+  }
+
+  // Deterministic fallback to guarantee uniqueness within the current batch.
+  const mononymPools = [BRAZILIAN_MONONYM_NAMES, LATAM_MONONYM_NAMES];
+  for (const pool of mononymPools) {
+    for (const mononym of pool) {
+      if (!usedNames.has(mononym)) {
+        usedNames.add(mononym);
+        return mononym;
+      }
+    }
+  }
+
+  const pairPools: Array<[string[], string[]]> = [
+    [BRAZILIAN_FIRST_NAMES, BRAZILIAN_LAST_NAMES],
+    [LATAM_FIRST_NAMES, LATAM_LAST_NAMES],
+  ];
+  for (const [firstPool, lastPool] of pairPools) {
+    for (const first of firstPool) {
+      for (const last of lastPool) {
+        const candidate = `${first} ${last}`;
+        if (!usedNames.has(candidate)) {
+          usedNames.add(candidate);
+          return candidate;
+        }
+      }
+    }
+  }
+
+  throw new Error('Unable to generate a unique free-agent name');
 }
 
 /**
@@ -1069,6 +1176,7 @@ export function generateFreeAgent(
   position: Position,
   isVeteran: boolean,
   currentSeason: number,
+  usedNames?: Set<string>,
 ): FreeAgentData {
   // Determine age and overall based on type
   let age: number;
@@ -1102,7 +1210,7 @@ export function generateFreeAgent(
 
   return {
     templateId,
-    name: generatePlayerName(),
+    name: usedNames ? generateUniquePlayerName(usedNames) : generatePlayerName(),
     nickname: null,
     age,
     nationality: 'Brazil',
@@ -1135,6 +1243,7 @@ export function generateInitialFreeAgents(
   currentSeason: number,
 ): FreeAgentData[] {
   const freeAgents: FreeAgentData[] = [];
+  const usedNames = new Set<string>();
 
   for (const position of ['GK', 'DEF', 'MID', 'ATT'] as Position[]) {
     const count = FREE_AGENT_DISTRIBUTION[position];
@@ -1142,7 +1251,9 @@ export function generateInitialFreeAgents(
 
     for (let i = 0; i < count; i++) {
       const isVeteran = i < veteranCount;
-      freeAgents.push(generateFreeAgent(position, isVeteran, currentSeason));
+      freeAgents.push(
+        generateFreeAgent(position, isVeteran, currentSeason, usedNames),
+      );
     }
   }
 

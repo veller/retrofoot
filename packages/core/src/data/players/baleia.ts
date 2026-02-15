@@ -8,7 +8,7 @@ import type { PlayerSeed } from './types';
 export const BALEIA_PLAYERS: PlayerSeed[] = [
   {
     templateId: 'marcos-santana-gomes',
-    name: 'Marcos Santana Gomes',
+    name: 'Ramiro Arostegui',
     nickname: 'Léo',
     realInspiration: 'Generated',
     teamId: 'baleia',
@@ -170,7 +170,7 @@ export const BALEIA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'luis-alves-dias',
-    name: 'Luis Alves Dias',
+    name: 'Thiago Menendez',
     nickname: 'Tche',
     realInspiration: 'Generated',
     teamId: 'baleia',
@@ -251,7 +251,7 @@ export const BALEIA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'pablo-pereira-rodrigues',
-    name: 'Pablo Pereira Rodrigues',
+    name: 'Canobbio',
     realInspiration: 'Generated',
     teamId: 'baleia',
     position: 'MID',
@@ -291,7 +291,7 @@ export const BALEIA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'fernando-marques-guimaraes',
-    name: 'Fernando Marques Guimarães',
+    name: 'Caio Cabrera',
     realInspiration: 'Generated',
     teamId: 'baleia',
     position: 'MID',
@@ -331,7 +331,7 @@ export const BALEIA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'rodrigo-alves-moraes',
-    name: 'Rodrigo Alves Moraes',
+    name: 'Lucas Veron',
     realInspiration: 'Generated',
     teamId: 'baleia',
     position: 'MID',
@@ -411,7 +411,7 @@ export const BALEIA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'kevin-marques-batista',
-    name: 'Kevin Marques Batista',
+    name: 'Veronel',
     realInspiration: 'Generated',
     teamId: 'baleia',
     position: 'MID',

@@ -49,7 +49,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'nathan-ferreira-rodrigues',
-    name: 'Nathan Ferreira Rodrigues',
+    name: 'Nico Pereyra',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'GK',
@@ -130,7 +130,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'marcos-gomes-martins',
-    name: 'Marcos Gomes Martins',
+    name: 'Tomas Suarez',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'DEF',
@@ -170,7 +170,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gabriel-rocha-marques',
-    name: 'Gabriel Rocha Marques',
+    name: 'Enzo Montiel',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'DEF',
@@ -250,7 +250,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'samuel-mendes-vieira',
-    name: 'Samuel Mendes Vieira',
+    name: 'Arrascaeta',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'MID',
@@ -330,7 +330,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'adriano-barbosa-nascimento',
-    name: 'Adriano Barbosa Nascimento',
+    name: 'Franco Villalba',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'MID',
@@ -370,7 +370,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'julio-lopes-moreira',
-    name: 'Julio Lopes Moreira',
+    name: 'Lauti Salcedo',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'MID',
@@ -490,7 +490,7 @@ export const ACMINEIRO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'bernardo-almeida-nunes',
-    name: 'Bernardo Almeida Nunes',
+    name: 'Dallena',
     realInspiration: 'Generated',
     teamId: 'acmineiro',
     position: 'ATT',

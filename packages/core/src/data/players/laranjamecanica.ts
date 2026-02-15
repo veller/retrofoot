@@ -48,7 +48,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'wesley-batista-pereira',
-    name: 'Wesley Batista Pereira',
+    name: 'Thiago Menendez',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
     position: 'GK',
@@ -168,7 +168,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'yago-batista-nunes',
-    name: 'Yago Batista Nunes',
+    name: 'Caio Cabrera',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
     position: 'DEF',
@@ -288,7 +288,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gustavo-lopes-machado',
-    name: 'Gustavo Lopes Machado',
+    name: 'Lucas Veron',
     nickname: 'Léo',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
@@ -329,7 +329,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'elias-mendes-lima',
-    name: 'Elias Mendes Lima',
+    name: 'Battia',
     nickname: 'Luan',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
@@ -450,7 +450,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'igor-araujo-nunes',
-    name: 'Igor Araujo Nunes',
+    name: 'Lodeiro',
     nickname: 'Edu',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
@@ -491,7 +491,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'victor-martins-pinto',
-    name: 'Victor Martins Pinto',
+    name: 'Bruno Duarte',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',
     position: 'ATT',
@@ -571,7 +571,7 @@ export const LARANJAMECANICA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'zico-santana-costa',
-    name: 'Zico Santana Costa',
+    name: 'Benitez',
     nickname: 'Kiko',
     realInspiration: 'Generated',
     teamId: 'laranjamecanica',

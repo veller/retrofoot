@@ -88,7 +88,7 @@ export const CABULOSO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'julio-cardoso-santos',
-    name: 'Julio Cardoso Santos',
+    name: 'Bruno Duarte',
     realInspiration: 'Generated',
     teamId: 'cabuloso',
     position: 'DEF',
@@ -249,7 +249,7 @@ export const CABULOSO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'matheus-oliveira-carvalho',
-    name: 'Matheus Oliveira Carvalho',
+    name: 'Matias Roldan',
     realInspiration: 'Generated',
     teamId: 'cabuloso',
     position: 'MID',
@@ -289,7 +289,7 @@ export const CABULOSO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'igor-lopes-fernandes',
-    name: 'Igor Lopes Fernandes',
+    name: 'Facu Mansilla',
     nickname: 'Cris',
     realInspiration: 'Generated',
     teamId: 'cabuloso',
@@ -451,7 +451,7 @@ export const CABULOSO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'caique-ramos-lima',
-    name: 'Caique Ramos Lima',
+    name: 'Diego Diarte',
     realInspiration: 'Generated',
     teamId: 'cabuloso',
     position: 'ATT',
@@ -531,7 +531,7 @@ export const CABULOSO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'fabio-marques-castro',
-    name: 'Fabio Marques Castro',
+    name: 'Riquela',
     realInspiration: 'Generated',
     teamId: 'cabuloso',
     position: 'ATT',

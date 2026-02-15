@@ -48,7 +48,7 @@ export const MENGALVIO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'tomas-alves-castro',
-    name: 'Tomas Alves Castro',
+    name: 'Dario Funes',
     realInspiration: 'Generated',
     teamId: 'mengalvio',
     position: 'GK',
@@ -169,7 +169,7 @@ export const MENGALVIO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'zeca-martins-pinto',
-    name: 'Zeca Martins Pinto',
+    name: 'Julian Canales',
     realInspiration: 'Generated',
     teamId: 'mengalvio',
     position: 'DEF',
@@ -250,7 +250,7 @@ export const MENGALVIO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'bernardo-campos-marques',
-    name: 'Bernardo Campos Marques',
+    name: 'Mauro Saravia',
     realInspiration: 'Generated',
     teamId: 'mengalvio',
     position: 'MID',
@@ -410,7 +410,7 @@ export const MENGALVIO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'hugo-araujo-cardoso',
-    name: 'Hugo Araujo Cardoso',
+    name: 'Renzo Battaglia',
     realInspiration: 'Generated',
     teamId: 'mengalvio',
     position: 'MID',
@@ -531,7 +531,7 @@ export const MENGALVIO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'xande-barbosa-goncalves',
-    name: 'Xande Barbosa Gonçalves',
+    name: 'Emilio Cardozo',
     realInspiration: 'Generated',
     teamId: 'mengalvio',
     position: 'ATT',

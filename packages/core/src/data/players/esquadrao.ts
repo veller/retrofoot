@@ -8,7 +8,7 @@ import type { PlayerSeed } from './types';
 export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   {
     templateId: 'kaio-lopes-melo',
-    name: 'Kaio Lopes Melo',
+    name: 'Emilio Cardozo',
     nickname: 'Fio',
     realInspiration: 'Generated',
     teamId: 'esquadrao',
@@ -49,7 +49,7 @@ export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'luis-vieira-rodrigues',
-    name: 'Luis Vieira Rodrigues',
+    name: 'Rafa Maidana',
     realInspiration: 'Generated',
     teamId: 'esquadrao',
     position: 'GK',
@@ -249,7 +249,7 @@ export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'wallace-teixeira-andrade',
-    name: 'Wallace Teixeira Andrade',
+    name: 'Leo Melano',
     nickname: 'Japa',
     realInspiration: 'Generated',
     teamId: 'esquadrao',
@@ -490,7 +490,7 @@ export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'yago-cardoso-moraes',
-    name: 'Yago Cardoso Moraes',
+    name: 'Ivan Balerdi',
     realInspiration: 'Generated',
     teamId: 'esquadrao',
     position: 'ATT',
@@ -530,7 +530,7 @@ export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'fabio-rocha-campos',
-    name: 'Fabio Rocha Campos',
+    name: 'Galego',
     realInspiration: 'Generated',
     teamId: 'esquadrao',
     position: 'ATT',
@@ -570,7 +570,7 @@ export const ESQUADRAO_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'tiago-nascimento-pereira',
-    name: 'Tiago Nascimento Pereira',
+    name: 'Ciro Formica',
     nickname: 'Kaka',
     realInspiration: 'Generated',
     teamId: 'esquadrao',

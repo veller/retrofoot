@@ -130,7 +130,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'caio-goncalves-rodrigues',
-    name: 'Caio Gonçalves Rodrigues',
+    name: 'Nacho Insua',
     nickname: 'Roni',
     realInspiration: 'Generated',
     teamId: 'flordelince',
@@ -211,7 +211,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'victor-machado-nascimento',
-    name: 'Victor Machado Nascimento',
+    name: 'Gabi Correa',
     nickname: 'Juca',
     realInspiration: 'Generated',
     teamId: 'flordelince',
@@ -332,7 +332,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'lucas-barbosa-ramos',
-    name: 'Lucas Barbosa Ramos',
+    name: 'Nico Pereyra',
     nickname: 'Dodô',
     realInspiration: 'Generated',
     teamId: 'flordelince',
@@ -454,7 +454,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'elias-machado-moraes',
-    name: 'Elias Machado Moraes',
+    name: 'Taglia',
     nickname: 'Japa',
     realInspiration: 'Generated',
     teamId: 'flordelince',
@@ -495,7 +495,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'otavio-monteiro-ribeiro',
-    name: 'Otavio Monteiro Ribeiro',
+    name: 'Tomas Suarez',
     realInspiration: 'Generated',
     teamId: 'flordelince',
     position: 'ATT',
@@ -535,7 +535,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'rafael-ramos-marques',
-    name: 'Rafael Ramos Marques',
+    name: 'Buonan',
     realInspiration: 'Generated',
     teamId: 'flordelince',
     position: 'ATT',
@@ -575,7 +575,7 @@ export const FLORDELINCE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'rafael-lima-correia',
-    name: 'Rafael Lima Correia',
+    name: 'Enzo Montiel',
     nickname: 'Pepe',
     realInspiration: 'Generated',
     teamId: 'flordelince',

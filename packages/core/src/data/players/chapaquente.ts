@@ -48,7 +48,7 @@ export const CHAPAQUENTE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'marcio-ribeiro-souza',
-    name: 'Marcio Ribeiro Souza',
+    name: 'Mateo Bogado',
     realInspiration: 'Generated',
     teamId: 'chapaquente',
     position: 'GK',
@@ -290,7 +290,7 @@ export const CHAPAQUENTE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'caique-oliveira-nunes',
-    name: 'Caique Oliveira Nunes',
+    name: 'Sorin',
     realInspiration: 'Generated',
     teamId: 'chapaquente',
     position: 'MID',
@@ -492,7 +492,7 @@ export const CHAPAQUENTE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'marcio-gomes-dias',
-    name: 'Marcio Gomes Dias',
+    name: 'Yuri Gallardo',
     realInspiration: 'Generated',
     teamId: 'chapaquente',
     position: 'ATT',
@@ -572,7 +572,7 @@ export const CHAPAQUENTE_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'nathan-santos-mendes',
-    name: 'Nathan Santos Mendes',
+    name: 'Montiel',
     realInspiration: 'Generated',
     teamId: 'chapaquente',
     position: 'ATT',

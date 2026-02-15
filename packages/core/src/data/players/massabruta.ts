@@ -210,7 +210,7 @@ export const MASSABRUTA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'caique-moraes-lima',
-    name: 'Caique Moraes Lima',
+    name: 'Kevin Ledesma',
     nickname: 'Zé',
     realInspiration: 'Generated',
     teamId: 'massabruta',
@@ -251,7 +251,7 @@ export const MASSABRUTA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'matheus-ferreira-goncalves',
-    name: 'Matheus Ferreira Gonçalves',
+    name: 'Santi Benavidez',
     nickname: 'Raí',
     realInspiration: 'Generated',
     teamId: 'massabruta',
@@ -372,7 +372,7 @@ export const MASSABRUTA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'gustavo-silva-ramos',
-    name: 'Gustavo Silva Ramos',
+    name: 'Cautero',
     nickname: 'Teco',
     realInspiration: 'Generated',
     teamId: 'massabruta',
@@ -453,7 +453,7 @@ export const MASSABRUTA_PLAYERS: PlayerSeed[] = [
   },
   {
     templateId: 'paulo-castro-machado',
-    name: 'Paulo Castro Machado',
+    name: 'Gallardo',
     realInspiration: 'Generated',
     teamId: 'massabruta',
     position: 'ATT',
