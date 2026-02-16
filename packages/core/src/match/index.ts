@@ -38,8 +38,6 @@ import {
   LATE_GAME_FITNESS_MINUTE,
   LIVE_ENERGY_DRAIN_BASE_PER_MINUTE,
   ENERGY_PENALTY_MAX,
-  CORNER_GOAL_RATE,
-  FREE_KICK_GOAL_RATE,
   PENALTY_BASE_CONVERSION,
   PENALTY_MIN_CONVERSION,
   PENALTY_MAX_CONVERSION,
@@ -124,6 +122,10 @@ const AI_SUB_MINUTE_SITUATIONAL = 60;
 const AI_SUB_URGENT_ENERGY = 35;
 const AI_SUB_SITUATIONAL_ENERGY = 45;
 const AI_SUB_PREFERRED_BENCH_ENERGY = 55;
+const AI_SUB_MIN_INCOMING_ENERGY_FATIGUE = 50;
+const AI_SUB_MIN_INCOMING_ENERGY_TACTICAL = 58;
+const AI_SUB_MIN_ENERGY_GAIN_FATIGUE = 8;
+const AI_SUB_MIN_ENERGY_GAIN_TACTICAL = 12;
 const AI_SUB_MAX = 5;
 let traceEventCounter = 0;
 
@@ -238,6 +240,7 @@ function pickAssister(
   players: Player[],
   tactics: Tactics,
   scorerId: string,
+  liveEnergyByPlayerId?: Record<string, number>,
 ): Player | undefined {
   const lineupPlayers = players.filter(
     (p) =>
@@ -248,7 +251,11 @@ function pickAssister(
 
   // Weight by passing and vision
   const weights = lineupPlayers.map(
-    (p) => p.attributes.passing + p.attributes.vision,
+    (p) => {
+      const liveEnergy = liveEnergyByPlayerId?.[p.id] ?? p.energy ?? 100;
+      const fatigueFactor = 1 - calculateEnergyModifier(liveEnergy) * 0.9;
+      return Math.max(1, (p.attributes.passing + p.attributes.vision) * fatigueFactor);
+    },
   );
   const idx = weightedRandom(weights);
   return lineupPlayers[idx];
@@ -258,6 +265,7 @@ function pickAssister(
 function pickOwnGoalPlayer(
   players: Player[],
   tactics: Tactics,
+  liveEnergyByPlayerId?: Record<string, number>,
 ): Player | undefined {
   const lineupPlayers = players.filter(
     (p) =>
@@ -275,7 +283,11 @@ function pickOwnGoalPlayer(
   }
 
   // Weight inversely by composure (lower composure = more likely OG)
-  const weights = lineupPlayers.map((p) => 100 - p.attributes.composure);
+  const weights = lineupPlayers.map((p) => {
+    const liveEnergy = liveEnergyByPlayerId?.[p.id] ?? p.energy ?? 100;
+    const fatigueErrorRisk = calculateEnergyModifier(liveEnergy) * 85;
+    return 100 - p.attributes.composure + fatigueErrorRisk;
+  });
   const idx = weightedRandom(weights);
   return lineupPlayers[idx];
 }
@@ -354,13 +366,12 @@ export function calculateLiveEnergyDrainPerMinute(
 export function calculateEnergyModifier(energy: number): number {
   const e = clamp(energy, 0, 100);
   if (e >= 85) return 0;
-  if (e >= 70) return ((85 - e) / 15) * 0.06;
-  if (e >= 55) return 0.06 + ((70 - e) / 15) * 0.1;
-  if (e >= 40) return 0.16 + ((55 - e) / 15) * 0.12;
-  return Math.min(
-    ENERGY_PENALTY_MAX,
-    0.28 + ((40 - e) / 40) * (ENERGY_PENALTY_MAX - 0.28),
-  );
+  if (e >= 70) return ((85 - e) / 15) * 0.08;
+  if (e >= 55) return 0.08 + ((70 - e) / 15) * 0.2;
+  if (e >= 40) return 0.28 + ((55 - e) / 15) * 0.22;
+  if (e >= 25) return 0.5 + ((40 - e) / 15) * 0.18;
+  if (e >= 10) return 0.68 + ((25 - e) / 15) * 0.14;
+  return Math.min(ENERGY_PENALTY_MAX, 0.82 + ((10 - e) / 10) * 0.08);
 }
 
 // Calculate striker streak modifier based on recent performance
@@ -575,7 +586,11 @@ export function calculateChanceSuccessForTesting(
 }
 
 // Pick a random player from lineup (weighted by relevant attribute)
-function pickScorer(players: Player[], tactics: Tactics): Player | undefined {
+function pickScorer(
+  players: Player[],
+  tactics: Tactics,
+  liveEnergyByPlayerId?: Record<string, number>,
+): Player | undefined {
   const lineupPlayers = players.filter((p) => tactics.lineup.includes(p.id));
   // Attackers and midfielders can score
   const attackers = lineupPlayers.filter((p) =>
@@ -583,9 +598,11 @@ function pickScorer(players: Player[], tactics: Tactics): Player | undefined {
   );
   if (attackers.length === 0) return lineupPlayers[0];
 
-  const weights = attackers.map(
-    (p) => p.attributes.shooting + p.attributes.positioning,
-  );
+  const weights = attackers.map((p) => {
+    const liveEnergy = liveEnergyByPlayerId?.[p.id] ?? p.energy ?? 100;
+    const fatigueFactor = 1 - calculateEnergyModifier(liveEnergy) * 0.92;
+    return Math.max(1, (p.attributes.shooting + p.attributes.positioning) * fatigueFactor);
+  });
   const idx = weightedRandom(weights);
   return attackers[idx];
 }
@@ -653,7 +670,7 @@ function calculatePenaltyConversion(
   const liveEnergy =
     options?.attackingLiveEnergyByPlayerId?.[taker.id] ?? taker.energy ?? 100;
   const fatiguePenalty =
-    calculateEnergyModifier(liveEnergy) * 0.15 +
+    calculateEnergyModifier(liveEnergy) * 0.45 +
     calculateFitnessModifier(taker.fitness ?? 100, minute) * 0.08;
   const formModifier = calculateFormModifier(taker.form?.form ?? NEUTRAL_FORM) * 0.18;
 
@@ -932,6 +949,12 @@ function evaluateAiSubstitutions(
         state.minute >= AI_SUB_MINUTE_SITUATIONAL &&
         outgoingEnergy <= AI_SUB_SITUATIONAL_ENERGY;
       if (!isUrgent && !isSituational) continue;
+      const reason: 'fatigue' | 'tactical' | 'protect_lead' =
+        isUrgent
+          ? 'fatigue'
+          : scoreLead > 0 && state.minute >= 70
+            ? 'protect_lead'
+            : 'tactical';
 
       const outgoingScore = calculateProjectedPlayerStrength(
         outgoing,
@@ -952,6 +975,20 @@ function evaluateAiSubstitutions(
             };
           })
           .filter((entry) => entry.score > outgoingScore)
+          .filter((entry) => {
+            const minIncoming =
+              reason === 'fatigue'
+                ? AI_SUB_MIN_INCOMING_ENERGY_FATIGUE
+                : AI_SUB_MIN_INCOMING_ENERGY_TACTICAL;
+            const minGain =
+              reason === 'fatigue'
+                ? AI_SUB_MIN_ENERGY_GAIN_FATIGUE
+                : AI_SUB_MIN_ENERGY_GAIN_TACTICAL;
+            return (
+              entry.energy >= minIncoming &&
+              entry.energy - outgoingEnergy >= minGain
+            );
+          })
           .sort((a, b) => {
             const aPreferred = a.energy >= AI_SUB_PREFERRED_BENCH_ENERGY ? 1 : 0;
             const bPreferred = b.energy >= AI_SUB_PREFERRED_BENCH_ENERGY ? 1 : 0;
@@ -990,13 +1027,6 @@ function evaluateAiSubstitutions(
         });
         continue;
       }
-
-      const reason: 'fatigue' | 'tactical' | 'protect_lead' =
-        isUrgent
-          ? 'fatigue'
-          : scoreLead > 0 && state.minute >= 70
-            ? 'protect_lead'
-            : 'tactical';
 
       const result = makeSubstitution(state, team, outgoing.id, incoming.id, {
         reason,
@@ -1048,19 +1078,162 @@ function pickSetPieceScorer(
   players: Player[],
   tactics: Tactics,
   isCorner: boolean,
+  liveEnergyByPlayerId?: Record<string, number>,
 ): Player | undefined {
   const lineupPlayers = players.filter((p) => tactics.lineup.includes(p.id));
   const outfield = lineupPlayers.filter((p) => p.position !== 'GK');
   if (outfield.length === 0) return lineupPlayers[0];
 
   // For corners, weight by heading + positioning; for free kicks, by shooting
-  const weights = outfield.map((p) =>
-    isCorner
+  const weights = outfield.map((p) => {
+    const liveEnergy = liveEnergyByPlayerId?.[p.id] ?? p.energy ?? 100;
+    const fatigueFactor = 1 - calculateEnergyModifier(liveEnergy) * 0.88;
+    const base = isCorner
       ? p.attributes.heading + p.attributes.positioning
-      : p.attributes.shooting + p.attributes.composure,
-  );
+      : p.attributes.shooting + p.attributes.composure;
+    return Math.max(1, base * fatigueFactor);
+  });
   const idx = weightedRandom(weights);
   return outfield[idx];
+}
+
+function getAverageLiveEnergy(
+  lineup: Player[],
+  liveEnergyByPlayerId: Record<string, number>,
+): number {
+  if (lineup.length === 0) return 100;
+  const total = lineup.reduce(
+    (sum, player) => sum + (liveEnergyByPlayerId[player.id] ?? player.energy ?? 100),
+    0,
+  );
+  return total / lineup.length;
+}
+
+function calculateCornerGoalChance(
+  options: {
+    attackingPlayers: Player[];
+    defendingPlayers: Player[];
+    attackingTactics: Tactics;
+    defendingTactics: Tactics;
+    attackingLiveEnergyByPlayerId: Record<string, number>;
+    defendingLiveEnergyByPlayerId: Record<string, number>;
+    defendingGK?: Player;
+  },
+): number {
+  const attackingOutfield = options.attackingPlayers.filter(
+    (p) => options.attackingTactics.lineup.includes(p.id) && p.position !== 'GK',
+  );
+  const defendingOutfield = options.defendingPlayers.filter(
+    (p) => options.defendingTactics.lineup.includes(p.id) && p.position !== 'GK',
+  );
+  if (attackingOutfield.length === 0 || defendingOutfield.length === 0) return 0.03;
+
+  const attackAerial = attackingOutfield.reduce((sum, player) => {
+    const energy = options.attackingLiveEnergyByPlayerId[player.id] ?? player.energy ?? 100;
+    const fatigueFactor = 1 - calculateEnergyModifier(energy) * 0.85;
+    const skill = player.attributes.heading * 0.65 + player.attributes.positioning * 0.35;
+    return sum + skill * fatigueFactor;
+  }, 0) / attackingOutfield.length;
+
+  const defenceAerial = defendingOutfield.reduce((sum, player) => {
+    const energy = options.defendingLiveEnergyByPlayerId[player.id] ?? player.energy ?? 100;
+    const fatigueFactor = 1 - calculateEnergyModifier(energy) * 0.65;
+    const skill =
+      player.attributes.heading * 0.25 +
+      player.attributes.positioning * 0.35 +
+      player.attributes.tackling * 0.4;
+    return sum + skill * fatigueFactor;
+  }, 0) / defendingOutfield.length;
+
+  const gkResistance = options.defendingGK
+    ? (options.defendingGK.attributes.handling * 0.55 +
+        options.defendingGK.attributes.reflexes * 0.45) *
+      (1 -
+        calculateEnergyModifier(
+          options.defendingLiveEnergyByPlayerId[options.defendingGK.id] ??
+            options.defendingGK.energy ??
+            100,
+        ) *
+          0.45)
+    : 67;
+
+  const attackingEnergyAvg = getAverageLiveEnergy(
+    attackingOutfield,
+    options.attackingLiveEnergyByPlayerId,
+  );
+  const defendingEnergyAvg = getAverageLiveEnergy(
+    defendingOutfield,
+    options.defendingLiveEnergyByPlayerId,
+  );
+  const attackBoost = (100 - calculateEnergyModifier(attackingEnergyAvg) * 100) / 100;
+  const defenceDrop = calculateEnergyModifier(defendingEnergyAvg);
+
+  const base =
+    0.028 +
+    ((attackAerial - (defenceAerial * 0.72 + gkResistance * 0.28)) / 100) * 0.07 +
+    (attackBoost - 0.6) * 0.03 +
+    defenceDrop * 0.03;
+
+  return clamp(base, 0.008, 0.075);
+}
+
+function calculateFreeKickGoalChance(
+  options: {
+    taker?: Player;
+    defendingPlayers: Player[];
+    defendingTactics: Tactics;
+    attackingLiveEnergyByPlayerId: Record<string, number>;
+    defendingLiveEnergyByPlayerId: Record<string, number>;
+    defendingGK?: Player;
+  },
+): number {
+  const taker = options.taker;
+  if (!taker) return 0.05;
+  const takerEnergy =
+    options.attackingLiveEnergyByPlayerId[taker.id] ?? taker.energy ?? 100;
+  const takerFatigue = calculateEnergyModifier(takerEnergy);
+  const takerSkill =
+    (taker.attributes.shooting * 0.62 + taker.attributes.composure * 0.38) *
+    (1 - takerFatigue * 0.9);
+
+  const defendingOutfield = options.defendingPlayers.filter(
+    (p) => options.defendingTactics.lineup.includes(p.id) && p.position !== 'GK',
+  );
+  const wallSkill =
+    defendingOutfield.length === 0
+      ? 70
+      : defendingOutfield.reduce((sum, player) => {
+          const energy =
+            options.defendingLiveEnergyByPlayerId[player.id] ?? player.energy ?? 100;
+          const fatigueFactor = 1 - calculateEnergyModifier(energy) * 0.6;
+          return sum + (player.attributes.positioning * 0.6 + player.attributes.tackling * 0.4) * fatigueFactor;
+        }, 0) / defendingOutfield.length;
+
+  const gkSkill = options.defendingGK
+    ? (options.defendingGK.attributes.diving * 0.5 +
+        options.defendingGK.attributes.reflexes * 0.35 +
+        options.defendingGK.attributes.handling * 0.15) *
+      (1 -
+        calculateEnergyModifier(
+          options.defendingLiveEnergyByPlayerId[options.defendingGK.id] ??
+            options.defendingGK.energy ??
+            100,
+        ) *
+          0.45)
+    : 70;
+
+  const defenceEnergyAvg = getAverageLiveEnergy(
+    defendingOutfield,
+    options.defendingLiveEnergyByPlayerId,
+  );
+  const defenceDrop = calculateEnergyModifier(defenceEnergyAvg);
+
+  const base =
+    0.04 +
+    ((takerSkill - (wallSkill * 0.35 + gkSkill * 0.65)) / 100) * 0.11 +
+    defenceDrop * 0.04;
+
+  return clamp(base, 0.015, 0.12);
 }
 
 function pickFoulerForCard(
@@ -1309,14 +1482,18 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
     attackingTeam === 'home'
       ? state.awayTacticalImpact
       : state.homeTacticalImpact;
+  const attackingStrength = attackingTeam === 'home' ? homeStrength : awayStrength;
+  const defendingStrength = attackingTeam === 'home' ? awayStrength : homeStrength;
+  const strengthDiff = attackingStrength - defendingStrength;
 
   const eventProbability = Math.max(
-    0.05,
+    0.04,
     Math.min(
-      0.35,
+      0.33,
       EVENT_PROBABILITY_PER_MINUTE +
-        attackingImpact.creation * 0.2 -
-        defendingImpact.prevention * 0.1,
+        attackingImpact.creation * 0.16 -
+        defendingImpact.prevention * 0.08 +
+        strengthDiff * 0.0012,
     ),
   );
   emitTrace(config, {
@@ -1329,6 +1506,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       baseProbability: EVENT_PROBABILITY_PER_MINUTE,
       attackingCreation: attackingImpact.creation,
       defendingPrevention: defendingImpact.prevention,
+      strengthDiff: Math.round(strengthDiff * 100) / 100,
     },
     computed: {
       clampedProbability: Math.round(eventProbability * 1000) / 1000,
@@ -1349,7 +1527,11 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
 
   if (eventRoll < EVENT_THRESHOLD_ATTACKING_CHANCE) {
     // Attacking chance - pick scorer first to factor into success calculation
-    const scorer = pickScorer(attackingPlayers, attackingTactics);
+    const scorer = pickScorer(
+      attackingPlayers,
+      attackingTactics,
+      attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+    );
 
     const successChance = calculateChanceSuccess(
       attackingPlayers,
@@ -1404,6 +1586,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
         const ownGoalPlayer = pickOwnGoalPlayer(
           defendingPlayers,
           defendingTactics,
+          attackingTeam === 'home' ? state.awayLiveEnergy : state.homeLiveEnergy,
         );
         if (attackingTeam === 'home') {
           state.homeScore++;
@@ -1435,6 +1618,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
             attackingPlayers,
             attackingTactics,
             scorer.id,
+            attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
           );
         }
 
@@ -1459,7 +1643,7 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       }
     } else {
       // Chance missed
-      const shooter = pickScorer(attackingPlayers, attackingTactics);
+      const shooter = scorer;
       state.events.push({
         minute: state.minute,
         type: 'chance_missed',
@@ -1556,12 +1740,24 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       description: `Corner kick for ${teamObj.name}`,
     });
 
-    // Set piece goal chance from corner
-    if (random() < CORNER_GOAL_RATE) {
+    // Set-piece goal chance from corner using tactical quality + live fatigue.
+    const cornerGoalChance = calculateCornerGoalChance({
+      attackingPlayers,
+      defendingPlayers,
+      attackingTactics,
+      defendingTactics,
+      attackingLiveEnergyByPlayerId:
+        attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+      defendingLiveEnergyByPlayerId:
+        attackingTeam === 'home' ? state.awayLiveEnergy : state.homeLiveEnergy,
+      defendingGK: defendingPlayers.find((p) => p.position === 'GK'),
+    });
+    if (random() < cornerGoalChance) {
       const scorer = pickSetPieceScorer(
         attackingPlayers,
         attackingTactics,
         true,
+        attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
       );
       if (attackingTeam === 'home') {
         state.homeScore++;
@@ -1588,13 +1784,25 @@ function simulateMinute(state: MatchState, config: MatchConfig): void {
       description: `Free kick in a dangerous position for ${teamObj.name}`,
     });
 
-    // Set piece goal chance from free kick
-    if (random() < FREE_KICK_GOAL_RATE) {
-      const scorer = pickSetPieceScorer(
-        attackingPlayers,
-        attackingTactics,
-        false,
-      );
+    const freeKickTaker = pickSetPieceScorer(
+      attackingPlayers,
+      attackingTactics,
+      false,
+      attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+    );
+    const freeKickGoalChance = calculateFreeKickGoalChance({
+      taker: freeKickTaker,
+      defendingPlayers,
+      defendingTactics,
+      attackingLiveEnergyByPlayerId:
+        attackingTeam === 'home' ? state.homeLiveEnergy : state.awayLiveEnergy,
+      defendingLiveEnergyByPlayerId:
+        attackingTeam === 'home' ? state.awayLiveEnergy : state.homeLiveEnergy,
+      defendingGK: defendingPlayers.find((p) => p.position === 'GK'),
+    });
+    // Set-piece goal chance from free kick
+    if (random() < freeKickGoalChance) {
+      const scorer = freeKickTaker;
       if (attackingTeam === 'home') {
         state.homeScore++;
       } else {

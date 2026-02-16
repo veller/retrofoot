@@ -32,13 +32,13 @@ export const LATE_GAME_FITNESS_MINUTE = 60;
 
 // Energy (match fatigue)
 export const LIVE_ENERGY_DRAIN_BASE_PER_MINUTE = 0.14;
-export const ENERGY_PENALTY_MAX = 0.4;
+export const ENERGY_PENALTY_MAX = 0.9;
 
 // Set pieces
 export const CORNER_GOAL_RATE = 0.03;
 export const FREE_KICK_GOAL_RATE = 0.05;
 export const PENALTY_BASE_CONVERSION = 0.78;
-export const PENALTY_MIN_CONVERSION = 0.6;
+export const PENALTY_MIN_CONVERSION = 0.5;
 export const PENALTY_MAX_CONVERSION = 0.92;
 
 // Red cards

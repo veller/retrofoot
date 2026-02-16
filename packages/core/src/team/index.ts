@@ -19,7 +19,7 @@ export const FORMATION_OPTIONS: FormationType[] = [
 
 export const DEFAULT_FORMATION: FormationType = '4-3-3';
 export const MIN_FITNESS_FOR_AVAILABILITY = 50;
-const AI_STARTER_HARD_FLOOR = 35;
+const AI_STARTER_HARD_FLOOR = 50;
 
 export interface FormationAvailabilityCounts {
   GK: number;

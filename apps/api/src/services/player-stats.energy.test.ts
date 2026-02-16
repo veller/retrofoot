@@ -19,15 +19,37 @@ const mediumRecovery = calculateRoundEnergyRecovery({
   minutesPlayed: 60,
   age: 27,
   stamina: 70,
+  currentEnergy: 70,
 });
 const heavyRecovery = calculateRoundEnergyRecovery({
   minutesPlayed: 90,
   age: 27,
   stamina: 70,
+  currentEnergy: 70,
+});
+const lightRecovery = calculateRoundEnergyRecovery({
+  minutesPlayed: 30,
+  age: 27,
+  stamina: 70,
+  currentEnergy: 70,
+});
+const dnpSameBaseline = calculateRoundEnergyRecovery({
+  minutesPlayed: 0,
+  age: 27,
+  stamina: 70,
+  currentEnergy: 70,
 });
 assert(
   heavyRecovery < mediumRecovery,
   'Players should recover less after heavy minutes',
+);
+assert(
+  mediumRecovery < lightRecovery,
+  'Recovery should be higher after lighter workloads',
+);
+assert(
+  lightRecovery < dnpSameBaseline,
+  'Resting should recover more than playing minutes',
 );
 
 const youngFitRecovery = calculateRoundEnergyRecovery({
@@ -90,4 +112,21 @@ const age37LowStamina = calculateRoundEnergyRecovery({
 assert(
   age31HighStamina > age37LowStamina,
   'Recovery above 30 should decline with age and improve with stamina',
+);
+
+const playedPrime = calculateRoundEnergyRecovery({
+  minutesPlayed: 75,
+  age: 27,
+  stamina: 75,
+  currentEnergy: 70,
+});
+const playedOlderLowStamina = calculateRoundEnergyRecovery({
+  minutesPlayed: 75,
+  age: 36,
+  stamina: 52,
+  currentEnergy: 70,
+});
+assert(
+  playedOlderLowStamina < playedPrime,
+  'For equal workload, older low-stamina players should recover less',
 );

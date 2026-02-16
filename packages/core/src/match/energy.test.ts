@@ -8,6 +8,7 @@ import {
   createMatchState,
   makeSubstitution,
   pickPenaltyTakerForTesting,
+  simulateMatch,
   simulateMatchStep,
 } from './index';
 import { createDefaultForm, type Player, type Team, type Tactics } from '../types';
@@ -16,7 +17,12 @@ import {
   EVENT_THRESHOLD_YELLOW_CARD,
 } from './constants';
 
-function makePlayer(id: string, position: Player['position'], energy: number): Player {
+function makePlayer(
+  id: string,
+  position: Player['position'],
+  energy: number,
+  skill = 70,
+): Player {
   return {
     id,
     name: id,
@@ -25,21 +31,21 @@ function makePlayer(id: string, position: Player['position'], energy: number): P
     position,
     preferredFoot: 'right',
     attributes: {
-      speed: 70,
-      strength: 70,
-      stamina: 70,
-      shooting: 70,
-      passing: 70,
-      dribbling: 70,
-      heading: 70,
-      tackling: 70,
-      positioning: 70,
-      vision: 70,
-      composure: 70,
-      aggression: 70,
-      reflexes: 70,
-      handling: 70,
-      diving: 70,
+      speed: skill,
+      strength: skill,
+      stamina: skill,
+      shooting: skill,
+      passing: skill,
+      dribbling: skill,
+      heading: skill,
+      tackling: skill,
+      positioning: skill,
+      vision: skill,
+      composure: skill,
+      aggression: skill,
+      reflexes: skill,
+      handling: skill,
+      diving: skill,
     },
     potential: 80,
     morale: 70,
@@ -164,6 +170,95 @@ function setupMatch(): { config: MatchConfig; state: MatchState } {
   return { config, state: createMatchState(config) };
 }
 
+function withSeededRandom<T>(seed: number, run: () => T): T {
+  let state = seed >>> 0;
+  const randomSpy = vi.spyOn(Math, 'random');
+  randomSpy.mockImplementation(() => {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 0x1_0000_0000;
+  });
+  try {
+    return run();
+  } finally {
+    randomSpy.mockRestore();
+  }
+}
+
+function applyTeamProfile(team: Team, tactics: Tactics, skill: number, energy: number): void {
+  const lineupIds = new Set(tactics.lineup);
+  for (const player of team.players) {
+    if (!lineupIds.has(player.id)) continue;
+    player.energy = energy;
+    player.attributes.speed = skill;
+    player.attributes.strength = skill;
+    player.attributes.stamina = skill;
+    player.attributes.shooting = skill;
+    player.attributes.passing = skill;
+    player.attributes.dribbling = skill;
+    player.attributes.heading = skill;
+    player.attributes.tackling = skill;
+    player.attributes.positioning = skill;
+    player.attributes.vision = skill;
+    player.attributes.composure = skill;
+    player.attributes.aggression = skill;
+    player.attributes.reflexes = skill;
+    player.attributes.handling = skill;
+    player.attributes.diving = skill;
+  }
+}
+
+function runScenario(options: {
+  runs: number;
+  homeSkill: number;
+  awaySkill: number;
+  homeEnergy: number;
+  awayEnergy: number;
+  baseSeed: number;
+}): {
+  homeWins: number;
+  awayWins: number;
+  draws: number;
+  homeCards: number;
+  awayCards: number;
+} {
+  let homeWins = 0;
+  let awayWins = 0;
+  let draws = 0;
+  let homeCards = 0;
+  let awayCards = 0;
+
+  for (let i = 0; i < options.runs; i++) {
+    const home = makeTeam(`hs-${i}`);
+    const away = makeTeam(`as-${i}`);
+    applyTeamProfile(home.team, home.tactics, options.homeSkill, options.homeEnergy);
+    applyTeamProfile(away.team, away.tactics, options.awaySkill, options.awayEnergy);
+
+    const result = withSeededRandom(options.baseSeed + i, () =>
+      simulateMatch({
+        homeTeam: home.team,
+        awayTeam: away.team,
+        homeTactics: home.tactics,
+        awayTactics: away.tactics,
+        homeControl: 'human',
+        awayControl: 'human',
+        neutralVenue: true,
+      }),
+    );
+
+    if (result.homeScore > result.awayScore) homeWins++;
+    else if (result.homeScore < result.awayScore) awayWins++;
+    else draws++;
+
+    for (const event of result.events) {
+      if (event.type !== 'yellow_card' && event.type !== 'red_card') continue;
+      if (event.team === 'home') homeCards++;
+      if (event.team === 'away') awayCards++;
+    }
+  }
+
+  return { homeWins, awayWins, draws, homeCards, awayCards };
+}
+
 describe('energy match behavior', () => {
   it('uses stronger live drain multipliers', () => {
     const young = makePlayer('young', 'MID', 100);
@@ -182,11 +277,13 @@ describe('energy match behavior', () => {
 
   it('uses threshold penalty curve breakpoints', () => {
     expect(calculateEnergyModifier(85)).toBeCloseTo(0);
-    expect(calculateEnergyModifier(70)).toBeCloseTo(0.06);
-    expect(calculateEnergyModifier(55)).toBeCloseTo(0.16);
-    expect(calculateEnergyModifier(40)).toBeCloseTo(0.28);
-    expect(calculateEnergyModifier(0)).toBeCloseTo(0.4);
-    expect(calculateEnergyModifier(77.5)).toBeCloseTo(0.03);
+    expect(calculateEnergyModifier(70)).toBeCloseTo(0.08);
+    expect(calculateEnergyModifier(55)).toBeCloseTo(0.28);
+    expect(calculateEnergyModifier(40)).toBeCloseTo(0.5);
+    expect(calculateEnergyModifier(25)).toBeCloseTo(0.68);
+    expect(calculateEnergyModifier(10)).toBeCloseTo(0.82);
+    expect(calculateEnergyModifier(0)).toBeCloseTo(0.9);
+    expect(calculateEnergyModifier(77.5)).toBeCloseTo(0.04);
   });
 
   it('depletes only on-pitch players each simulated minute', () => {
@@ -497,6 +594,78 @@ describe('energy match behavior', () => {
     expect(easierPenalty).toBeGreaterThan(harderPenalty);
     expect(easierPenalty).toBeGreaterThan(0.78);
     expect(harderPenalty).toBeLessThan(0.9);
+  });
+
+  it('drops penalty conversion significantly for exhausted taker', () => {
+    const taker = makePlayer('taker', 'ATT', 100, 85);
+    const gk = makePlayer('gk', 'GK', 100, 75);
+    const fresh = calculatePenaltyConversionForTesting(taker, gk, {
+      attackingLiveEnergyByPlayerId: { [taker.id]: 100 },
+    });
+    const exhausted = calculatePenaltyConversionForTesting(taker, gk, {
+      attackingLiveEnergyByPlayerId: { [taker.id]: 0 },
+    });
+
+    expect(exhausted).toBeLessThan(fresh - 0.1);
+  });
+
+  it('keeps exhausted equal-strength side from winning often', () => {
+    const runs = 300;
+    const outcome = runScenario({
+      runs,
+      homeSkill: 72,
+      awaySkill: 72,
+      homeEnergy: 20,
+      awayEnergy: 100,
+      baseSeed: 10_000,
+    });
+
+    const homeWinRate = outcome.homeWins / runs;
+    expect(homeWinRate).toBeLessThanOrEqual(0.15);
+  });
+
+  it('allows exhausted stronger side to win sometimes but not dominate', () => {
+    const runs = 300;
+    const outcome = runScenario({
+      runs,
+      homeSkill: 99,
+      awaySkill: 50,
+      homeEnergy: 35,
+      awayEnergy: 100,
+      baseSeed: 20_000,
+    });
+
+    const homeWinRate = outcome.homeWins / runs;
+    expect(homeWinRate).toBeGreaterThanOrEqual(0.2);
+    expect(homeWinRate).toBeLessThanOrEqual(0.35);
+  });
+
+  it('preserves quality edge when both sides are exhausted', () => {
+    const runs = 280;
+    const outcome = runScenario({
+      runs,
+      homeSkill: 82,
+      awaySkill: 68,
+      homeEnergy: 22,
+      awayEnergy: 22,
+      baseSeed: 30_000,
+    });
+
+    expect(outcome.homeWins).toBeGreaterThan(outcome.awayWins);
+  });
+
+  it('produces more defensive cards for exhausted side', () => {
+    const runs = 220;
+    const outcome = runScenario({
+      runs,
+      homeSkill: 74,
+      awaySkill: 74,
+      homeEnergy: 15,
+      awayEnergy: 100,
+      baseSeed: 40_000,
+    });
+
+    expect(outcome.homeCards).toBeGreaterThan(outcome.awayCards);
   });
 
   it('does not emit traces when tracing is disabled', () => {
