@@ -210,7 +210,7 @@ export function generatePlayerName(options?: {
   usedNames?: Set<string>;
 }): { name: string; nickname?: string } {
   const usedNames = options?.usedNames;
-  let name: string;
+  let name: string | undefined;
 
   for (let attempt = 0; attempt < 128; attempt++) {
     const isMononym = random() < 0.28;

@@ -431,12 +431,13 @@ export function AiDecisionDevDrawer({
 }: {
   playerMatch: LiveMatchState | null;
 }) {
-  if (!import.meta.env.DEV) return null;
+  const isDev = import.meta.env.DEV;
 
   const [open, setOpen] = useState(false);
   const traces = useAiTraceStore((state) => state.events);
 
   useEffect(() => {
+    if (!isDev) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.shiftKey && event.key.toLowerCase() === 'd') {
         event.preventDefault();
@@ -445,7 +446,7 @@ export function AiDecisionDevDrawer({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [isDev]);
 
   const currentMinute = playerMatch?.state.minute ?? 0;
 
@@ -484,6 +485,8 @@ export function AiDecisionDevDrawer({
       why: buildWhyText(playerMatch, event, traces),
     }));
   }, [playerMatch, significantEvents, traces]);
+
+  if (!isDev) return null;
 
   return (
     <div className="fixed bottom-4 right-4 z-[90] max-w-[min(96vw,1180px)]">

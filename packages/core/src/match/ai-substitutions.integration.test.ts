@@ -143,6 +143,18 @@ describe('live multi-match AI substitution behavior', () => {
     const playerMatch = matches[playerMatchIndex];
     const isPlayerHome = playerMatch.homeTeam.id === player.team.id;
     expect(isPlayerHome ? playerMatch.homeControl : playerMatch.awayControl).toBe('human');
+    const aiOnlyMatch = matches.find((m) => m.fixtureId === 'fx-ai');
+    expect(aiOnlyMatch).toBeDefined();
+    if (aiOnlyMatch) {
+      const homeLineup = aiOnlyMatch.state.homeLineup;
+      const homeBench = aiOnlyMatch.state.homeSubs;
+      const outgoing = homeLineup.find((p) => p.position === 'MID');
+      const incoming = homeBench.find((p) => p.position === 'MID');
+      if (outgoing && incoming) {
+        aiOnlyMatch.state.homeLiveEnergy[outgoing.id] = 24;
+        aiOnlyMatch.state.homeLiveEnergy[incoming.id] = 92;
+      }
+    }
 
     for (let i = 0; i < 80; i++) {
       simulateAllMatchesStep(matches);
@@ -157,9 +169,6 @@ describe('live multi-match AI substitution behavior', () => {
       ? playerMatch.state.homeSubsUsed
       : playerMatch.state.awaySubsUsed;
     expect(userSubsUsed).toBe(0);
-
-    const aiOnlyMatch = matches.find((m) => m.fixtureId === 'fx-ai');
-    expect(aiOnlyMatch).toBeDefined();
     const aiSubEvents = aiOnlyMatch!.state.events.filter((e) => e.type === 'substitution');
     expect(aiSubEvents.length).toBeGreaterThan(0);
   });
