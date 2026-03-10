@@ -54,6 +54,7 @@ export function LoginPage() {
         title="Sign In | RetroFoot"
         description="Sign in to your RetroFoot account and continue your football management career."
         path="/login"
+        noindex
       />
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
         <div className="w-full max-w-md">

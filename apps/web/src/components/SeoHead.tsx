@@ -34,11 +34,21 @@ export function SeoHead({
       <meta property="og:type" content={ogType} />
       {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
       <meta property="og:image" content={DEFAULT_OG_IMAGE} />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta
+        property="og:image:alt"
+        content="RetroFoot retro-styled football manager game cover."
+      />
 
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
       <meta name="twitter:image" content={DEFAULT_OG_IMAGE} />
+      <meta
+        name="twitter:image:alt"
+        content="RetroFoot retro-styled football manager game cover."
+      />
     </Helmet>
   );
 }

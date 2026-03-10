@@ -90,6 +90,7 @@ export function RegisterPage() {
         title="Create Account | RetroFoot"
         description="Create your RetroFoot manager account and start your football career."
         path="/register"
+        noindex
       />
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
         <div className="w-full max-w-md">
