@@ -3,9 +3,10 @@
 // ============================================================================
 
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks';
+import { trackEvent } from '@/lib/analytics';
 import { SeoHead } from './SeoHead';
 
 /**
@@ -13,9 +14,10 @@ import { SeoHead } from './SeoHead';
  * Use as a parent route to protect child routes.
  */
 export function ProtectedRoute(): ReactElement {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
   const [redirectReady, setRedirectReady] = useState(false);
+  const sessionTrackedRef = useRef(false);
 
   useEffect(() => {
     if (isAuthenticated || isLoading) {
@@ -31,6 +33,15 @@ export function ProtectedRoute(): ReactElement {
       window.clearTimeout(redirectTimer);
     };
   }, [isAuthenticated, isLoading]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || sessionTrackedRef.current) {
+      return;
+    }
+
+    sessionTrackedRef.current = true;
+    trackEvent('session_start');
+  }, [isAuthenticated, user]);
 
   if (isLoading || (!isAuthenticated && !redirectReady)) {
     return (

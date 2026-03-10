@@ -30,6 +30,7 @@ import { AiDecisionDevDrawer } from '../components/AiDecisionDevDrawer';
 import { useGameStore } from '../stores/gameStore';
 import { createAiTraceOptionsForDev } from '../lib/aiTraceBridge';
 import { useAiTraceStore } from '../lib/aiTraceStore';
+import { trackEvent } from '../lib/analytics';
 
 type MatchPhase = 'pre_match' | 'live' | 'substitutions' | 'post_match';
 
@@ -947,6 +948,12 @@ export function MatchPage() {
 
       const responseData = await response.json();
 
+      trackEvent('match_completed', {
+        saveId,
+        round: matchData?.currentRound ?? null,
+        seasonComplete: Boolean(responseData.seasonComplete),
+      });
+
       // Check if season is complete - redirect to season summary
       if (responseData.seasonComplete) {
         navigate(`/game/${saveId}/season-summary`);
@@ -959,7 +966,7 @@ export function MatchPage() {
       setIsSaving(false);
       return; // Don't navigate on failure
     }
-  }, [results, saveId, navigate]);
+  }, [results, saveId, navigate, matchData?.currentRound]);
 
   // Loading state
   if (isLoading) {

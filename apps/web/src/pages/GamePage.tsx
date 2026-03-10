@@ -53,6 +53,7 @@ import {
 } from '../hooks';
 import { useAuth } from '../hooks/useAuth';
 import { useGameStore } from '../stores/gameStore';
+import { trackEvent } from '../lib/analytics';
 
 type GameTab = 'squad' | 'table' | 'transfers' | 'finances' | 'history';
 type MobileSquadView = 'squad' | 'pitch' | 'info';
@@ -236,6 +237,10 @@ export function GamePage() {
     if (tactics) {
       setStoreTactics(tactics);
     }
+    trackEvent('match_started', {
+      saveId: saveId ?? null,
+      round: data?.currentRound ?? null,
+    });
     navigate(`/game/${saveId}/match`);
   };
 

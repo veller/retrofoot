@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, useSaves } from '@/hooks';
+import { trackEvent } from '@/lib/analytics';
+
+function getGameOverMessage(gameOverReason?: string): string {
+  if (gameOverReason === 'relegated') {
+    return 'Your team was relegated from the league.';
+  }
+  return 'Your career has ended.';
+}
 
 export function HomePage() {
   const { user, signOut } = useAuth();
@@ -8,6 +16,23 @@ export function HomePage() {
     useSaves();
   const navigate = useNavigate();
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const gameOverTrackedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hasSave || !currentSave?.gameOver) {
+      return;
+    }
+    if (gameOverTrackedRef.current === currentSave.id) {
+      return;
+    }
+
+    gameOverTrackedRef.current = currentSave.id;
+    trackEvent('game_over', {
+      saveId: currentSave.id,
+      outcome: currentSave.gameOverReason || 'unknown',
+      season: currentSave.currentSeason,
+    });
+  }, [hasSave, currentSave]);
 
   const handleNewGameClick = () => {
     setShowConfirmModal(true);
@@ -26,6 +51,72 @@ export function HomePage() {
   const handleCancelNewGame = () => {
     setShowConfirmModal(false);
   };
+
+  let primaryActions: ReactNode;
+  if (isLoading) {
+    primaryActions = (
+      <div className="bg-slate-700 text-slate-400 font-bold py-4 px-8 text-center border-2 border-slate-600">
+        Loading...
+      </div>
+    );
+  } else if (hasSave && currentSave?.gameOver) {
+    primaryActions = (
+      <>
+        <div className="bg-red-900/50 border-2 border-red-700 p-4 mb-4 text-center">
+          <p className="text-red-400 font-bold mb-1">GAME OVER</p>
+          <p className="text-slate-400 text-sm">
+            {getGameOverMessage(currentSave.gameOverReason)}
+          </p>
+        </div>
+        <div className="text-center text-slate-500 text-sm mb-2">
+          {currentSave?.name} • {currentSave?.managerName}
+        </div>
+        <button
+          onClick={handleNewGameClick}
+          className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 border-2 border-pitch-400 transition-colors w-full"
+        >
+          NEW GAME
+        </button>
+      </>
+    );
+  } else if (hasSave) {
+    primaryActions = (
+      <>
+        <Link
+          to={`/game/${currentSave?.id}`}
+          className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
+        >
+          CONTINUE
+        </Link>
+        <div className="text-center text-slate-500 text-sm -mt-2 mb-2">
+          {currentSave?.name} • {currentSave?.managerName}
+        </div>
+        <button
+          onClick={handleNewGameClick}
+          className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-bold py-4 px-8 border-2 border-slate-500 hover:border-slate-400 transition-colors"
+        >
+          NEW GAME
+        </button>
+      </>
+    );
+  } else {
+    primaryActions = (
+      <>
+        <Link
+          to="/game/new"
+          className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
+        >
+          NEW GAME
+        </Link>
+        <button
+          disabled
+          className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
+        >
+          LOAD GAME (No saves)
+        </button>
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
@@ -54,67 +145,7 @@ export function HomePage() {
       </header>
 
       <nav className="flex flex-col gap-4 w-full max-w-xs">
-        {isLoading ? (
-          <div className="bg-slate-700 text-slate-400 font-bold py-4 px-8 text-center border-2 border-slate-600">
-            Loading...
-          </div>
-        ) : hasSave && currentSave?.gameOver ? (
-          <>
-            {/* User has a game over save - show only New Game */}
-            <div className="bg-red-900/50 border-2 border-red-700 p-4 mb-4 text-center">
-              <p className="text-red-400 font-bold mb-1">GAME OVER</p>
-              <p className="text-slate-400 text-sm">
-                {currentSave.gameOverReason === 'relegated'
-                  ? 'Your team was relegated from the league.'
-                  : 'Your career has ended.'}
-              </p>
-            </div>
-            <div className="text-center text-slate-500 text-sm mb-2">
-              {currentSave?.name} • {currentSave?.managerName}
-            </div>
-            <button
-              onClick={handleNewGameClick}
-              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 border-2 border-pitch-400 transition-colors w-full"
-            >
-              NEW GAME
-            </button>
-          </>
-        ) : hasSave ? (
-          <>
-            {/* User has a save - show Continue button */}
-            <Link
-              to={`/game/${currentSave?.id}`}
-              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
-            >
-              CONTINUE
-            </Link>
-            <div className="text-center text-slate-500 text-sm -mt-2 mb-2">
-              {currentSave?.name} • {currentSave?.managerName}
-            </div>
-            <button
-              onClick={handleNewGameClick}
-              className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white font-bold py-4 px-8 border-2 border-slate-500 hover:border-slate-400 transition-colors"
-            >
-              NEW GAME
-            </button>
-          </>
-        ) : (
-          <>
-            {/* No save - show New Game button */}
-            <Link
-              to="/game/new"
-              className="bg-pitch-600 hover:bg-pitch-500 text-white font-bold py-4 px-8 text-center transition-colors border-2 border-pitch-400"
-            >
-              NEW GAME
-            </Link>
-            <button
-              disabled
-              className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
-            >
-              LOAD GAME (No saves)
-            </button>
-          </>
-        )}
+        {primaryActions}
         <button
           disabled
           className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"
@@ -123,8 +154,21 @@ export function HomePage() {
         </button>
       </nav>
 
-      <footer className="mt-16 text-slate-500 text-sm">
+      <footer className="mt-16 text-slate-500 text-sm text-center space-y-2">
         <p>Inspired by Elifoot &amp; Brasfoot</p>
+        <p className="text-xs">
+          <Link to="/privacy" className="hover:text-slate-300">
+            Privacy
+          </Link>{' '}
+          ·{' '}
+          <Link to="/terms" className="hover:text-slate-300">
+            Terms
+          </Link>{' '}
+          ·{' '}
+          <Link to="/contact" className="hover:text-slate-300">
+            Contact
+          </Link>
+        </p>
       </footer>
 
       {/* Confirmation Modal */}

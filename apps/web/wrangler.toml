@@ -3,3 +3,6 @@
 
 name = "retrofoot-web"
 pages_build_output_dir = "dist"
+
+[vars]
+API_ORIGIN = "https://retrofoot-api.vellerbauer.workers.dev"

@@ -7,6 +7,7 @@ import {
   text,
   integer,
   real,
+  index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
@@ -398,6 +399,33 @@ export const achievements = sqliteTable('achievements', {
 });
 
 // ============================================================================
+// Analytics Events (in-house product analytics)
+// ============================================================================
+
+export const analyticsEvents = sqliteTable(
+  'analytics_events',
+  {
+    id: text('id').primaryKey(),
+    eventName: text('event_name').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    saveId: text('save_id').references(() => saves.id, { onDelete: 'set null' }),
+    payload: text('payload', { mode: 'json' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('analytics_events_user_id_idx').on(table.userId),
+    saveIdIdx: index('analytics_events_save_id_idx').on(table.saveId),
+    eventNameIdx: index('analytics_events_event_name_created_at_user_idx').on(
+      table.eventName,
+      table.createdAt,
+      table.userId,
+    ),
+  }),
+);
+
+// ============================================================================
 // Type exports for use in application
 // ============================================================================
 
@@ -451,3 +479,6 @@ export type NewSeasonHistory = typeof seasonHistory.$inferInsert;
 
 export type Achievement = typeof achievements.$inferSelect;
 export type NewAchievement = typeof achievements.$inferInsert;
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type NewAnalyticsEvent = typeof analyticsEvents.$inferInsert;

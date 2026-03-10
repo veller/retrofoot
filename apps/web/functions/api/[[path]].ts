@@ -1,7 +1,24 @@
 // Proxy all /api/* requests to the Workers API
 // This makes auth cookies first-party (same domain) instead of third-party
 
-const API_ORIGIN = 'https://retrofoot-api.vellerbauer.workers.dev';
+type ApiProxyEnv = {
+  API_ORIGIN?: string;
+};
+
+const DEFAULT_API_ORIGIN = 'https://retrofoot-api.vellerbauer.workers.dev';
+
+function resolveApiOrigin(env: ApiProxyEnv): string {
+  const configured = env.API_ORIGIN?.trim();
+  if (!configured) {
+    return DEFAULT_API_ORIGIN;
+  }
+
+  try {
+    return new URL(configured).origin;
+  } catch {
+    return DEFAULT_API_ORIGIN;
+  }
+}
 
 function getSetCookieHeaders(headers: Headers): string[] {
   const withGetSetCookie = headers as Headers & {
@@ -27,18 +44,19 @@ function getSetCookieHeaders(headers: Headers): string[] {
   return cookies;
 }
 
-export const onRequest: PagesFunction = async (context) => {
+export const onRequest: PagesFunction<ApiProxyEnv> = async (context) => {
   const { request } = context;
+  const apiOrigin = resolveApiOrigin(context.env);
   const url = new URL(request.url);
 
   // Build the target URL (keep the /api path)
-  const targetUrl = new URL(url.pathname + url.search, API_ORIGIN);
+  const targetUrl = new URL(url.pathname + url.search, apiOrigin);
 
   // Create headers, forwarding most from the original request
   const headers = new Headers(request.headers);
 
   // Set the correct host for the target
-  headers.set('Host', new URL(API_ORIGIN).host);
+  headers.set('Host', new URL(apiOrigin).host);
 
   // Forward the original origin for CORS
   const origin = request.headers.get('Origin');
@@ -75,11 +93,8 @@ export const onRequest: PagesFunction = async (context) => {
     // Rewrite each cookie
     for (const cookie of cookies) {
       // Remove the Domain attribute so it defaults to the current domain
-      // Also remove __Secure- prefix if present (we'll keep it secure via SameSite)
       const rewrittenCookie = cookie
-        // Remove Domain=... attribute
         .replace(/;\s*Domain=[^;]*/gi, '')
-        // Keep the cookie otherwise unchanged
         .trim();
 
       responseHeaders.append('Set-Cookie', rewrittenCookie);

@@ -8,7 +8,12 @@ import { matchRoutes } from './routes/match';
 import { transferRoutes } from './routes/transfer';
 import { seasonRoutes } from './routes/season';
 import { achievementsRoutes } from './routes/achievements';
-import type { CloudflareBindings } from './lib/auth';
+import { analyticsRoutes } from './routes/analytics';
+import {
+  resolveAllowedOrigins,
+  type CloudflareBindings,
+} from './lib/auth';
+import { createRateLimitMiddleware } from './lib/rate-limit';
 
 // Re-export the Env type for use in other files
 export type Env = CloudflareBindings;
@@ -16,19 +21,41 @@ export type Env = CloudflareBindings;
 // Create Hono app with environment type
 const app = new Hono<{ Bindings: Env }>();
 
+const authRateLimit = createRateLimitMiddleware({
+  keyPrefix: 'auth',
+  maxRequests: 30,
+  windowMs: 60_000,
+});
+
+const writeRateLimit = createRateLimitMiddleware({
+  keyPrefix: 'writes',
+  maxRequests: 80,
+  windowMs: 60_000,
+  methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
+});
+
 // Global middleware
 app.use('*', logger());
-app.use(
-  '*',
-  cors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://retrofoot-web.pages.dev',
-    ],
+app.use('*', async (c, next) => {
+  const allowedOrigins = resolveAllowedOrigins(c.env.ALLOWED_ORIGINS);
+  const corsMiddleware = cors({
+    origin: allowedOrigins,
     credentials: true,
-  }),
-);
+  });
+  return corsMiddleware(c, next);
+});
+
+// Basic abuse protection for auth and write-heavy endpoints.
+app.use('/api/auth/*', authRateLimit);
+app.use('/api/save', writeRateLimit);
+app.use('/api/save/*', writeRateLimit);
+app.use('/api/match', writeRateLimit);
+app.use('/api/match/*', writeRateLimit);
+app.use('/api/transfer', writeRateLimit);
+app.use('/api/transfer/*', writeRateLimit);
+app.use('/api/season', writeRateLimit);
+app.use('/api/season/*', writeRateLimit);
+app.use('/api/analytics/*', writeRateLimit);
 
 // Health check
 app.get('/api/health', (c) => {
@@ -47,6 +74,7 @@ app.route('/api/match', matchRoutes);
 app.route('/api/transfer', transferRoutes);
 app.route('/api/season', seasonRoutes);
 app.route('/api/achievements', achievementsRoutes);
+app.route('/api/analytics', analyticsRoutes);
 
 // 404 handler
 app.notFound((c) => {

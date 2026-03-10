@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { signIn, signUp, useSession } from '@/lib/auth';
 import { awaitSessionReady } from '@/lib/auth-session';
 import { SeoHead } from '@/components';
+import { trackEvent } from '@/lib/analytics';
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -73,6 +74,7 @@ export function RegisterPage() {
           }
         }
 
+        trackEvent('sign_up_success');
         navigate('/', { replace: true });
       }
     } catch (err) {
@@ -184,7 +186,7 @@ export function RegisterPage() {
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center space-y-3">
             <p className="text-slate-400">
               Already have an account?{' '}
               <Link
@@ -192,6 +194,19 @@ export function RegisterPage() {
                 className="text-pitch-400 hover:text-pitch-300 transition-colors"
               >
                 Sign in
+              </Link>
+            </p>
+            <p className="text-slate-500 text-xs">
+              <Link to="/privacy" className="hover:text-slate-300">
+                Privacy
+              </Link>{' '}
+              ·{' '}
+              <Link to="/terms" className="hover:text-slate-300">
+                Terms
+              </Link>{' '}
+              ·{' '}
+              <Link to="/contact" className="hover:text-slate-300">
+                Contact
               </Link>
             </p>
           </div>

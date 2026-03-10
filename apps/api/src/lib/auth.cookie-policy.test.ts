@@ -6,7 +6,7 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-const localhostOverride = resolveCookiePolicy('production', {
+const localhostOverride = resolveCookiePolicy('production', undefined, {
   url: 'http://localhost:8787/api/auth/session',
   headers: new Headers({
     host: 'localhost:8787',
@@ -20,7 +20,7 @@ assert(
   'Localhost should use development base URL',
 );
 
-const productionPolicy = resolveCookiePolicy('production', {
+const productionPolicy = resolveCookiePolicy('production', undefined, {
   url: 'https://retrofoot-api.vellerbauer.workers.dev/api/auth/session',
   headers: new Headers({
     host: 'retrofoot-api.vellerbauer.workers.dev',
@@ -34,7 +34,7 @@ assert(
   'Production should use production base URL',
 );
 
-const explicitDevelopment = resolveCookiePolicy('development', {
+const explicitDevelopment = resolveCookiePolicy('development', undefined, {
   url: 'https://retrofoot-api.vellerbauer.workers.dev/api/auth/session',
   headers: new Headers({
     host: 'retrofoot-api.vellerbauer.workers.dev',

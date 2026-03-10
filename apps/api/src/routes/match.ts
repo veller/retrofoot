@@ -28,6 +28,7 @@ import {
 import { processRoundFinances } from '../services/finance.service';
 import { processPlayerStatsAndGrowth } from '../services/player-stats.service';
 import { processAITransfers } from '../services/ai-transfer.service';
+import { logAnalyticsEvent } from '../lib/analytics';
 
 // Constants
 const FORM_HISTORY_LENGTH = 5;
@@ -716,6 +717,28 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     // Check if this was the final round of the season (38 rounds for 20 teams)
     const TOTAL_ROUNDS = 38;
     const seasonComplete = currentRound >= TOTAL_ROUNDS;
+
+    const playerFixtureResult = body.results.find((result) => {
+      const fixture = fixturesMap.get(result.fixtureId);
+      if (!fixture) {
+        return false;
+      }
+      return (
+        fixture.homeTeamId === save.playerTeamId ||
+        fixture.awayTeamId === save.playerTeamId
+      );
+    });
+
+    if (playerFixtureResult) {
+      await logAnalyticsEvent(c.env.DB, 'match_completed', session.user.id, {
+        saveId,
+        payload: {
+          fixtureId: playerFixtureResult.fixtureId,
+          round: currentRound,
+          seasonComplete,
+        },
+      });
+    }
 
     return c.json({
       success: true,

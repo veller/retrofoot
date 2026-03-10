@@ -1,6 +1,5 @@
 User-agent: *
-Allow: /login
-Allow: /register
+Allow: /
 Disallow: /game/
 Disallow: /api/
 

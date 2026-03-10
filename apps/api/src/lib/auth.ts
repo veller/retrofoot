@@ -20,6 +20,8 @@ export type CloudflareBindings = {
   BETTER_AUTH_SECRET: string;
   ENVIRONMENT?: string;
   AUTH_PERF_LOGS?: string;
+  API_BASE_URL?: string;
+  ALLOWED_ORIGINS?: string;
 };
 
 // Session duration constants (in seconds)
@@ -31,6 +33,11 @@ const CLI_FALLBACK_SECRET =
   'cli-schema-generation-fallback-secret-not-used-at-runtime-32chars';
 const PRODUCTION_API_BASE_URL = 'https://retrofoot-api.vellerbauer.workers.dev';
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:8787';
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://retrofoot-web.pages.dev',
+];
 
 let cachedRuntimeAuth: ReturnType<typeof betterAuth> | null = null;
 let cachedRuntimeAuthKey: string | null = null;
@@ -69,7 +76,7 @@ function getRuntimeCacheKey(
   env: CloudflareBindings,
   modeKey: string,
 ): string {
-  return `${env.ENVIRONMENT ?? 'production'}:${modeKey}:${env.BETTER_AUTH_SECRET}`;
+  return `${env.ENVIRONMENT ?? 'production'}:${modeKey}:${env.BETTER_AUTH_SECRET}:${env.API_BASE_URL ?? ''}:${env.ALLOWED_ORIGINS ?? ''}`;
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -98,8 +105,35 @@ function parseFirstHeaderValue(value: string | null): string | null {
   return first || null;
 }
 
+function parseCsvValues(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+export function resolveAllowedOrigins(value?: string): string[] {
+  const configured = parseCsvValues(value);
+  const combined = [...DEFAULT_ALLOWED_ORIGINS, ...configured];
+  return Array.from(new Set(combined));
+}
+
+function resolveRuntimeSecret(env: CloudflareBindings): string {
+  const secret = env.BETTER_AUTH_SECRET?.trim();
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      'BETTER_AUTH_SECRET must be configured and at least 32 characters long.',
+    );
+  }
+  return secret;
+}
+
 export function resolveCookiePolicy(
   environment: string | undefined,
+  apiBaseUrl: string | undefined,
   context?: RequestContext,
 ): CookiePolicy {
   const envMode = environment === 'development' ? 'development' : 'production';
@@ -135,7 +169,7 @@ export function resolveCookiePolicy(
     crossSubDomainCookies: !isDevelopmentLike,
     baseURL: isDevelopmentLike
       ? DEVELOPMENT_API_BASE_URL
-      : PRODUCTION_API_BASE_URL,
+      : (apiBaseUrl?.trim() || PRODUCTION_API_BASE_URL),
     modeKey: isDevelopmentLike ? 'development-like' : 'production-like',
     localOverride,
   };
@@ -164,7 +198,11 @@ function maybeLogLocalCookieOverride(
 
 function buildAuth(env?: CloudflareBindings, context?: RequestContext) {
   const isRuntime = Boolean(env);
-  const cookiePolicy = resolveCookiePolicy(env?.ENVIRONMENT, context);
+  const cookiePolicy = resolveCookiePolicy(
+    env?.ENVIRONMENT,
+    env?.API_BASE_URL,
+    context,
+  );
   maybeLogLocalCookieOverride(env, cookiePolicy);
 
   // Use actual DB for runtime, empty object for CLI schema generation
@@ -260,12 +298,8 @@ function buildAuth(env?: CloudflareBindings, context?: RequestContext) {
         secure: cookiePolicy.secure,
       },
     },
-    trustedOrigins: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://retrofoot-web.pages.dev',
-    ],
-    secret: env?.BETTER_AUTH_SECRET || CLI_FALLBACK_SECRET,
+    trustedOrigins: resolveAllowedOrigins(env?.ALLOWED_ORIGINS),
+    secret: env ? resolveRuntimeSecret(env) : CLI_FALLBACK_SECRET,
     baseURL: cookiePolicy.baseURL,
     basePath: '/api/auth',
   });
@@ -282,7 +316,11 @@ export function createAuth(env?: CloudflareBindings, context?: RequestContext) {
     return buildAuth();
   }
 
-  const cookiePolicy = resolveCookiePolicy(env.ENVIRONMENT, context);
+  const cookiePolicy = resolveCookiePolicy(
+    env.ENVIRONMENT,
+    env.API_BASE_URL,
+    context,
+  );
   const cacheKey = getRuntimeCacheKey(env, cookiePolicy.modeKey);
   if (cachedRuntimeAuth && cachedRuntimeAuthKey === cacheKey) {
     return cachedRuntimeAuth;

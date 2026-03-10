@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signIn, useSession } from '@/lib/auth';
+import { trackEvent } from '@/lib/analytics';
 import { SeoHead } from '@/components';
 
 export function LoginPage() {
@@ -28,14 +29,19 @@ export function LoginPage() {
       });
 
       if (signInError) {
+        trackEvent('login_unsuccessful', {
+          reason: signInError.message || 'unknown_error',
+        });
         setError(signInError.message || 'Login failed. Please try again.');
         setLoading(false);
       } else {
         // Refetch session to update the reactive state before navigating
         await session.refetch();
+        trackEvent('login_successful');
         navigate(from, { replace: true });
       }
     } catch (err) {
+      trackEvent('login_unsuccessful', { reason: 'unexpected_error' });
       setError('An unexpected error occurred. Please try again.');
       console.error('Login error:', err);
       setLoading(false);
@@ -108,7 +114,7 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center space-y-3">
             <p className="text-slate-400">
               Don't have an account?{' '}
               <Link
@@ -116,6 +122,19 @@ export function LoginPage() {
                 className="text-pitch-400 hover:text-pitch-300 transition-colors"
               >
                 Create one
+              </Link>
+            </p>
+            <p className="text-slate-500 text-xs">
+              <Link to="/privacy" className="hover:text-slate-300">
+                Privacy
+              </Link>{' '}
+              ·{' '}
+              <Link to="/terms" className="hover:text-slate-300">
+                Terms
+              </Link>{' '}
+              ·{' '}
+              <Link to="/contact" className="hover:text-slate-300">
+                Contact
               </Link>
             </p>
           </div>

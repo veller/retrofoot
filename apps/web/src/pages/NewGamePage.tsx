@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCreateSave } from '@/hooks';
 import { apiFetch } from '@/lib/api';
+import { trackEvent } from '@/lib/analytics';
 
 interface TeamOption {
   id: string;
@@ -50,6 +51,10 @@ export function NewGamePage() {
     });
 
     if (result) {
+      trackEvent('game_created', {
+        saveId: result.saveId,
+        setupStatus: result.setupStatus,
+      });
       if (result.setupStatus === 'pending') {
         navigate(`/game/${result.saveId}?setup=1`);
         return;

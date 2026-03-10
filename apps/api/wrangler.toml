@@ -22,6 +22,8 @@ migrations_dir = "../../packages/db/migrations"
 # Environment variables (secrets should be set via `wrangler secret put`)
 [vars]
 ENVIRONMENT = "production"
+API_BASE_URL = "https://retrofoot-api.vellerbauer.workers.dev"
+ALLOWED_ORIGINS = "https://retrofoot-web.pages.dev"
 
 # Development secrets and overrides (use .dev.vars file for local dev)
 # The .dev.vars file overrides [vars] during `wrangler dev`

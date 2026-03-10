@@ -1,5 +1,59 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSeasonSummary, useAdvanceSeason } from '../hooks';
+import { trackEvent } from '../lib/analytics';
+
+function getOrdinalSuffix(value: number): string {
+  if (value === 1) return 'st';
+  if (value === 2) return 'nd';
+  if (value === 3) return 'rd';
+  return 'th';
+}
+
+function getSeasonResultContainerClass(position: number, isRelegated: boolean): string {
+  if (isRelegated) {
+    return 'bg-red-900/20 border-red-500/50';
+  }
+  if (position === 1) {
+    return 'bg-amber-900/20 border-amber-500/50';
+  }
+  if (position <= 4) {
+    return 'bg-pitch-900/20 border-pitch-500/50';
+  }
+  return 'bg-slate-800 border-slate-700';
+}
+
+function getPositionTextClass(position: number, isRelegated: boolean): string {
+  if (isRelegated) {
+    return 'text-red-400';
+  }
+  if (position === 1) {
+    return 'text-amber-400';
+  }
+  if (position <= 4) {
+    return 'text-pitch-400';
+  }
+  return 'text-white';
+}
+
+function getStandingsRowClass(isPlayerTeam: boolean, isRelegatedTeam: boolean): string {
+  if (isPlayerTeam) {
+    return 'bg-pitch-900/40 border-l-4 border-l-pitch-500';
+  }
+  if (isRelegatedTeam) {
+    return 'bg-red-900/20';
+  }
+  return '';
+}
+
+function formatGoalDifference(goalDifference: number): string {
+  return `${goalDifference > 0 ? '+' : ''}${goalDifference}`;
+}
+
+function getGoalDifferenceClass(goalDifference: number): string {
+  if (goalDifference > 0) return 'text-green-400';
+  if (goalDifference < 0) return 'text-red-400';
+  return '';
+}
 
 export function SeasonSummaryPage() {
   const { saveId } = useParams<{ saveId: string }>();
@@ -14,6 +68,10 @@ export function SeasonSummaryPage() {
   const handleAdvanceSeason = async () => {
     const result = await advance();
     if (result.success) {
+      trackEvent('season_completed', {
+        saveId: saveId ?? null,
+        season: data?.season ?? null,
+      });
       // Navigate back to game page for new season
       navigate(`/game/${saveId}`);
     } else if (result.gameOver) {
@@ -52,6 +110,14 @@ export function SeasonSummaryPage() {
   }
 
   const isRelegated = data.playerTeam.isRelegated;
+  const seasonResultContainerClass = getSeasonResultContainerClass(
+    data.playerTeam.position,
+    isRelegated,
+  );
+  const playerPositionClass = getPositionTextClass(
+    data.playerTeam.position,
+    isRelegated,
+  );
 
   return (
     <div className="min-h-screen bg-slate-900">
@@ -162,15 +228,7 @@ export function SeasonSummaryPage() {
 
         {/* Your Season Result */}
         <div
-          className={`border rounded-xl p-6 mb-6 ${
-            isRelegated
-              ? 'bg-red-900/20 border-red-500/50'
-              : data.playerTeam.position === 1
-                ? 'bg-amber-900/20 border-amber-500/50'
-                : data.playerTeam.position <= 4
-                  ? 'bg-pitch-900/20 border-pitch-500/50'
-                  : 'bg-slate-800 border-slate-700'
-          }`}
+          className={`border rounded-xl p-6 mb-6 ${seasonResultContainerClass}`}
         >
           <h3 className="text-lg font-bold text-white mb-4 text-center">
             Your Season
@@ -189,25 +247,11 @@ export function SeasonSummaryPage() {
                 Position
               </div>
               <div
-                className={`text-3xl font-bold ${
-                  isRelegated
-                    ? 'text-red-400'
-                    : data.playerTeam.position === 1
-                      ? 'text-amber-400'
-                      : data.playerTeam.position <= 4
-                        ? 'text-pitch-400'
-                        : 'text-white'
-                }`}
+                className={`text-3xl font-bold ${playerPositionClass}`}
               >
                 {data.playerTeam.position}
                 <span className="text-lg text-slate-400">
-                  {data.playerTeam.position === 1
-                    ? 'st'
-                    : data.playerTeam.position === 2
-                      ? 'nd'
-                      : data.playerTeam.position === 3
-                        ? 'rd'
-                        : 'th'}
+                  {getOrdinalSuffix(data.playerTeam.position)}
                 </span>
               </div>
             </div>
@@ -341,11 +385,7 @@ export function SeasonSummaryPage() {
                     <tr
                       key={entry.teamId}
                       className={`border-b border-slate-700 text-white ${
-                        isPlayerTeam
-                          ? 'bg-pitch-900/40 border-l-4 border-l-pitch-500'
-                          : isRelegatedTeam
-                            ? 'bg-red-900/20'
-                            : ''
+                        getStandingsRowClass(isPlayerTeam, isRelegatedTeam)
                       }`}
                     >
                       <td className="text-center py-2 text-slate-400">
@@ -359,16 +399,9 @@ export function SeasonSummaryPage() {
                       <td className="text-center py-2">{entry.drawn}</td>
                       <td className="text-center py-2">{entry.lost}</td>
                       <td
-                        className={`text-center py-2 ${
-                          entry.goalDifference > 0
-                            ? 'text-green-400'
-                            : entry.goalDifference < 0
-                              ? 'text-red-400'
-                              : ''
-                        }`}
+                        className={`text-center py-2 ${getGoalDifferenceClass(entry.goalDifference)}`}
                       >
-                        {entry.goalDifference > 0 ? '+' : ''}
-                        {entry.goalDifference}
+                        {formatGoalDifference(entry.goalDifference)}
                       </td>
                       <td className="text-center py-2 text-pitch-400 font-bold">
                         {entry.points}
