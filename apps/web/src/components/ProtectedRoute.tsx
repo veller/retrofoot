@@ -3,10 +3,11 @@
 // ============================================================================
 
 import type { ReactElement } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks';
 import { trackEvent } from '@/lib/analytics';
+import { setPendingOnlineInvitePath } from '@/lib/pendingOnlineInvite';
 import { SeoHead } from './SeoHead';
 
 /**
@@ -42,6 +43,17 @@ export function ProtectedRoute(): ReactElement {
     sessionTrackedRef.current = true;
     trackEvent('session_start');
   }, [isAuthenticated, user]);
+
+  useLayoutEffect(() => {
+    if (isLoading || isAuthenticated || !redirectReady) return;
+    setPendingOnlineInvitePath(location.pathname + location.search);
+  }, [
+    isLoading,
+    isAuthenticated,
+    redirectReady,
+    location.pathname,
+    location.search,
+  ]);
 
   if (isLoading || (!isAuthenticated && !redirectReady)) {
     return (

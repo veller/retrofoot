@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { signIn, useSession } from '@/lib/auth';
 import { trackEvent } from '@/lib/analytics';
+import { clearPendingOnlineInvite } from '@/lib/pendingOnlineInvite';
 import { SeoHead } from '@/components';
 
 export function LoginPage() {
@@ -38,6 +39,9 @@ export function LoginPage() {
         // Refetch session to update the reactive state before navigating
         await session.refetch();
         trackEvent('login_successful');
+        if (from.startsWith('/online/join/')) {
+          clearPendingOnlineInvite();
+        }
         navigate(from, { replace: true });
       }
     } catch (err) {

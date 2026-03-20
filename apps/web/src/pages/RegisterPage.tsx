@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { signIn, signUp, useSession } from '@/lib/auth';
 import { awaitSessionReady } from '@/lib/auth-session';
+import { consumePendingOnlineInvitePath } from '@/lib/pendingOnlineInvite';
 import { SeoHead } from '@/components';
 import { trackEvent } from '@/lib/analytics';
 
@@ -75,7 +76,8 @@ export function RegisterPage() {
         }
 
         trackEvent('sign_up_success');
-        navigate('/', { replace: true });
+        const pendingInvite = consumePendingOnlineInvitePath();
+        navigate(pendingInvite ?? '/', { replace: true });
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
