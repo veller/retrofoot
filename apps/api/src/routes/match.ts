@@ -7,23 +7,18 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { simulateMatch, selectBestLineup } from '@retrofoot/core';
 import {
   saves,
   fixtures,
   teams,
   players,
   standings,
-  tactics,
-  roundLocks,
 } from '@retrofoot/db/schema';
 import { createAuth } from '../lib/auth';
 import type { Env } from '../index';
 import {
   CompleteRoundRequestSchema,
   type MatchResultInput,
-  RoundLockPayloadSchema,
-  type RoundLockPayload,
   type StandingsUpdate,
 } from '../types/match.types';
 import {
@@ -45,58 +40,6 @@ const YELLOW_ACCUMULATION_BY_PRESET: Record<string, number> = {
   domestic_5yc: 5,
   uefa_3yc: 3,
 };
-
-function parseStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string');
-}
-
-function getDefaultTactics(team: {
-  id: string;
-  players: Array<{
-    id: string;
-    status?: string;
-    suspensionMatchesRemaining?: number;
-  }>;
-}): {
-  formation: '4-3-3';
-  posture: 'balanced';
-  lineup: string[];
-  substitutes: string[];
-} {
-  const { lineup, substitutes } = selectBestLineup(team as never, '4-3-3');
-  return {
-    formation: '4-3-3',
-    posture: 'balanced',
-    lineup,
-    substitutes,
-  };
-}
-
-function computeSubMinutesByTeam(events: MatchResultInput['events']): {
-  home: Record<string, number>;
-  away: Record<string, number>;
-} {
-  const byTeam = {
-    home: {} as Record<string, number>,
-    away: {} as Record<string, number>,
-  };
-
-  for (const event of events) {
-    if (
-      event.type !== 'substitution' ||
-      !event.playerId ||
-      !event.assistPlayerId
-    ) {
-      continue;
-    }
-
-    byTeam[event.team][event.playerId] = event.minute;
-    byTeam[event.team][event.assistPlayerId] = event.minute;
-  }
-
-  return byTeam;
-}
 
 export const matchRoutes = new Hono<{ Bindings: Env }>();
 
@@ -279,336 +222,6 @@ matchRoutes.get('/:saveId/fixtures', async (c) => {
   });
 });
 
-matchRoutes.post('/:saveId/lock-round', async (c) => {
-  const auth = createAuth(c.env, {
-    url: c.req.url,
-    headers: c.req.raw.headers,
-  });
-  const session = await auth.api.getSession({
-    headers: c.req.raw.headers,
-  });
-
-  if (!session?.user?.id) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const saveId = c.req.param('saveId');
-  const db = drizzle(c.env.DB);
-
-  const saveResult = await db
-    .select({
-      userId: saves.userId,
-      currentRound: saves.currentRound,
-      playerTeamId: saves.playerTeamId,
-    })
-    .from(saves)
-    .where(eq(saves.id, saveId))
-    .limit(1);
-
-  if (saveResult.length === 0 || saveResult[0].userId !== session.user.id) {
-    return c.json({ error: 'Unauthorized' }, 403);
-  }
-
-  const save = saveResult[0];
-  const currentRound = save.currentRound ?? DEFAULT_ROUND;
-
-  const existingLock = await db
-    .select({
-      id: roundLocks.id,
-      status: roundLocks.status,
-      payload: roundLocks.payload,
-    })
-    .from(roundLocks)
-    .where(
-      and(eq(roundLocks.saveId, saveId), eq(roundLocks.round, currentRound)),
-    )
-    .limit(1);
-
-  if (existingLock.length > 0) {
-    const payloadResult = RoundLockPayloadSchema.safeParse(
-      existingLock[0].payload,
-    );
-    if (!payloadResult.success) {
-      return c.json({ error: 'Stored lock payload is invalid' }, 500);
-    }
-    return c.json({
-      locked: true,
-      reused: true,
-      status: existingLock[0].status,
-      payload: payloadResult.data,
-    });
-  }
-
-  const [roundFixtures, teamsResult, playersResult, tacticsResult] =
-    await Promise.all([
-      db
-        .select({
-          id: fixtures.id,
-          round: fixtures.round,
-          homeTeamId: fixtures.homeTeamId,
-          awayTeamId: fixtures.awayTeamId,
-          date: fixtures.date,
-          played: fixtures.played,
-        })
-        .from(fixtures)
-        .where(
-          and(
-            eq(fixtures.saveId, saveId),
-            eq(fixtures.round, currentRound),
-            eq(fixtures.played, false),
-          ),
-        ),
-      db
-        .select({
-          id: teams.id,
-          name: teams.name,
-          shortName: teams.shortName,
-          badgeUrl: teams.badgeUrl,
-          primaryColor: teams.primaryColor,
-          secondaryColor: teams.secondaryColor,
-          stadium: teams.stadium,
-          capacity: teams.capacity,
-          reputation: teams.reputation,
-          budget: teams.budget,
-          wageBudget: teams.wageBudget,
-          momentum: teams.momentum,
-          lastFiveResults: teams.lastFiveResults,
-        })
-        .from(teams)
-        .where(eq(teams.saveId, saveId)),
-      db
-        .select({
-          id: players.id,
-          teamId: players.teamId,
-          name: players.name,
-          nickname: players.nickname,
-          age: players.age,
-          nationality: players.nationality,
-          position: players.position,
-          preferredFoot: players.preferredFoot,
-          attributes: players.attributes,
-          potential: players.potential,
-          morale: players.morale,
-          fitness: players.fitness,
-          energy: players.energy,
-          injured: players.injured,
-          injuryWeeks: players.injuryWeeks,
-          contractEndSeason: players.contractEndSeason,
-          wage: players.wage,
-          marketValue: players.marketValue,
-          status: players.status,
-          form: players.form,
-          lastFiveRatings: players.lastFiveRatings,
-          seasonGoals: players.seasonGoals,
-          seasonAssists: players.seasonAssists,
-          seasonMinutes: players.seasonMinutes,
-          seasonAvgRating: players.seasonAvgRating,
-          yellowAccumulation: players.yellowAccumulation,
-          suspensionMatchesRemaining: players.suspensionMatchesRemaining,
-          suspensionReason: players.suspensionReason,
-          seasonYellowCards: players.seasonYellowCards,
-          seasonRedCards: players.seasonRedCards,
-        })
-        .from(players)
-        .where(eq(players.saveId, saveId)),
-      db
-        .select({
-          teamId: tactics.teamId,
-          formation: tactics.formation,
-          posture: tactics.posture,
-          lineup: tactics.lineup,
-          substitutes: tactics.substitutes,
-        })
-        .from(tactics)
-        .where(eq(tactics.saveId, saveId)),
-    ]);
-
-  if (roundFixtures.length === 0) {
-    return c.json(
-      { error: 'No unplayed fixtures found for current round' },
-      400,
-    );
-  }
-
-  const playersByTeam = new Map<string, typeof playersResult>();
-  for (const player of playersResult) {
-    if (!player.teamId) continue;
-    const teamPlayers = playersByTeam.get(player.teamId);
-    if (teamPlayers) {
-      teamPlayers.push(player);
-    } else {
-      playersByTeam.set(player.teamId, [player]);
-    }
-  }
-
-  const teamsWithPlayers = teamsResult.map((team) => ({
-    ...team,
-    lastFiveResults:
-      (team.lastFiveResults as ('W' | 'D' | 'L')[]) ?? DEFAULT_FORM,
-    players: (playersByTeam.get(team.id) ?? []).map((player) => ({
-      ...player,
-      morale: player.morale ?? 70,
-      fitness: player.fitness ?? 100,
-      energy: player.energy ?? 100,
-      injured: player.injured ?? false,
-      injuryWeeks: player.injuryWeeks ?? 0,
-      status: player.status ?? 'active',
-      yellowAccumulation: player.yellowAccumulation ?? 0,
-      suspensionMatchesRemaining: player.suspensionMatchesRemaining ?? 0,
-      seasonYellowCards: player.seasonYellowCards ?? 0,
-      seasonRedCards: player.seasonRedCards ?? 0,
-      form: {
-        form: player.form ?? 70,
-        lastFiveRatings: (player.lastFiveRatings as number[]) ?? [],
-        seasonGoals: player.seasonGoals ?? 0,
-        seasonAssists: player.seasonAssists ?? 0,
-        seasonMinutes: player.seasonMinutes ?? 0,
-        seasonAvgRating: player.seasonAvgRating ?? 0,
-      },
-    })),
-  }));
-
-  const teamMap = new Map(teamsWithPlayers.map((team) => [team.id, team]));
-  const tacticsByTeam = new Map(
-    tacticsResult.map((row) => [
-      row.teamId,
-      {
-        formation:
-          typeof row.formation === 'string' && row.formation.length > 0
-            ? row.formation
-            : '4-3-3',
-        posture:
-          row.posture === 'attacking' ||
-          row.posture === 'defensive' ||
-          row.posture === 'balanced'
-            ? row.posture
-            : 'balanced',
-        lineup: parseStringArray(row.lineup),
-        substitutes: parseStringArray(row.substitutes),
-      },
-    ]),
-  );
-
-  const lockedFixtures: RoundLockPayload['fixtures'] = [];
-  for (const fixture of roundFixtures) {
-    const homeTeam = teamMap.get(fixture.homeTeamId);
-    const awayTeam = teamMap.get(fixture.awayTeamId);
-    if (!homeTeam || !awayTeam) continue;
-
-    const homeDefaults = getDefaultTactics(homeTeam);
-    const awayDefaults = getDefaultTactics(awayTeam);
-    const homePersisted = tacticsByTeam.get(homeTeam.id);
-    const awayPersisted = tacticsByTeam.get(awayTeam.id);
-
-    const homeTactics = {
-      formation: (homePersisted?.formation ?? homeDefaults.formation) as
-        | '3-5-2'
-        | '4-3-3'
-        | '4-4-2'
-        | '4-5-1'
-        | '5-3-2',
-      posture: (homePersisted?.posture ?? homeDefaults.posture) as
-        | 'attacking'
-        | 'balanced'
-        | 'defensive',
-      lineup:
-        homePersisted?.lineup.length === 11
-          ? homePersisted.lineup
-          : homeDefaults.lineup,
-      substitutes:
-        homePersisted && homePersisted.substitutes.length > 0
-          ? homePersisted.substitutes
-          : homeDefaults.substitutes,
-    };
-    const awayTactics = {
-      formation: (awayPersisted?.formation ?? awayDefaults.formation) as
-        | '3-5-2'
-        | '4-3-3'
-        | '4-4-2'
-        | '4-5-1'
-        | '5-3-2',
-      posture: (awayPersisted?.posture ?? awayDefaults.posture) as
-        | 'attacking'
-        | 'balanced'
-        | 'defensive',
-      lineup:
-        awayPersisted?.lineup.length === 11
-          ? awayPersisted.lineup
-          : awayDefaults.lineup,
-      substitutes:
-        awayPersisted && awayPersisted.substitutes.length > 0
-          ? awayPersisted.substitutes
-          : awayDefaults.substitutes,
-    };
-
-    const simulated = simulateMatch({
-      fixtureId: fixture.id,
-      homeTeam: homeTeam as never,
-      awayTeam: awayTeam as never,
-      homeControl: fixture.homeTeamId === save.playerTeamId ? 'human' : 'ai',
-      awayControl: fixture.awayTeamId === save.playerTeamId ? 'human' : 'ai',
-      homeTactics,
-      awayTactics,
-    });
-    const subMinutesByTeam = computeSubMinutesByTeam(simulated.events);
-    const playerSide =
-      fixture.homeTeamId === save.playerTeamId
-        ? 'home'
-        : fixture.awayTeamId === save.playerTeamId
-          ? 'away'
-          : null;
-
-    lockedFixtures.push({
-      fixtureId: fixture.id,
-      homeScore: simulated.homeScore,
-      awayScore: simulated.awayScore,
-      attendance: simulated.attendance,
-      events: simulated.events,
-      lineupByTeam: {
-        home: homeTactics.lineup,
-        away: awayTactics.lineup,
-      },
-      substitutionMinutesByTeam: subMinutesByTeam,
-      ...(playerSide
-        ? {
-            lineupPlayerIds:
-              playerSide === 'home' ? homeTactics.lineup : awayTactics.lineup,
-            substitutionMinutes: subMinutesByTeam[playerSide],
-          }
-        : {}),
-      lockedAt: new Date().toISOString(),
-    });
-  }
-
-  if (lockedFixtures.length === 0) {
-    return c.json({ error: 'Unable to build lock payload for fixtures' }, 400);
-  }
-
-  const payload: RoundLockPayload = {
-    saveId,
-    round: currentRound,
-    createdAt: new Date().toISOString(),
-    fixtures: lockedFixtures,
-  };
-
-  await db.insert(roundLocks).values({
-    id: nanoid(),
-    saveId,
-    round: currentRound,
-    status: 'locked',
-    payload,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-
-  return c.json({
-    locked: true,
-    reused: false,
-    status: 'locked',
-    payload,
-  });
-});
-
 matchRoutes.post('/:saveId/complete', async (c) => {
   const auth = createAuth(c.env, {
     url: c.req.url,
@@ -654,8 +267,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
 
   const currentRound = save.currentRound ?? DEFAULT_ROUND;
 
-  // Parse and validate request body with Zod (accepted for backwards compatibility,
-  // but server-authoritative completion uses locked server payload only).
+  let parsedBody: { results: MatchResultInput[] };
   try {
     const rawBody = await c.req.json();
     const parsed = CompleteRoundRequestSchema.safeParse(rawBody);
@@ -671,49 +283,25 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         400,
       );
     }
+    parsedBody = parsed.data;
   } catch {
     return c.json({ error: 'Invalid JSON in request body' }, 400);
   }
 
+  const roundResults = parsedBody.results;
+  if (!roundResults.length) {
+    return c.json({ error: 'Match results are required' }, 400);
+  }
+
   try {
-    const lockResult = await db
-      .select({
-        id: roundLocks.id,
-        status: roundLocks.status,
-        payload: roundLocks.payload,
-      })
-      .from(roundLocks)
-      .where(
-        and(eq(roundLocks.saveId, saveId), eq(roundLocks.round, currentRound)),
-      )
-      .limit(1);
-
-    if (lockResult.length === 0) {
-      return c.json(
-        { error: 'No locked round found. Start match first.' },
-        409,
-      );
-    }
-    if (lockResult[0].status === 'committed') {
-      return c.json({ error: 'Round already completed' }, 409);
-    }
-
-    const payloadResult = RoundLockPayloadSchema.safeParse(
-      lockResult[0].payload,
-    );
-    if (!payloadResult.success) {
-      return c.json({ error: 'Stored lock payload is invalid' }, 500);
-    }
-
-    const lockedResults: MatchResultInput[] = payloadResult.data.fixtures;
-
     // Fetch fixtures data
-    const resultFixtureIds = lockedResults.map((r) => r.fixtureId);
+    const resultFixtureIds = roundResults.map((r) => r.fixtureId);
     const roundFixturesData = await db
       .select({
         id: fixtures.id,
         homeTeamId: fixtures.homeTeamId,
         awayTeamId: fixtures.awayTeamId,
+        played: fixtures.played,
       })
       .from(fixtures)
       .where(
@@ -724,6 +312,10 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       );
 
     const fixturesMap = new Map(roundFixturesData.map((f) => [f.id, f]));
+
+    if (roundFixturesData.some((f) => Boolean(f.played))) {
+      return c.json({ error: 'Round already completed' }, 409);
+    }
 
     // Get team IDs that played in this round
     const playingTeamIds = new Set<string>();
@@ -769,7 +361,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     const formUpdates = new Map<string, ('W' | 'D' | 'L')[]>();
     const standingsUpdates: StandingsUpdate[] = [];
 
-    for (const result of lockedResults) {
+    for (const result of roundResults) {
       for (const event of result.events) {
         if (event.playerId && event.type === 'yellow_card') {
           playerYellowCards.set(
@@ -900,7 +492,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         .where(eq(players.saveId, saveId)),
     ]);
 
-    const fixtureStatements = lockedResults.map((result) =>
+    const fixtureStatements = roundResults.map((result) =>
       c.env.DB.prepare(
         'UPDATE fixtures SET played = 1, home_score = ?, away_score = ? WHERE id = ?',
       ).bind(result.homeScore, result.awayScore, result.fixtureId),
@@ -1097,7 +689,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
       );
 
     const playerStatsPromises = teamIdArray.map((teamId) =>
-      processPlayerStatsAndGrowth(db, c.env.DB, saveId, teamId, lockedResults),
+      processPlayerStatsAndGrowth(db, c.env.DB, saveId, teamId, roundResults),
     );
 
     await Promise.all([
@@ -1108,7 +700,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         saveId,
         save.currentSeason,
         currentRound,
-        lockedResults,
+        roundResults,
         {
           teams: prefetchedTeams,
           players: prefetchedPlayers,
@@ -1126,13 +718,6 @@ matchRoutes.post('/:saveId/complete', async (c) => {
         updatedAt: new Date(),
       })
       .where(eq(saves.id, saveId));
-    await db
-      .update(roundLocks)
-      .set({
-        status: 'committed',
-        updatedAt: new Date(),
-      })
-      .where(eq(roundLocks.id, lockResult[0].id));
 
     // Process AI transfer activity (kept alive with waitUntil)
     const transferPromise = processAITransfers(
@@ -1152,7 +737,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     const TOTAL_ROUNDS = 38;
     const seasonComplete = currentRound >= TOTAL_ROUNDS;
 
-    const playerFixtureResult = lockedResults.find((result) => {
+    const playerFixtureResult = roundResults.find((result) => {
       const fixture = fixturesMap.get(result.fixtureId);
       if (!fixture) {
         return false;
@@ -1177,7 +762,7 @@ matchRoutes.post('/:saveId/complete', async (c) => {
     return c.json({
       success: true,
       newRound,
-      matchesProcessed: lockedResults.length,
+      matchesProcessed: roundResults.length,
       seasonComplete,
     });
   } catch (error) {

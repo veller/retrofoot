@@ -26,9 +26,12 @@ import {
   useSaveMatchData,
   fetchTeamTactics,
   saveTeamTactics,
-  lockRoundReplay,
-  type LockedRoundPayload,
 } from '../hooks';
+import {
+  saveMatchCheckpoint,
+  loadMatchCheckpoint,
+  clearMatchCheckpoint,
+} from '../lib/matchCheckpoint';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
@@ -59,75 +62,28 @@ const SECONDS_PER_TICK = 6; // 6 seconds per tick
 const DRIVER_INTERVAL_MS = 50;
 const MAX_CATCHUP_TICKS = 15; // Cap catch-up so we don't freeze after long background
 
-type ReplaySnapshot = {
-  minute: number;
-  phase: 'first_half' | 'half_time' | 'second_half' | 'full_time';
-  homeScore: number;
-  awayScore: number;
-  events: MatchEvent[];
-};
+const GOAL_CHECKPOINT_EVENT_TYPES = new Set<MatchEvent['type']>([
+  'goal',
+  'own_goal',
+  'penalty_scored',
+]);
 
-type ReplayTimeline = {
-  fullTimeMinute: number;
-  snapshots: Map<number, ReplaySnapshot>;
-};
-
-function isHomeGoalEvent(event: MatchEvent): boolean {
-  if (event.type === 'goal' || event.type === 'penalty_scored') {
-    return event.team === 'home';
-  }
-  if (event.type === 'own_goal') {
-    return event.team === 'away';
-  }
-  return false;
-}
-
-function isAwayGoalEvent(event: MatchEvent): boolean {
-  if (event.type === 'goal' || event.type === 'penalty_scored') {
-    return event.team === 'away';
-  }
-  if (event.type === 'own_goal') {
-    return event.team === 'home';
-  }
-  return false;
-}
-
-function buildReplayTimeline(events: MatchEvent[]): ReplayTimeline {
-  const fullTimeEvent = events.find((event) => event.type === 'full_time');
-  const maxMinuteFromEvents = events.reduce(
-    (maxMinute, event) => Math.max(maxMinute, event.minute),
-    90,
-  );
-  const fullTimeMinute = Math.max(
-    fullTimeEvent?.minute ?? 90,
-    maxMinuteFromEvents,
-  );
-  const snapshots = new Map<number, ReplaySnapshot>();
-
-  for (let minute = 0; minute <= fullTimeMinute; minute++) {
-    const minuteEvents = events.filter((event) => event.minute <= minute);
-    const homeScore = minuteEvents.filter(isHomeGoalEvent).length;
-    const awayScore = minuteEvents.filter(isAwayGoalEvent).length;
-
-    const phase: ReplaySnapshot['phase'] =
-      minute >= fullTimeMinute
-        ? 'full_time'
-        : minute === 45
-          ? 'half_time'
-          : minute > 45
-            ? 'second_half'
-            : 'first_half';
-
-    snapshots.set(minute, {
-      minute,
-      phase,
-      homeScore,
-      awayScore,
-      events: minuteEvents,
-    });
-  }
-
-  return { fullTimeMinute, snapshots };
+function cloneMatchesForCheckpoint(
+  matches: LiveMatchState[],
+): LiveMatchState[] {
+  return matches.map((m) => ({
+    ...m,
+    state: {
+      ...m.state,
+      events: [...m.state.events],
+      homeLineup: [...m.state.homeLineup],
+      awayLineup: [...m.state.awayLineup],
+      homeSubs: [...m.state.homeSubs],
+      awaySubs: [...m.state.awaySubs],
+      homeLiveEnergy: { ...m.state.homeLiveEnergy },
+      awayLiveEnergy: { ...m.state.awayLiveEnergy },
+    },
+  }));
 }
 
 function computeTeamParticipationForResult(
@@ -420,8 +376,6 @@ export function MatchPage() {
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const [results, setResults] = useState<MatchResult[]>([]);
   const [playerTactics, setPlayerTactics] = useState<Tactics | null>(null);
-  const [lockedRoundPayload, setLockedRoundPayload] =
-    useState<LockedRoundPayload | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<1 | 3 | 5>(() => {
     try {
@@ -450,15 +404,11 @@ export function MatchPage() {
   const pendingGameSecondsRef = useRef<number>(0);
   const pushTraceEvent = useAiTraceStore((state) => state.push);
   const clearTraceEvents = useAiTraceStore((state) => state.clear);
-  const replayTimelineByFixture = useMemo(() => {
-    if (!lockedRoundPayload) return new Map<string, ReplayTimeline>();
-    return new Map(
-      lockedRoundPayload.fixtures.map((fixture) => [
-        fixture.fixtureId,
-        buildReplayTimeline(fixture.events as MatchEvent[]),
-      ]),
-    );
-  }, [lockedRoundPayload]);
+  const didRestoreCheckpointRef = useRef(false);
+
+  useEffect(() => {
+    didRestoreCheckpointRef.current = false;
+  }, [saveId, matchData?.currentRound]);
 
   // Find the player's fixture and teams
   const { playerFixture, playerHomeTeam, playerAwayTeam } = useMemo(() => {
@@ -556,6 +506,12 @@ export function MatchPage() {
 
     async function hydrateMatchTactics() {
       if (!matchData) return;
+      if (
+        saveId &&
+        loadMatchCheckpoint(saveId, matchData.currentRound ?? 1)
+      ) {
+        return;
+      }
       const playerTeam = matchData.teams.find(
         (team) => team.id === matchData.playerTeamId,
       );
@@ -609,9 +565,45 @@ export function MatchPage() {
     };
   }, [matchData, gameStoreTactics, saveId]);
 
+  // Resume in-progress round from local checkpoint (e.g. after refresh).
+  useEffect(() => {
+    if (!matchData || !saveId || didRestoreCheckpointRef.current) return;
+    const round = matchData.currentRound ?? 1;
+    const cp = loadMatchCheckpoint(saveId, round);
+    if (!cp) return;
+
+    const unplayed = matchData.fixtures.filter((f) => !f.played);
+    const idsA = [...unplayed.map((f) => f.id)].sort().join(',');
+    const idsB = [...cp.matches.map((m) => m.fixtureId)].sort().join(',');
+    if (idsA !== idsB) {
+      clearMatchCheckpoint(saveId, round);
+      return;
+    }
+
+    didRestoreCheckpointRef.current = true;
+    setMatches(cp.matches);
+    setPlayerMatchIndex(cp.playerMatchIndex);
+    setCurrentMinute(cp.currentMinute);
+    setCurrentSeconds(cp.currentSeconds);
+
+    const pm = cp.matches[cp.playerMatchIndex];
+    const atHalfTime = pm?.state.phase === 'half_time';
+    setIsPaused(atHalfTime || cp.isPaused);
+
+    if (pm && matchData.playerTeamId) {
+      const isHome = pm.homeTeam.id === matchData.playerTeamId;
+      setPlayerTactics(isHome ? pm.state.homeTactics : pm.state.awayTactics);
+    }
+    setPhase('live');
+  }, [matchData, saveId]);
+
   // Initialize match states when confirmed
-  const handleConfirmMatch = useCallback(async () => {
+  const handleConfirmMatch = useCallback(() => {
     if (!matchData || !playerTactics) return;
+
+    if (saveId) {
+      clearMatchCheckpoint(saveId, matchData.currentRound ?? 1);
+    }
 
     const unplayedFixtures = matchData.fixtures.filter((f) => !f.played);
     const coreFixtures = unplayedFixtures.map(toCoreFigure);
@@ -632,16 +624,6 @@ export function MatchPage() {
       },
     });
 
-    let lockPayload: LockedRoundPayload | null = null;
-    if (saveId) {
-      try {
-        lockPayload = await lockRoundReplay(saveId);
-      } catch (error) {
-        console.error('Failed to lock round replay:', error);
-        return;
-      }
-    }
-
     const { matches: matchStates, playerMatchIndex: pmi } =
       createMultiMatchState({
         fixtures: coreFixtures,
@@ -653,7 +635,6 @@ export function MatchPage() {
         totalRounds: 38,
       });
 
-    setLockedRoundPayload(lockPayload);
     setMatches(matchStates);
     setPlayerMatchIndex(pmi);
     setPhase('live');
@@ -672,37 +653,10 @@ export function MatchPage() {
         setMatches((prevMatches) => {
           if (prevMatches.length === 0) return prevMatches;
 
-          if (lockedRoundPayload) {
-            for (const match of prevMatches) {
-              if (
-                match.state.phase === 'full_time' ||
-                match.state.phase === 'half_time'
-              ) {
-                continue;
-              }
-
-              const timeline = replayTimelineByFixture.get(match.fixtureId);
-              if (!timeline) continue;
-
-              const nextMinute = Math.min(
-                match.state.minute + 1,
-                timeline.fullTimeMinute,
-              );
-              const snapshot =
-                timeline.snapshots.get(nextMinute) ??
-                timeline.snapshots.get(timeline.fullTimeMinute);
-              if (!snapshot) continue;
-
-              match.state.minute = snapshot.minute;
-              match.state.phase = snapshot.phase;
-              match.state.homeScore = snapshot.homeScore;
-              match.state.awayScore = snapshot.awayScore;
-              match.state.events = [...snapshot.events];
-            }
-          } else {
-            // Advance all matches by one minute
-            simulateAllMatchesStep(prevMatches);
-          }
+          const stepResult = simulateAllMatchesStep(prevMatches);
+          const goalHappened = stepResult.events.some(({ event }) =>
+            GOAL_CHECKPOINT_EVENT_TYPES.has(event.type),
+          );
 
           // Update current minute from player's match
           const playerMatch = prevMatches[playerMatchIndex];
@@ -754,19 +708,35 @@ export function MatchPage() {
           }
 
           // Deep clone to trigger re-render (fix event visibility issue)
-          return prevMatches.map((m) => ({
-            ...m,
-            state: {
-              ...m.state,
-              events: [...m.state.events],
-              homeLineup: [...m.state.homeLineup],
-              awayLineup: [...m.state.awayLineup],
-              homeSubs: [...m.state.homeSubs],
-              awaySubs: [...m.state.awaySubs],
-              homeLiveEnergy: { ...m.state.homeLiveEnergy },
-              awayLiveEnergy: { ...m.state.awayLiveEnergy },
-            },
-          }));
+          const cloned = cloneMatchesForCheckpoint(prevMatches);
+
+          const pmAfter = cloned[playerMatchIndex];
+          const minuteAfter = pmAfter?.state.minute ?? 0;
+          const phaseAfter = pmAfter?.state.phase;
+          const atHalfTime = phaseAfter === 'half_time';
+          const atFullTime = phaseAfter === 'full_time';
+          const shouldCheckpoint =
+            Boolean(saveId) &&
+            (goalHappened ||
+              minuteAfter === 25 ||
+              minuteAfter === 75 ||
+              atFullTime);
+
+          if (shouldCheckpoint && saveId) {
+            const round = matchData?.currentRound ?? 1;
+            const checkpointSaveId = saveId;
+            queueMicrotask(() => {
+              saveMatchCheckpoint(checkpointSaveId, round, {
+                matches: cloned,
+                playerMatchIndex,
+                currentMinute: minuteAfter,
+                currentSeconds: 0,
+                isPaused: atHalfTime || atFullTime,
+              });
+            });
+          }
+
+          return cloned;
         });
 
         return 0; // Reset seconds
@@ -775,8 +745,8 @@ export function MatchPage() {
       return newSeconds;
     });
   }, [
-    lockedRoundPayload,
-    replayTimelineByFixture,
+    saveId,
+    matchData?.currentRound,
     playerMatchIndex,
     matchData?.playerTeamId,
   ]);
@@ -828,10 +798,21 @@ export function MatchPage() {
   function startSecondHalf(): void {
     setMatches((prev) => {
       prev.forEach((m) => resumeFromHalfTime(m.state));
-      return prev.map((m) => ({
-        ...m,
-        state: { ...m.state, events: [...m.state.events] },
-      }));
+      const cloned = cloneMatchesForCheckpoint(prev);
+      if (saveId) {
+        const round = matchData?.currentRound ?? 1;
+        const pm = cloned[playerMatchIndex];
+        queueMicrotask(() => {
+          saveMatchCheckpoint(saveId, round, {
+            matches: cloned,
+            playerMatchIndex,
+            currentMinute: pm?.state.minute ?? 0,
+            currentSeconds: 0,
+            isPaused: false,
+          });
+        });
+      }
+      return cloned;
     });
     setCurrentSeconds(0);
     setIsPaused(false);
@@ -848,7 +829,6 @@ export function MatchPage() {
   };
 
   const handleOpenSubstitutions = () => {
-    if (lockedRoundPayload) return;
     setPhase('substitutions');
   };
 
@@ -866,7 +846,6 @@ export function MatchPage() {
 
   const handleSubstitute = useCallback(
     (playerOutId: string, playerInId: string) => {
-      if (lockedRoundPayload) return;
       setMatches((prev) => {
         if (playerMatchIndex < 0 || !prev[playerMatchIndex]) return prev;
 
@@ -897,12 +876,11 @@ export function MatchPage() {
         });
       });
     },
-    [lockedRoundPayload, playerMatchIndex, matchData?.playerTeamId],
+    [playerMatchIndex, matchData?.playerTeamId],
   );
 
   const handleApplyLiveTactics = useCallback(
     (nextTactics: Tactics) => {
-      if (lockedRoundPayload) return;
       if (!matchData || !playerTactics) return;
       const playerTeam = matchData.teams.find(
         (team) => team.id === matchData.playerTeamId,
@@ -1013,7 +991,7 @@ export function MatchPage() {
       }
       setPhase('live');
     },
-    [lockedRoundPayload, matchData, playerMatchIndex, playerTactics, saveId],
+    [matchData, playerMatchIndex, playerTactics, saveId],
   );
 
   const handleFinish = useCallback(async () => {
@@ -1078,6 +1056,10 @@ export function MatchPage() {
       if (!response.ok) {
         setIsSaving(false);
         return;
+      }
+
+      if (saveId) {
+        clearMatchCheckpoint(saveId, matchData?.currentRound ?? 1);
       }
 
       const responseData = await response.json();
@@ -1279,7 +1261,6 @@ export function MatchPage() {
         playbackSpeed={playbackSpeed}
         onSpeedChange={setPlaybackSpeed}
         round={matchData.currentRound}
-        substitutionsEnabled={!lockedRoundPayload}
       />
       <AiDecisionDevDrawer playerMatch={matches[playerMatchIndex] ?? null} />
     </>

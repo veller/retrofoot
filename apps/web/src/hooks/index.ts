@@ -11,14 +11,11 @@ export {
   fetchSaveSetupStatus,
   fetchTeamTactics,
   saveTeamTactics,
-  lockRoundReplay,
 } from './useSaveData';
 export type {
   SaveData,
   MatchData,
   MatchFixture,
-  LockedRoundPayload,
-  LockedRoundFixture,
   RoundTransaction,
 } from './useSaveData';
 export { useLeaderboards } from './useLeaderboards';

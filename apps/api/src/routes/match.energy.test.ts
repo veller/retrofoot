@@ -1,7 +1,6 @@
 import {
   MatchResultInputSchema,
   CompleteRoundRequestSchema,
-  RoundLockPayloadSchema,
 } from '../types/match.types';
 
 const basePayload = {
@@ -42,29 +41,16 @@ assert(
   'Schema should preserve legacy payload compatibility',
 );
 
-const parsedLockPayload = RoundLockPayloadSchema.safeParse({
-  saveId: 'save-1',
-  round: 3,
-  createdAt: new Date().toISOString(),
-  fixtures: [
-    {
-      ...basePayload,
-      lineupByTeam: {
-        home: ['h1', 'h2'],
-        away: ['a1', 'a2'],
-      },
-      substitutionMinutesByTeam: {
-        home: { h1: 70 },
-        away: { a1: 80 },
-      },
-      lockedAt: new Date().toISOString(),
-    },
-  ],
+const parsedCompleteWithResults = CompleteRoundRequestSchema.safeParse({
+  results: [basePayload],
 });
-assert(parsedLockPayload.success, 'Schema should accept round lock payload');
+assert(
+  parsedCompleteWithResults.success,
+  'Schema should require completion request with results',
+);
 
 const parsedCompleteNoResults = CompleteRoundRequestSchema.safeParse({});
 assert(
-  parsedCompleteNoResults.success,
-  'Schema should allow completion request without client result payload',
+  !parsedCompleteNoResults.success,
+  'Schema should reject completion request without results',
 );
