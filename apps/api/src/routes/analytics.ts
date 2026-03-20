@@ -1,11 +1,16 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createAuth } from '../lib/auth';
-import { logAnalyticsEvent } from '../lib/analytics';
+import {
+  CLIENT_POSTABLE_ANALYTICS_EVENTS,
+  logAnalyticsEvent,
+} from '../lib/analytics';
 import type { Env } from '../index';
 
+const postableEventEnum = z.enum(CLIENT_POSTABLE_ANALYTICS_EVENTS);
+
 const analyticsEventSchema = z.object({
-  eventName: z.enum(['login_successful', 'login_unsuccessful']),
+  eventName: postableEventEnum,
   saveId: z.string().min(1).optional(),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
@@ -38,15 +43,10 @@ analyticsRoutes.post('/events', async (c) => {
   }
 
   try {
-    await logAnalyticsEvent(
-      c.env.DB,
-      body.eventName,
-      session.user.id,
-      {
-        saveId: body.saveId,
-        payload: body.payload,
-      },
-    );
+    await logAnalyticsEvent(c.env.DB, body.eventName, session.user.id, {
+      saveId: body.saveId,
+      payload: body.payload,
+    });
     return c.json({ success: true }, 202);
   } catch (error) {
     console.error('Failed to insert analytics event:', error);

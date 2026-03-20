@@ -51,7 +51,7 @@ import {
   type LeaderboardEntry,
   type SeasonHistoryEntry,
 } from '../hooks';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, useIsAdmin } from '../hooks';
 import { useGameStore } from '../stores/gameStore';
 import { trackEvent } from '../lib/analytics';
 
@@ -137,6 +137,7 @@ export function GamePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut } = useAuth();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
   const {
     data,
     isLoading,
@@ -544,6 +545,14 @@ export function GamePage() {
           >
             Home
           </Link>
+          {isAdmin && !isAdminLoading ? (
+            <Link
+              to="/admin"
+              className="text-slate-300 hover:text-pitch-400 font-medium transition-colors"
+            >
+              Admin
+            </Link>
+          ) : null}
           <button
             onClick={signOut}
             className="text-slate-300 hover:text-red-400 font-medium transition-colors"
@@ -657,6 +666,15 @@ export function GamePage() {
                   >
                     <span>Home</span>
                   </Link>
+                  {isAdmin && !isAdminLoading ? (
+                    <Link
+                      to="/admin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full flex items-center justify-between rounded px-3 py-2 text-sm font-medium uppercase transition-colors bg-slate-700 text-slate-200 hover:bg-slate-600"
+                    >
+                      <span>Admin</span>
+                    </Link>
+                  ) : null}
                   <button
                     onClick={() => {
                       setMobileMenuOpen(false);

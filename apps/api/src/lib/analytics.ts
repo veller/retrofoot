@@ -1,9 +1,23 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { nanoid } from 'nanoid';
 
-export const ANALYTICS_EVENT_NAMES = [
+/** Events the browser may POST to /api/analytics/events (match_completed is server-only). */
+export const CLIENT_POSTABLE_ANALYTICS_EVENTS = [
   'login_successful',
   'login_unsuccessful',
+  'session_start',
+  'sign_up_success',
+  'game_created',
+  'match_started',
+  'season_completed',
+  'game_over',
+] as const;
+
+export type ClientPostableAnalyticsEvent =
+  (typeof CLIENT_POSTABLE_ANALYTICS_EVENTS)[number];
+
+export const ANALYTICS_EVENT_NAMES = [
+  ...CLIENT_POSTABLE_ANALYTICS_EVENTS,
   'match_completed',
 ] as const;
 

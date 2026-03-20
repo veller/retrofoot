@@ -9,10 +9,8 @@ import { transferRoutes } from './routes/transfer';
 import { seasonRoutes } from './routes/season';
 import { achievementsRoutes } from './routes/achievements';
 import { analyticsRoutes } from './routes/analytics';
-import {
-  resolveAllowedOrigins,
-  type CloudflareBindings,
-} from './lib/auth';
+import { adminRoutes } from './routes/admin';
+import { resolveAllowedOrigins, type CloudflareBindings } from './lib/auth';
 import { createRateLimitMiddleware } from './lib/rate-limit';
 
 // Re-export the Env type for use in other files
@@ -32,6 +30,13 @@ const writeRateLimit = createRateLimitMiddleware({
   maxRequests: 80,
   windowMs: 60_000,
   methods: ['POST', 'PUT', 'PATCH', 'DELETE'],
+});
+
+const adminReadRateLimit = createRateLimitMiddleware({
+  keyPrefix: 'admin',
+  maxRequests: 120,
+  windowMs: 60_000,
+  methods: ['GET'],
 });
 
 // Global middleware
@@ -56,6 +61,7 @@ app.use('/api/transfer/*', writeRateLimit);
 app.use('/api/season', writeRateLimit);
 app.use('/api/season/*', writeRateLimit);
 app.use('/api/analytics/*', writeRateLimit);
+app.use('/api/admin/*', adminReadRateLimit);
 
 // Health check
 app.get('/api/health', (c) => {
@@ -75,6 +81,7 @@ app.route('/api/transfer', transferRoutes);
 app.route('/api/season', seasonRoutes);
 app.route('/api/achievements', achievementsRoutes);
 app.route('/api/analytics', analyticsRoutes);
+app.route('/api/admin', adminRoutes);
 
 // 404 handler
 app.notFound((c) => {

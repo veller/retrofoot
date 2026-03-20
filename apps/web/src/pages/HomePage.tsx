@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth, useSaves } from '@/hooks';
+import { useAuth, useSaves, useIsAdmin } from '@/hooks';
 import { trackEvent } from '@/lib/analytics';
 
 function getGameOverMessage(gameOverReason?: string | null): string {
@@ -12,6 +12,7 @@ function getGameOverMessage(gameOverReason?: string | null): string {
 
 export function HomePage() {
   const { user, signOut } = useAuth();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
   const { currentSave, hasSave, isLoading, deleteSave, isDeleting } =
     useSaves();
   const navigate = useNavigate();
@@ -121,11 +122,19 @@ export function HomePage() {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
       {/* User info bar */}
-      <div className="absolute top-4 right-4 flex items-center gap-4">
+      <div className="absolute top-4 right-4 flex items-center gap-4 flex-wrap justify-end">
         <span className="text-slate-400 text-sm">
           Welcome,{' '}
           <span className="text-pitch-400">{user?.name || user?.email}</span>
         </span>
+        {isAdmin && !isAdminLoading ? (
+          <Link
+            to="/admin"
+            className="text-slate-400 hover:text-pitch-400 text-sm font-medium transition-colors"
+          >
+            Admin
+          </Link>
+        ) : null}
         <button
           onClick={signOut}
           className="text-slate-400 hover:text-red-400 text-sm transition-colors"

@@ -14,9 +14,16 @@ type AnalyticsEventName =
 
 type AnalyticsProperties = Record<string, string | number | boolean | null>;
 
+/** Sent to API; match_completed is logged server-side only (avoid duplicates). */
 const CLIENT_CAPTURED_EVENTS = new Set<AnalyticsEventName>([
   'login_successful',
   'login_unsuccessful',
+  'session_start',
+  'sign_up_success',
+  'game_created',
+  'match_started',
+  'season_completed',
+  'game_over',
 ]);
 
 function canUseAnalytics(): boolean {

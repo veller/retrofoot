@@ -22,6 +22,8 @@ export type CloudflareBindings = {
   AUTH_PERF_LOGS?: string;
   API_BASE_URL?: string;
   ALLOWED_ORIGINS?: string;
+  /** Comma-separated admin emails; if unset, built-in defaults apply */
+  ADMIN_EMAILS?: string;
 };
 
 // Session duration constants (in seconds)
@@ -72,10 +74,7 @@ function logAuthPerf(
   console.log(JSON.stringify({ event: 'auth_perf', ...data }));
 }
 
-function getRuntimeCacheKey(
-  env: CloudflareBindings,
-  modeKey: string,
-): string {
+function getRuntimeCacheKey(env: CloudflareBindings, modeKey: string): string {
   return `${env.ENVIRONMENT ?? 'production'}:${modeKey}:${env.BETTER_AUTH_SECRET}:${env.API_BASE_URL ?? ''}:${env.ALLOWED_ORIGINS ?? ''}`;
 }
 
@@ -169,7 +168,7 @@ export function resolveCookiePolicy(
     crossSubDomainCookies: !isDevelopmentLike,
     baseURL: isDevelopmentLike
       ? DEVELOPMENT_API_BASE_URL
-      : (apiBaseUrl?.trim() || PRODUCTION_API_BASE_URL),
+      : apiBaseUrl?.trim() || PRODUCTION_API_BASE_URL,
     modeKey: isDevelopmentLike ? 'development-like' : 'production-like',
     localOverride,
   };

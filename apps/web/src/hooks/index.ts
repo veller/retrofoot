@@ -1,5 +1,6 @@
 // Hooks barrel export
 export { useAuth } from './useAuth';
+export { useIsAdmin } from './useIsAdmin';
 export { useTouchDrag } from './useTouchDrag';
 export type { PitchSlot } from './useTouchDrag';
 export { useSaves, useCreateSave } from './useSaves';

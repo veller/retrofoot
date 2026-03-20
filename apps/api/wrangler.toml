@@ -24,6 +24,8 @@ migrations_dir = "../../packages/db/migrations"
 ENVIRONMENT = "production"
 API_BASE_URL = "https://retrofoot-api.vellerbauer.workers.dev"
 ALLOWED_ORIGINS = "https://retrofoot-web.pages.dev"
+# Optional: comma-separated admin emails for /api/admin (defaults are set in code if unset)
+# ADMIN_EMAILS = "you@example.com,other@example.com"
 
 # Development secrets and overrides (use .dev.vars file for local dev)
 # The .dev.vars file overrides [vars] during `wrangler dev`

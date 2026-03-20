@@ -73,23 +73,29 @@ export const verifications = sqliteTable('verifications', {
 // Game Saves
 // ============================================================================
 
-export const saves = sqliteTable('saves', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  playerTeamId: text('player_team_id').notNull(),
-  managerName: text('manager_name').notNull(),
-  managerReputation: integer('manager_reputation').default(50),
-  disciplinePreset: text('discipline_preset').default('domestic_5yc'),
-  currentSeason: text('current_season').notNull(), // e.g., "2024/25"
-  currentRound: integer('current_round').default(1),
-  gameOver: integer('game_over', { mode: 'boolean' }).default(false),
-  gameOverReason: text('game_over_reason'), // 'relegated' | null
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-});
+export const saves = sqliteTable(
+  'saves',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    playerTeamId: text('player_team_id').notNull(),
+    managerName: text('manager_name').notNull(),
+    managerReputation: integer('manager_reputation').default(50),
+    disciplinePreset: text('discipline_preset').default('domestic_5yc'),
+    currentSeason: text('current_season').notNull(), // e.g., "2024/25"
+    currentRound: integer('current_round').default(1),
+    gameOver: integer('game_over', { mode: 'boolean' }).default(false),
+    gameOverReason: text('game_over_reason'), // 'relegated' | null
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => ({
+    userIdIdx: index('saves_user_id_idx').on(table.userId),
+  }),
+);
 
 // ============================================================================
 // Teams

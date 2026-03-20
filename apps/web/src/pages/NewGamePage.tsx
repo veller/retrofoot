@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useCreateSave } from '@/hooks';
+import { useCreateSave, useIsAdmin } from '@/hooks';
 import { apiFetch } from '@/lib/api';
 import { trackEvent } from '@/lib/analytics';
 
@@ -16,6 +16,7 @@ interface TeamOption {
 export function NewGamePage() {
   const navigate = useNavigate();
   const { createSave, isCreating, error } = useCreateSave();
+  const { isAdmin, isLoading: isAdminLoading } = useIsAdmin();
 
   const [teams, setTeams] = useState<TeamOption[]>([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(true);
@@ -74,7 +75,16 @@ export function NewGamePage() {
             &larr; Back
           </Link>
           <h1 className="font-pixel text-xl text-pitch-400">NEW GAME</h1>
-          <div className="w-16" /> {/* Spacer */}
+          <div className="min-w-[4rem] flex justify-end">
+            {isAdmin && !isAdminLoading ? (
+              <Link
+                to="/admin"
+                className="text-sm text-slate-400 hover:text-pitch-400 font-medium"
+              >
+                Admin
+              </Link>
+            ) : null}
+          </div>
         </div>
       </header>
 

@@ -10,6 +10,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 import { ContactPage } from './pages/ContactPage';
+import { AdminPage } from './pages/AdminPage';
 import { ProtectedRoute } from './components';
 
 export function App() {
@@ -26,6 +27,7 @@ export function App() {
         {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/game/new" element={<NewGamePage />} />
           <Route path="/game/:saveId" element={<GamePage />} />
           <Route path="/game/:saveId/match" element={<MatchPage />} />
