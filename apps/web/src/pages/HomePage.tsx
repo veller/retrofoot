@@ -155,6 +155,12 @@ export function HomePage() {
 
       <nav className="flex flex-col gap-4 w-full max-w-xs">
         {primaryActions}
+        <Link
+          to="/online"
+          className="bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold py-4 px-8 text-center transition-colors border-2 border-amber-700/50 hover:border-amber-600"
+        >
+          PLAY ONLINE
+        </Link>
         <button
           disabled
           className="bg-slate-700 text-slate-500 font-bold py-4 px-8 border-2 border-slate-600 cursor-not-allowed"

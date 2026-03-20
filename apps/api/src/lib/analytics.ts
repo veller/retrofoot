@@ -55,3 +55,50 @@ export async function logAnalyticsEvent(
     )
     .run();
 }
+
+/** Online-only funnel; stored in `online_analytics_events`. */
+export const CLIENT_POSTABLE_ONLINE_ANALYTICS_EVENTS = [
+  'online_lobby_created',
+  'online_league_joined',
+  'online_lobby_viewed',
+] as const;
+
+export type ClientPostableOnlineAnalyticsEvent =
+  (typeof CLIENT_POSTABLE_ONLINE_ANALYTICS_EVENTS)[number];
+
+/** Includes server-only events (not accepted from browser POST). */
+export const SERVER_ONLY_ONLINE_ANALYTICS_EVENTS = [
+  'online_league_started',
+] as const;
+
+export type OnlineAnalyticsEventName =
+  | ClientPostableOnlineAnalyticsEvent
+  | (typeof SERVER_ONLY_ONLINE_ANALYTICS_EVENTS)[number];
+
+export async function logOnlineAnalyticsEvent(
+  db: D1Database,
+  eventName: OnlineAnalyticsEventName,
+  userId: string,
+  options?: {
+    onlineLeagueId?: string;
+    onlineFixtureId?: string;
+    onlineMatchSessionId?: string;
+    payload?: AnalyticsPayload;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      'INSERT INTO online_analytics_events (id, event_name, user_id, online_league_id, online_fixture_id, online_match_session_id, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .bind(
+      nanoid(),
+      eventName,
+      userId,
+      options?.onlineLeagueId ?? null,
+      options?.onlineFixtureId ?? null,
+      options?.onlineMatchSessionId ?? null,
+      serializePayload(options?.payload),
+      Date.now(),
+    )
+    .run();
+}

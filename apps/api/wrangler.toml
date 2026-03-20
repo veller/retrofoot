@@ -19,6 +19,14 @@ database_name = "retrofoot-db"
 database_id = "bca95b94-1528-42fb-9de4-09a61ea76754"
 migrations_dir = "../../packages/db/migrations"
 
+[[durable_objects.bindings]]
+name = "MATCH_ROOM"
+class_name = "MatchRoom"
+
+[[migrations]]
+tag = "online-match-room-v1"
+new_sqlite_classes = ["MatchRoom"]
+
 # Environment variables (secrets should be set via `wrangler secret put`)
 [vars]
 ENVIRONMENT = "production"
@@ -32,3 +40,6 @@ ALLOWED_ORIGINS = "https://retrofoot-web.pages.dev"
 # Create a .dev.vars file with:
 # BETTER_AUTH_SECRET=your-secret-at-least-32-characters-long
 # ENVIRONMENT=development
+# Optional (see docs/LOCAL_ONLINE_DEV.md):
+# ONLINE_DEV_SINGLE_PLAYER_MATCH=1
+# ONLINE_DEV_SECRET=long-random-string-for-dev-routes-only

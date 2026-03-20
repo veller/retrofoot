@@ -12,6 +12,11 @@ import { TermsPage } from './pages/TermsPage';
 import { ContactPage } from './pages/ContactPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProtectedRoute } from './components';
+import { OnlineHomePage } from './online/OnlineHomePage';
+import { LeagueLobbyPage } from './online/LeagueLobbyPage';
+import { OnlineLeagueSeasonPage } from './online/OnlineLeagueSeasonPage';
+import { OnlineMatchRoomPage } from './online/OnlineMatchRoomPage';
+import { OnlineJoinInvitePage } from './online/OnlineJoinInvitePage';
 
 export function App() {
   return (
@@ -34,6 +39,20 @@ export function App() {
           <Route
             path="/game/:saveId/season-summary"
             element={<SeasonSummaryPage />}
+          />
+          <Route path="/online" element={<OnlineHomePage />} />
+          <Route
+            path="/online/join/:inviteCode"
+            element={<OnlineJoinInvitePage />}
+          />
+          <Route path="/online/league/:leagueId" element={<LeagueLobbyPage />} />
+          <Route
+            path="/online/league/:leagueId/season"
+            element={<OnlineLeagueSeasonPage />}
+          />
+          <Route
+            path="/online/league/:leagueId/match/:fixtureId"
+            element={<OnlineMatchRoomPage />}
           />
         </Route>
 

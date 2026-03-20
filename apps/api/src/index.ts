@@ -10,7 +10,9 @@ import { seasonRoutes } from './routes/season';
 import { achievementsRoutes } from './routes/achievements';
 import { analyticsRoutes } from './routes/analytics';
 import { adminRoutes } from './routes/admin';
+import { onlineRoutes } from './routes/online';
 import { resolveAllowedOrigins, type CloudflareBindings } from './lib/auth';
+import { MatchRoom } from './durable/MatchRoom';
 import { createRateLimitMiddleware } from './lib/rate-limit';
 
 // Re-export the Env type for use in other files
@@ -61,6 +63,8 @@ app.use('/api/transfer/*', writeRateLimit);
 app.use('/api/season', writeRateLimit);
 app.use('/api/season/*', writeRateLimit);
 app.use('/api/analytics/*', writeRateLimit);
+app.use('/api/online', writeRateLimit);
+app.use('/api/online/*', writeRateLimit);
 app.use('/api/admin/*', adminReadRateLimit);
 
 // Health check
@@ -81,6 +85,7 @@ app.route('/api/transfer', transferRoutes);
 app.route('/api/season', seasonRoutes);
 app.route('/api/achievements', achievementsRoutes);
 app.route('/api/analytics', analyticsRoutes);
+app.route('/api/online', onlineRoutes);
 app.route('/api/admin', adminRoutes);
 
 // 404 handler
@@ -101,6 +106,7 @@ app.onError((err, c) => {
 });
 
 // Export for Cloudflare Workers
+export { MatchRoom };
 export default app;
 
 // Export type for Hono RPC client

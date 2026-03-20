@@ -520,3 +520,5 @@ export type NewAchievement = typeof achievements.$inferInsert;
 
 export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
 export type NewAnalyticsEvent = typeof analyticsEvents.$inferInsert;
+
+export * from './online';

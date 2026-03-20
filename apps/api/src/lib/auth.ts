@@ -2,7 +2,7 @@
 // RETROFOOT - Better Auth Configuration
 // ============================================================================
 
-import type { D1Database } from '@cloudflare/workers-types';
+import type { D1Database, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { betterAuth } from 'better-auth';
 import { verifyPassword as verifyLegacyScryptHash } from 'better-auth/crypto';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -17,6 +17,8 @@ import {
 // Cloudflare bindings type
 export type CloudflareBindings = {
   DB: D1Database;
+  /** Online live match coordination (WebSocket per fixture). */
+  MATCH_ROOM: DurableObjectNamespace;
   BETTER_AUTH_SECRET: string;
   ENVIRONMENT?: string;
   AUTH_PERF_LOGS?: string;
@@ -24,6 +26,16 @@ export type CloudflareBindings = {
   ALLOWED_ORIGINS?: string;
   /** Comma-separated admin emails; if unset, built-in defaults apply */
   ADMIN_EMAILS?: string;
+  /**
+   * When `ENVIRONMENT=development` and value is `1`, MatchRoom allows one
+   * connected manager to run the sim and resume half-time alone.
+   */
+  ONLINE_DEV_SINGLE_PLAYER_MATCH?: string;
+  /**
+   * Shared secret for `POST .../dev/...` routes; required in development
+   * when using the companion-member helper.
+   */
+  ONLINE_DEV_SECRET?: string;
 };
 
 // Session duration constants (in seconds)
