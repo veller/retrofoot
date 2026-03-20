@@ -153,7 +153,9 @@ export const players = sqliteTable('players', {
   // Player status and form tracking
   status: text('status').default('active'), // active, retiring, retired, deceased, suspended
   yellowAccumulation: integer('yellow_accumulation').default(0),
-  suspensionMatchesRemaining: integer('suspension_matches_remaining').default(0),
+  suspensionMatchesRemaining: integer('suspension_matches_remaining').default(
+    0,
+  ),
   suspensionReason: text('suspension_reason'),
   seasonYellowCards: integer('season_yellow_cards').default(0),
   seasonRedCards: integer('season_red_cards').default(0),
@@ -333,6 +335,31 @@ export const tactics = sqliteTable(
 );
 
 // ============================================================================
+// Round Locks (immutable round simulation payloads)
+// ============================================================================
+
+export const roundLocks = sqliteTable(
+  'round_locks',
+  {
+    id: text('id').primaryKey(),
+    saveId: text('save_id')
+      .notNull()
+      .references(() => saves.id, { onDelete: 'cascade' }),
+    round: integer('round').notNull(),
+    status: text('status').notNull().default('locked'), // 'locked' | 'committed'
+    payload: text('payload', { mode: 'json' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => ({
+    saveRoundUnique: uniqueIndex('round_locks_save_round_unique').on(
+      table.saveId,
+      table.round,
+    ),
+  }),
+);
+
+// ============================================================================
 // Financial Transactions (history tracking)
 // ============================================================================
 
@@ -410,7 +437,9 @@ export const analyticsEvents = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    saveId: text('save_id').references(() => saves.id, { onDelete: 'set null' }),
+    saveId: text('save_id').references(() => saves.id, {
+      onDelete: 'set null',
+    }),
     payload: text('payload', { mode: 'json' }),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   },
@@ -464,6 +493,9 @@ export type NewTransfer = typeof transfers.$inferInsert;
 
 export type Tactics = typeof tactics.$inferSelect;
 export type NewTactics = typeof tactics.$inferInsert;
+
+export type RoundLock = typeof roundLocks.$inferSelect;
+export type NewRoundLock = typeof roundLocks.$inferInsert;
 
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, useSaves } from '@/hooks';
 import { trackEvent } from '@/lib/analytics';
 
-function getGameOverMessage(gameOverReason?: string): string {
+function getGameOverMessage(gameOverReason?: string | null): string {
   if (gameOverReason === 'relegated') {
     return 'Your team was relegated from the league.';
   }

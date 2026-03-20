@@ -22,7 +22,13 @@ import {
   isLineupCompatibleWithFormation,
 } from '@retrofoot/core';
 import { apiFetch } from '../lib/api';
-import { useSaveMatchData, fetchTeamTactics, saveTeamTactics } from '../hooks';
+import {
+  useSaveMatchData,
+  fetchTeamTactics,
+  saveTeamTactics,
+  lockRoundReplay,
+  type LockedRoundPayload,
+} from '../hooks';
 import { PreMatchOverview } from '../components/PreMatchOverview';
 import { MatchLiveView } from '../components/MatchLiveView';
 import { SubstitutionPanel } from '../components/SubstitutionPanel';
@@ -52,6 +58,77 @@ const SECONDS_PER_TICK = 6; // 6 seconds per tick
 // consistent even when the timer is delayed (e.g. production or background tab).
 const DRIVER_INTERVAL_MS = 50;
 const MAX_CATCHUP_TICKS = 15; // Cap catch-up so we don't freeze after long background
+
+type ReplaySnapshot = {
+  minute: number;
+  phase: 'first_half' | 'half_time' | 'second_half' | 'full_time';
+  homeScore: number;
+  awayScore: number;
+  events: MatchEvent[];
+};
+
+type ReplayTimeline = {
+  fullTimeMinute: number;
+  snapshots: Map<number, ReplaySnapshot>;
+};
+
+function isHomeGoalEvent(event: MatchEvent): boolean {
+  if (event.type === 'goal' || event.type === 'penalty_scored') {
+    return event.team === 'home';
+  }
+  if (event.type === 'own_goal') {
+    return event.team === 'away';
+  }
+  return false;
+}
+
+function isAwayGoalEvent(event: MatchEvent): boolean {
+  if (event.type === 'goal' || event.type === 'penalty_scored') {
+    return event.team === 'away';
+  }
+  if (event.type === 'own_goal') {
+    return event.team === 'home';
+  }
+  return false;
+}
+
+function buildReplayTimeline(events: MatchEvent[]): ReplayTimeline {
+  const fullTimeEvent = events.find((event) => event.type === 'full_time');
+  const maxMinuteFromEvents = events.reduce(
+    (maxMinute, event) => Math.max(maxMinute, event.minute),
+    90,
+  );
+  const fullTimeMinute = Math.max(
+    fullTimeEvent?.minute ?? 90,
+    maxMinuteFromEvents,
+  );
+  const snapshots = new Map<number, ReplaySnapshot>();
+
+  for (let minute = 0; minute <= fullTimeMinute; minute++) {
+    const minuteEvents = events.filter((event) => event.minute <= minute);
+    const homeScore = minuteEvents.filter(isHomeGoalEvent).length;
+    const awayScore = minuteEvents.filter(isAwayGoalEvent).length;
+
+    const phase: ReplaySnapshot['phase'] =
+      minute >= fullTimeMinute
+        ? 'full_time'
+        : minute === 45
+          ? 'half_time'
+          : minute > 45
+            ? 'second_half'
+            : 'first_half';
+
+    snapshots.set(minute, {
+      minute,
+      phase,
+      homeScore,
+      awayScore,
+      events: minuteEvents,
+    });
+  }
+
+  return { fullTimeMinute, snapshots };
+}
 
 function computeTeamParticipationForResult(
   match: LiveMatchState,
@@ -343,6 +420,8 @@ export function MatchPage() {
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const [results, setResults] = useState<MatchResult[]>([]);
   const [playerTactics, setPlayerTactics] = useState<Tactics | null>(null);
+  const [lockedRoundPayload, setLockedRoundPayload] =
+    useState<LockedRoundPayload | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<1 | 3 | 5>(() => {
     try {
@@ -371,7 +450,15 @@ export function MatchPage() {
   const pendingGameSecondsRef = useRef<number>(0);
   const pushTraceEvent = useAiTraceStore((state) => state.push);
   const clearTraceEvents = useAiTraceStore((state) => state.clear);
-
+  const replayTimelineByFixture = useMemo(() => {
+    if (!lockedRoundPayload) return new Map<string, ReplayTimeline>();
+    return new Map(
+      lockedRoundPayload.fixtures.map((fixture) => [
+        fixture.fixtureId,
+        buildReplayTimeline(fixture.events as MatchEvent[]),
+      ]),
+    );
+  }, [lockedRoundPayload]);
 
   // Find the player's fixture and teams
   const { playerFixture, playerHomeTeam, playerAwayTeam } = useMemo(() => {
@@ -441,7 +528,9 @@ export function MatchPage() {
     );
     const sanitizedLineup = lineupIsCompatible ? lineup : rebuilt.lineup;
     const sanitizedLineupSet = new Set(sanitizedLineup);
-    const sanitizedSubs = substitutes.filter((id) => !sanitizedLineupSet.has(id));
+    const sanitizedSubs = substitutes.filter(
+      (id) => !sanitizedLineupSet.has(id),
+    );
 
     if (!lineupIsCompatible) {
       return {
@@ -456,7 +545,8 @@ export function MatchPage() {
       formation,
       posture: candidate.posture ?? 'balanced',
       lineup: sanitizedLineup,
-      substitutes: sanitizedSubs.length > 0 ? sanitizedSubs : rebuilt.substitutes,
+      substitutes:
+        sanitizedSubs.length > 0 ? sanitizedSubs : rebuilt.substitutes,
     };
   }
 
@@ -520,7 +610,7 @@ export function MatchPage() {
   }, [matchData, gameStoreTactics, saveId]);
 
   // Initialize match states when confirmed
-  const handleConfirmMatch = useCallback(() => {
+  const handleConfirmMatch = useCallback(async () => {
     if (!matchData || !playerTactics) return;
 
     const unplayedFixtures = matchData.fixtures.filter((f) => !f.played);
@@ -542,6 +632,16 @@ export function MatchPage() {
       },
     });
 
+    let lockPayload: LockedRoundPayload | null = null;
+    if (saveId) {
+      try {
+        lockPayload = await lockRoundReplay(saveId);
+      } catch (error) {
+        console.error('Failed to lock round replay:', error);
+        return;
+      }
+    }
+
     const { matches: matchStates, playerMatchIndex: pmi } =
       createMultiMatchState({
         fixtures: coreFixtures,
@@ -553,18 +653,14 @@ export function MatchPage() {
         totalRounds: 38,
       });
 
+    setLockedRoundPayload(lockPayload);
     setMatches(matchStates);
     setPlayerMatchIndex(pmi);
     setPhase('live');
     setCurrentMinute(0);
     setCurrentSeconds(0);
     setIsPaused(false);
-  }, [
-    clearTraceEvents,
-    matchData,
-    playerTactics,
-    pushTraceEvent,
-  ]);
+  }, [clearTraceEvents, matchData, playerTactics, pushTraceEvent, saveId]);
 
   // Simulation tick - advances time by SECONDS_PER_TICK seconds
   const tick = useCallback(() => {
@@ -576,8 +672,37 @@ export function MatchPage() {
         setMatches((prevMatches) => {
           if (prevMatches.length === 0) return prevMatches;
 
-          // Advance all matches by one minute
-          simulateAllMatchesStep(prevMatches);
+          if (lockedRoundPayload) {
+            for (const match of prevMatches) {
+              if (
+                match.state.phase === 'full_time' ||
+                match.state.phase === 'half_time'
+              ) {
+                continue;
+              }
+
+              const timeline = replayTimelineByFixture.get(match.fixtureId);
+              if (!timeline) continue;
+
+              const nextMinute = Math.min(
+                match.state.minute + 1,
+                timeline.fullTimeMinute,
+              );
+              const snapshot =
+                timeline.snapshots.get(nextMinute) ??
+                timeline.snapshots.get(timeline.fullTimeMinute);
+              if (!snapshot) continue;
+
+              match.state.minute = snapshot.minute;
+              match.state.phase = snapshot.phase;
+              match.state.homeScore = snapshot.homeScore;
+              match.state.awayScore = snapshot.awayScore;
+              match.state.events = [...snapshot.events];
+            }
+          } else {
+            // Advance all matches by one minute
+            simulateAllMatchesStep(prevMatches);
+          }
 
           // Update current minute from player's match
           const playerMatch = prevMatches[playerMatchIndex];
@@ -615,7 +740,8 @@ export function MatchPage() {
                   return {
                     ...result,
                     ...withTeamMinutes,
-                    lineupPlayerIds: withTeamMinutes.lineupByTeam[playerTeamSide],
+                    lineupPlayerIds:
+                      withTeamMinutes.lineupByTeam[playerTeamSide],
                     substitutionMinutes:
                       withTeamMinutes.substitutionMinutesByTeam[playerTeamSide],
                   };
@@ -648,7 +774,12 @@ export function MatchPage() {
 
       return newSeconds;
     });
-  }, [playerMatchIndex, matchData?.playerTeamId]);
+  }, [
+    lockedRoundPayload,
+    replayTimelineByFixture,
+    playerMatchIndex,
+    matchData?.playerTeamId,
+  ]);
 
   // Start/stop simulation. Driver runs at a fixed rate and runs N ticks based on elapsed real time
   // so playback speed is consistent even when the timer is delayed (e.g. production or background tab).
@@ -717,6 +848,7 @@ export function MatchPage() {
   };
 
   const handleOpenSubstitutions = () => {
+    if (lockedRoundPayload) return;
     setPhase('substitutions');
   };
 
@@ -734,6 +866,7 @@ export function MatchPage() {
 
   const handleSubstitute = useCallback(
     (playerOutId: string, playerInId: string) => {
+      if (lockedRoundPayload) return;
       setMatches((prev) => {
         if (playerMatchIndex < 0 || !prev[playerMatchIndex]) return prev;
 
@@ -764,11 +897,12 @@ export function MatchPage() {
         });
       });
     },
-    [playerMatchIndex, matchData?.playerTeamId],
+    [lockedRoundPayload, playerMatchIndex, matchData?.playerTeamId],
   );
 
   const handleApplyLiveTactics = useCallback(
     (nextTactics: Tactics) => {
+      if (lockedRoundPayload) return;
       if (!matchData || !playerTactics) return;
       const playerTeam = matchData.teams.find(
         (team) => team.id === matchData.playerTeamId,
@@ -879,7 +1013,7 @@ export function MatchPage() {
       }
       setPhase('live');
     },
-    [matchData, playerMatchIndex, playerTactics, saveId],
+    [lockedRoundPayload, matchData, playerMatchIndex, playerTactics, saveId],
   );
 
   const handleFinish = useCallback(async () => {
@@ -1145,6 +1279,7 @@ export function MatchPage() {
         playbackSpeed={playbackSpeed}
         onSpeedChange={setPlaybackSpeed}
         round={matchData.currentRound}
+        substitutionsEnabled={!lockedRoundPayload}
       />
       <AiDecisionDevDrawer playerMatch={matches[playerMatchIndex] ?? null} />
     </>

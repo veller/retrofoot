@@ -68,11 +68,22 @@ export const MatchResultInputSchema = z.object({
     .optional(),
 });
 
+export const LockedRoundFixtureSchema = MatchResultInputSchema.extend({
+  lockedAt: z.string().datetime().optional(),
+});
+
+export const RoundLockPayloadSchema = z.object({
+  saveId: z.string().min(1),
+  round: z.number().int().min(1),
+  createdAt: z.string().datetime(),
+  fixtures: z.array(LockedRoundFixtureSchema).min(1),
+});
+
 /**
  * Schema for complete round request body
  */
 export const CompleteRoundRequestSchema = z.object({
-  results: z.array(MatchResultInputSchema).min(1),
+  results: z.array(MatchResultInputSchema).min(1).optional(),
 });
 
 // =============================================================================
@@ -88,6 +99,8 @@ export type MatchEvent = z.infer<typeof MatchEventSchema>;
  * Match result input from client for completing a round
  */
 export type MatchResultInput = z.infer<typeof MatchResultInputSchema>;
+export type LockedRoundFixture = z.infer<typeof LockedRoundFixtureSchema>;
+export type RoundLockPayload = z.infer<typeof RoundLockPayloadSchema>;
 
 /**
  * Complete round request body

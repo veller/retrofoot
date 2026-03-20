@@ -1,4 +1,8 @@
-import { MatchResultInputSchema } from '../types/match.types';
+import {
+  MatchResultInputSchema,
+  CompleteRoundRequestSchema,
+  RoundLockPayloadSchema,
+} from '../types/match.types';
 
 const basePayload = {
   fixtureId: 'fx-1',
@@ -23,11 +27,44 @@ const parsedNewShape = MatchResultInputSchema.safeParse({
     away: { a1: 75, a12: 75 },
   },
 });
-assert(parsedNewShape.success, 'Schema should accept side-specific payload fields');
+assert(
+  parsedNewShape.success,
+  'Schema should accept side-specific payload fields',
+);
 
 const parsedLegacy = MatchResultInputSchema.safeParse({
   ...basePayload,
   lineupPlayerIds: ['p1', 'p2'],
   substitutionMinutes: { p1: 60, p12: 60 },
 });
-assert(parsedLegacy.success, 'Schema should preserve legacy payload compatibility');
+assert(
+  parsedLegacy.success,
+  'Schema should preserve legacy payload compatibility',
+);
+
+const parsedLockPayload = RoundLockPayloadSchema.safeParse({
+  saveId: 'save-1',
+  round: 3,
+  createdAt: new Date().toISOString(),
+  fixtures: [
+    {
+      ...basePayload,
+      lineupByTeam: {
+        home: ['h1', 'h2'],
+        away: ['a1', 'a2'],
+      },
+      substitutionMinutesByTeam: {
+        home: { h1: 70 },
+        away: { a1: 80 },
+      },
+      lockedAt: new Date().toISOString(),
+    },
+  ],
+});
+assert(parsedLockPayload.success, 'Schema should accept round lock payload');
+
+const parsedCompleteNoResults = CompleteRoundRequestSchema.safeParse({});
+assert(
+  parsedCompleteNoResults.success,
+  'Schema should allow completion request without client result payload',
+);

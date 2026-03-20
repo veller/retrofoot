@@ -267,6 +267,41 @@ export interface MatchData {
   teams: Team[];
 }
 
+export interface LockedRoundFixture {
+  fixtureId: string;
+  homeScore: number;
+  awayScore: number;
+  attendance: number;
+  events: Array<{
+    minute: number;
+    type: string;
+    team: 'home' | 'away';
+    playerId?: string;
+    playerName?: string;
+    assistPlayerId?: string;
+    assistPlayerName?: string;
+    cardReason?: 'straight_red' | 'second_yellow';
+    description?: string;
+  }>;
+  lineupPlayerIds?: string[];
+  substitutionMinutes?: Record<string, number>;
+  lineupByTeam?: {
+    home: string[];
+    away: string[];
+  };
+  substitutionMinutesByTeam?: {
+    home: Record<string, number>;
+    away: Record<string, number>;
+  };
+}
+
+export interface LockedRoundPayload {
+  saveId: string;
+  round: number;
+  createdAt: string;
+  fixtures: LockedRoundFixture[];
+}
+
 interface UseSaveMatchDataResult {
   data: MatchData | null;
   isLoading: boolean;
@@ -653,6 +688,24 @@ export async function saveTeamTactics(
     lineup: payload.tactics.lineup ?? [],
     substitutes: payload.tactics.substitutes ?? [],
   };
+}
+
+export async function lockRoundReplay(
+  saveId: string,
+): Promise<LockedRoundPayload> {
+  const response = await apiFetch(`/api/match/${saveId}/lock-round`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || 'Failed to lock round replay');
+  }
+
+  const payload: { payload: LockedRoundPayload } = await response.json();
+  return payload.payload;
 }
 
 // ============================================================================

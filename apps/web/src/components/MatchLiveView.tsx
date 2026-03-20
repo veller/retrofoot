@@ -59,6 +59,7 @@ interface MatchLiveViewProps {
   playbackSpeed: PlaybackSpeed;
   onSpeedChange: (speed: PlaybackSpeed) => void;
   round: number;
+  substitutionsEnabled?: boolean;
 }
 
 function formatTime(minute: number, seconds: number): string {
@@ -345,6 +346,7 @@ interface ControlButtonsProps {
   onSubstitutions: () => void;
   playbackSpeed: PlaybackSpeed;
   onSpeedChange: (speed: PlaybackSpeed) => void;
+  substitutionsEnabled: boolean;
 }
 
 function ControlButtons({
@@ -355,9 +357,11 @@ function ControlButtons({
   onSubstitutions,
   playbackSpeed,
   onSpeedChange,
+  substitutionsEnabled,
 }: ControlButtonsProps) {
   const isLive = phase === 'first_half' || phase === 'second_half';
-  const canSubstitute = phase === 'half_time' || isPaused;
+  const canSubstitute =
+    substitutionsEnabled && (phase === 'half_time' || isPaused);
 
   return (
     <div className="flex items-center gap-3">
@@ -417,6 +421,7 @@ interface MobileControlBarProps {
   onSubstitutions: () => void;
   playbackSpeed: PlaybackSpeed;
   onSpeedChange: (speed: PlaybackSpeed) => void;
+  substitutionsEnabled: boolean;
 }
 
 function MobileControlBar({
@@ -427,9 +432,11 @@ function MobileControlBar({
   onSubstitutions,
   playbackSpeed,
   onSpeedChange,
+  substitutionsEnabled,
 }: MobileControlBarProps) {
   const isLive = phase === 'first_half' || phase === 'second_half';
-  const canSubstitute = phase === 'half_time' || isPaused;
+  const canSubstitute =
+    substitutionsEnabled && (phase === 'half_time' || isPaused);
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-800 border-t border-slate-700 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
@@ -499,6 +506,7 @@ export function MatchLiveView({
   playbackSpeed,
   onSpeedChange,
   round,
+  substitutionsEnabled = true,
 }: MatchLiveViewProps): ReactElement {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
 
@@ -554,6 +562,7 @@ export function MatchLiveView({
           onSubstitutions={onSubstitutions}
           playbackSpeed={playbackSpeed}
           onSpeedChange={onSpeedChange}
+          substitutionsEnabled={substitutionsEnabled}
         />
       </header>
 
@@ -596,6 +605,7 @@ export function MatchLiveView({
         onSubstitutions={onSubstitutions}
         playbackSpeed={playbackSpeed}
         onSpeedChange={onSpeedChange}
+        substitutionsEnabled={substitutionsEnabled}
       />
 
       {selectedMatch && (
