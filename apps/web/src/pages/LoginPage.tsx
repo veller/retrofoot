@@ -56,8 +56,12 @@ export function LoginPage() {
         path="/login"
         noindex
       />
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8">
-        <div className="w-full max-w-md">
+      <div className="relative min-h-screen flex flex-col items-center justify-center p-8 bg-slate-900 bg-[url('/setup-loading-cover.webp')] bg-cover bg-center bg-no-repeat">
+        <div
+          className="absolute inset-0 bg-slate-950/65"
+          aria-hidden
+        />
+        <div className="relative z-10 w-full max-w-md">
           <header className="text-center mb-8">
             <Link to="/" className="inline-block">
               <h1 className="font-pixel text-3xl text-pitch-400 tracking-wider hover:text-pitch-300 transition-colors">
