@@ -17,6 +17,7 @@ import { LeagueLobbyPage } from './online/LeagueLobbyPage';
 import { OnlineLeagueSeasonPage } from './online/OnlineLeagueSeasonPage';
 import { OnlineMatchRoomPage } from './online/OnlineMatchRoomPage';
 import { OnlineJoinInvitePage } from './online/OnlineJoinInvitePage';
+import { OnlineClubPage } from './online/OnlineClubPage';
 
 export function App() {
   return (
@@ -25,6 +26,10 @@ export function App() {
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route
+          path="/online/join/:inviteCode"
+          element={<OnlineJoinInvitePage />}
+        />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/contact" element={<ContactPage />} />
@@ -41,11 +46,11 @@ export function App() {
             element={<SeasonSummaryPage />}
           />
           <Route path="/online" element={<OnlineHomePage />} />
-          <Route
-            path="/online/join/:inviteCode"
-            element={<OnlineJoinInvitePage />}
-          />
           <Route path="/online/league/:leagueId" element={<LeagueLobbyPage />} />
+          <Route
+            path="/online/league/:leagueId/club"
+            element={<OnlineClubPage />}
+          />
           <Route
             path="/online/league/:leagueId/season"
             element={<OnlineLeagueSeasonPage />}

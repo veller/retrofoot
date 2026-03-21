@@ -44,7 +44,9 @@ function asFoot(v: string): Player['preferredFoot'] {
   return 'right';
 }
 
-function mapDbPlayerToCore(row: typeof onlinePlayers.$inferSelect): Player {
+export function mapOnlineDbPlayerToCore(
+  row: typeof onlinePlayers.$inferSelect,
+): Player {
   const attrs = row.attributes as Player['attributes'];
   return {
     id: row.id,
@@ -194,8 +196,8 @@ export async function loadOnlineMatchBootstrap(
       ),
     );
 
-  const homePlayers = homePlayersRows.map(mapDbPlayerToCore);
-  const awayPlayers = awayPlayersRows.map(mapDbPlayerToCore);
+  const homePlayers = homePlayersRows.map(mapOnlineDbPlayerToCore);
+  const awayPlayers = awayPlayersRows.map(mapOnlineDbPlayerToCore);
 
   const homeTeam: Team = {
     id: ht.id,

@@ -8,6 +8,9 @@ interface SeoHeadProps {
   path?: string;
   noindex?: boolean;
   ogType?: 'website' | 'article';
+  /** Absolute URL; defaults to site OG asset for social previews. */
+  ogImage?: string;
+  ogImageAlt?: string;
 }
 
 export function SeoHead({
@@ -16,6 +19,8 @@ export function SeoHead({
   path,
   noindex = false,
   ogType = 'website',
+  ogImage = DEFAULT_OG_IMAGE,
+  ogImageAlt = 'RetroFoot retro-styled football manager game cover.',
 }: SeoHeadProps): ReactElement {
   const canonicalUrl = path ? toCanonicalUrl(path) : undefined;
   const robotsContent = noindex ? 'noindex, nofollow' : 'index, follow';
@@ -33,22 +38,16 @@ export function SeoHead({
       <meta property="og:description" content={description} />
       <meta property="og:type" content={ogType} />
       {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
-      <meta property="og:image" content={DEFAULT_OG_IMAGE} />
+      <meta property="og:image" content={ogImage} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
-      <meta
-        property="og:image:alt"
-        content="RetroFoot retro-styled football manager game cover."
-      />
+      <meta property="og:image:alt" content={ogImageAlt} />
 
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />
-      <meta name="twitter:image" content={DEFAULT_OG_IMAGE} />
-      <meta
-        name="twitter:image:alt"
-        content="RetroFoot retro-styled football manager game cover."
-      />
+      <meta name="twitter:image" content={ogImage} />
+      <meta name="twitter:image:alt" content={ogImageAlt} />
     </Helmet>
   );
 }

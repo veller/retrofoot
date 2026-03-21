@@ -15,6 +15,8 @@ pnpm --filter @retrofoot/api db:migrate
 
 This runs `wrangler d1 migrations apply retrofoot-db --local` using [`apps/api/wrangler.toml`](../apps/api/wrangler.toml). If you see `no such table: online_leagues`, migrations were not applied to the local database.
 
+Lobby flows also need migration **`0013_online_lobby_pick_template`** (`lobby_pick_template_id` on `online_league_members`). Re-run the migrate command after pulling.
+
 ## 2. API: `wrangler dev`
 
 ```bash

@@ -9,19 +9,33 @@ import {
   onlineStandings,
   onlineFixtures,
   onlineMatchSessions,
+  onlinePlayers,
+  onlineTactics,
   users,
 } from '@retrofoot/db/schema';
+import {
+  TEAMS,
+  isLineupCompatibleWithFormation,
+  normalizeFormation,
+  selectBestLineup,
+  type FormationType,
+  type TacticalPosture,
+  type Team,
+  type Tactics,
+  type TeamSeed,
+} from '@retrofoot/core';
 import { createAuth } from '../../lib/auth';
 import { logOnlineAnalyticsEvent } from '../../lib/analytics';
+import { mapOnlineDbPlayerToCore } from '../../lib/online-match-load';
 import {
   assignMembersToTeams,
-  pickRandomTeamTemplates,
   seedOnlineLeagueWorld,
-  shuffleArray,
   DEFAULT_SEASON_LABEL,
 } from '../../lib/seed-online';
 import type { Env } from '../../index';
 import { z } from 'zod';
+
+const ONLINE_BENCH_LIMIT = 7;
 
 const genInviteCode = customAlphabet(
   '23456789ABCDEFGHJKLMNPQRSTUVWXYZ',
@@ -72,6 +86,92 @@ const joinLeagueSchema = z.object({
 const addCompanionBodySchema = z.object({
   companionUserId: z.string().min(1),
 });
+
+const lobbyPickBodySchema = z.object({
+  templateId: z.string().min(1),
+});
+
+const onlineTacticsPutSchema = z.object({
+  formation: z.string(),
+  posture: z.enum(['defensive', 'balanced', 'attacking']),
+  lineup: z.array(z.string()),
+  substitutes: z.array(z.string()),
+});
+
+function coreTeamFromOnlineRow(
+  row: typeof onlineTeams.$inferSelect,
+  players: Team['players'],
+): Team {
+  const lastFive = row.lastFiveResults;
+  return {
+    id: row.id,
+    name: row.name,
+    shortName: row.shortName,
+    badgeUrl: row.badgeUrl ?? undefined,
+    primaryColor: row.primaryColor,
+    secondaryColor: row.secondaryColor,
+    stadium: row.stadium,
+    capacity: row.capacity,
+    reputation: row.reputation,
+    budget: row.budget,
+    wageBudget: row.wageBudget,
+    players,
+    momentum: row.momentum ?? 50,
+    lastFiveResults: Array.isArray(lastFive)
+      ? (lastFive as ('W' | 'D' | 'L')[])
+      : [],
+  };
+}
+
+async function loadMemberCoreTeam(
+  db: ReturnType<typeof drizzle>,
+  userId: string,
+  leagueId: string,
+): Promise<{ team: Team; onlineTeamId: string } | null> {
+  const [member] = await db
+    .select({
+      onlineTeamId: onlineLeagueMembers.onlineTeamId,
+    })
+    .from(onlineLeagueMembers)
+    .where(
+      and(
+        eq(onlineLeagueMembers.leagueId, leagueId),
+        eq(onlineLeagueMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!member?.onlineTeamId) return null;
+
+  const [teamRow] = await db
+    .select()
+    .from(onlineTeams)
+    .where(
+      and(
+        eq(onlineTeams.id, member.onlineTeamId),
+        eq(onlineTeams.leagueId, leagueId),
+      ),
+    )
+    .limit(1);
+
+  if (!teamRow) return null;
+
+  const playerRows = await db
+    .select()
+    .from(onlinePlayers)
+    .where(
+      and(
+        eq(onlinePlayers.leagueId, leagueId),
+        eq(onlinePlayers.teamId, member.onlineTeamId),
+      ),
+    );
+
+  const players = playerRows.map(mapOnlineDbPlayerToCore);
+  return {
+    onlineTeamId: member.onlineTeamId,
+    team: coreTeamFromOnlineRow(teamRow, players),
+  };
+}
 
 async function requireUserId(
   c: Context<{ Bindings: Env }>,
@@ -884,8 +984,331 @@ onlineRoutes.get('/leagues/:leagueId/me', async (c) => {
   });
 });
 
+/** Fictional club list for lobby picks (same universe as offline new game) */
+onlineRoutes.get('/leagues/:leagueId/lobby/team-pool', async (c) => {
+  const userId = await requireUserId(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const leagueId = c.req.param('leagueId');
+  const db = drizzle(c.env.DB);
+
+  const isMember = await assertOnlineMember(db, userId, leagueId);
+  if (!isMember) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const [league] = await db
+    .select({ status: onlineLeagues.status })
+    .from(onlineLeagues)
+    .where(eq(onlineLeagues.id, leagueId))
+    .limit(1);
+
+  if (!league || league.status !== 'lobby') {
+    return c.json({ error: 'Lobby picks are only available before kickoff' }, 409);
+  }
+
+  const pickRows = await db
+    .select({
+      userId: onlineLeagueMembers.userId,
+      lobbyPickTemplateId: onlineLeagueMembers.lobbyPickTemplateId,
+      name: users.name,
+      email: users.email,
+    })
+    .from(onlineLeagueMembers)
+    .innerJoin(users, eq(onlineLeagueMembers.userId, users.id))
+    .where(eq(onlineLeagueMembers.leagueId, leagueId));
+
+  const claims = pickRows
+    .filter((r) => r.lobbyPickTemplateId)
+    .map((r) => ({
+      userId: r.userId,
+      templateId: r.lobbyPickTemplateId as string,
+      displayName: r.name?.trim() || r.email.split('@')[0],
+    }));
+
+  return c.json({
+    templates: TEAMS.map((t) => ({
+      id: t.id,
+      name: t.name,
+      shortName: t.shortName,
+      primaryColor: t.primaryColor,
+      secondaryColor: t.secondaryColor,
+      reputation: t.reputation,
+    })),
+    claims,
+  });
+});
+
+/** Set or change your lobby club pick (unique per league while in lobby) */
+onlineRoutes.put('/leagues/:leagueId/my-lobby-pick', async (c) => {
+  const userId = await requireUserId(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const leagueId = c.req.param('leagueId');
+  let body: z.infer<typeof lobbyPickBodySchema>;
+  try {
+    const raw = await c.req.json();
+    const parsed = lobbyPickBodySchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid body', details: parsed.error.flatten() }, 400);
+    }
+    body = parsed.data;
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const template = TEAMS.find((t) => t.id === body.templateId);
+  if (!template) {
+    return c.json({ error: 'Unknown club' }, 400);
+  }
+
+  const db = drizzle(c.env.DB);
+
+  const [league] = await db
+    .select()
+    .from(onlineLeagues)
+    .where(eq(onlineLeagues.id, leagueId))
+    .limit(1);
+
+  if (!league) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  if (league.status !== 'lobby') {
+    return c.json({ error: 'League has already started' }, 409);
+  }
+
+  const [member] = await db
+    .select({ id: onlineLeagueMembers.id })
+    .from(onlineLeagueMembers)
+    .where(
+      and(
+        eq(onlineLeagueMembers.leagueId, leagueId),
+        eq(onlineLeagueMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!member) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const [clash] = await db
+    .select({ userId: onlineLeagueMembers.userId })
+    .from(onlineLeagueMembers)
+    .where(
+      and(
+        eq(onlineLeagueMembers.leagueId, leagueId),
+        eq(onlineLeagueMembers.lobbyPickTemplateId, body.templateId),
+      ),
+    )
+    .limit(1);
+
+  if (clash && clash.userId !== userId) {
+    return c.json({ error: 'Another player already chose this club' }, 409);
+  }
+
+  await db
+    .update(onlineLeagueMembers)
+    .set({ lobbyPickTemplateId: body.templateId })
+    .where(eq(onlineLeagueMembers.id, member.id));
+
+  return c.json({ ok: true, templateId: body.templateId });
+});
+
+/** Full squad for tactics UI (active league) */
+onlineRoutes.get('/leagues/:leagueId/me/squad', async (c) => {
+  const userId = await requireUserId(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const leagueId = c.req.param('leagueId');
+  const db = drizzle(c.env.DB);
+
+  const isMember = await assertOnlineMember(db, userId, leagueId);
+  if (!isMember) {
+    return c.json({ error: 'Forbidden' }, 403);
+  }
+
+  const loaded = await loadMemberCoreTeam(db, userId, leagueId);
+  if (!loaded) {
+    return c.json(
+      { error: 'No club assigned yet (still in lobby?)' },
+      404,
+    );
+  }
+
+  return c.json({ team: loaded.team });
+});
+
+onlineRoutes.get('/leagues/:leagueId/me/tactics', async (c) => {
+  const userId = await requireUserId(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const leagueId = c.req.param('leagueId');
+  const db = drizzle(c.env.DB);
+
+  const loaded = await loadMemberCoreTeam(db, userId, leagueId);
+  if (!loaded) {
+    return c.json({ error: 'No club assigned' }, 404);
+  }
+
+  const { team, onlineTeamId } = loaded;
+
+  const [row] = await db
+    .select()
+    .from(onlineTactics)
+    .where(
+      and(
+        eq(onlineTactics.leagueId, leagueId),
+        eq(onlineTactics.teamId, onlineTeamId),
+      ),
+    )
+    .limit(1);
+
+  let tactics: Tactics;
+  if (row) {
+    const formation = normalizeFormation(row.formation as FormationType);
+    const lineup = (row.lineup as string[]).filter(Boolean);
+    const substitutes = (row.substitutes as string[]).filter(Boolean);
+    const posture =
+      row.posture === 'defensive' || row.posture === 'attacking'
+        ? row.posture
+        : ('balanced' as TacticalPosture);
+    if (
+      lineup.length === 11 &&
+      isLineupCompatibleWithFormation(team, formation, lineup)
+    ) {
+      tactics = { formation, posture, lineup, substitutes };
+    } else {
+      const fresh = selectBestLineup(team, '4-3-3');
+      tactics = {
+        formation: '4-3-3',
+        posture: 'balanced',
+        lineup: fresh.lineup,
+        substitutes: fresh.substitutes,
+      };
+    }
+  } else {
+    const fresh = selectBestLineup(team, '4-3-3');
+    tactics = {
+      formation: '4-3-3',
+      posture: 'balanced',
+      lineup: fresh.lineup,
+      substitutes: fresh.substitutes,
+    };
+  }
+
+  return c.json({ tactics });
+});
+
+onlineRoutes.put('/leagues/:leagueId/me/tactics', async (c) => {
+  const userId = await requireUserId(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const leagueId = c.req.param('leagueId');
+  let body: z.infer<typeof onlineTacticsPutSchema>;
+  try {
+    const raw = await c.req.json();
+    const parsed = onlineTacticsPutSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid body', details: parsed.error.flatten() }, 400);
+    }
+    body = parsed.data;
+  } catch {
+    return c.json({ error: 'Invalid JSON' }, 400);
+  }
+
+  const db = drizzle(c.env.DB);
+  const loaded = await loadMemberCoreTeam(db, userId, leagueId);
+  if (!loaded) {
+    return c.json({ error: 'No club assigned' }, 404);
+  }
+
+  const { team, onlineTeamId } = loaded;
+  const formation = normalizeFormation(body.formation as FormationType);
+  const posture = body.posture;
+  const lineup = body.lineup;
+  const substitutes = body.substitutes;
+
+  const playerIds = new Set(team.players.map((p) => p.id));
+  if (lineup.length !== 11 || new Set(lineup).size !== lineup.length) {
+    return c.json({ error: 'Lineup must be 11 unique players' }, 400);
+  }
+  if (!lineup.every((id) => playerIds.has(id))) {
+    return c.json({ error: 'Lineup contains unknown players' }, 400);
+  }
+  if (substitutes.length > ONLINE_BENCH_LIMIT) {
+    return c.json({ error: `Bench max ${ONLINE_BENCH_LIMIT}` }, 400);
+  }
+  if (!substitutes.every((id) => playerIds.has(id))) {
+    return c.json({ error: 'Bench contains unknown players' }, 400);
+  }
+  const benchSet = new Set(substitutes);
+  if (lineup.some((id) => benchSet.has(id))) {
+    return c.json({ error: 'Player cannot be in lineup and bench' }, 400);
+  }
+  if (!isLineupCompatibleWithFormation(team, formation, lineup)) {
+    return c.json({ error: 'Lineup does not match formation and positions' }, 400);
+  }
+
+  const tacticsPayload: Tactics = {
+    formation,
+    posture,
+    lineup,
+    substitutes,
+  };
+
+  const now = new Date();
+  const [existing] = await db
+    .select({ id: onlineTactics.id })
+    .from(onlineTactics)
+    .where(
+      and(
+        eq(onlineTactics.leagueId, leagueId),
+        eq(onlineTactics.teamId, onlineTeamId),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(onlineTactics)
+      .set({
+        formation,
+        posture,
+        lineup,
+        substitutes,
+        updatedAt: now,
+      })
+      .where(eq(onlineTactics.id, existing.id));
+  } else {
+    await db.insert(onlineTactics).values({
+      id: nanoid(),
+      leagueId,
+      teamId: onlineTeamId,
+      formation,
+      posture,
+      lineup,
+      substitutes,
+      updatedAt: now,
+    });
+  }
+
+  return c.json({ ok: true, tactics: tacticsPayload });
+});
+
 /**
- * Host starts the league: seeds N random clubs (N = members), fixtures, assigns each player a team.
+ * Host starts the league: seeds picked clubs (one per member), fixtures, assigns teams.
  */
 onlineRoutes.post('/leagues/:leagueId/start', async (c) => {
   const userId = await requireUserId(c);
@@ -928,6 +1351,7 @@ onlineRoutes.post('/leagues/:leagueId/start', async (c) => {
     .select({
       id: onlineLeagueMembers.id,
       userId: onlineLeagueMembers.userId,
+      lobbyPickTemplateId: onlineLeagueMembers.lobbyPickTemplateId,
     })
     .from(onlineLeagueMembers)
     .where(eq(onlineLeagueMembers.leagueId, leagueId))
@@ -940,14 +1364,39 @@ onlineRoutes.post('/leagues/:leagueId/start', async (c) => {
     );
   }
 
-  const templates = pickRandomTeamTemplates(memberRows.length);
+  for (const m of memberRows) {
+    if (!m.lobbyPickTemplateId) {
+      return c.json(
+        { error: 'Every player must pick a club before starting' },
+        400,
+      );
+    }
+  }
 
-  const seeded = await seedOnlineLeagueWorld(db, leagueId, templates);
+  const pickIds = memberRows.map((m) => m.lobbyPickTemplateId as string);
+  if (new Set(pickIds).size !== pickIds.length) {
+    return c.json(
+      { error: 'Each club pick must be unique across players' },
+      400,
+    );
+  }
 
-  const shuffleMembers = shuffleArray([...memberRows]);
-  const shuffleTemplates = shuffleArray([...templates]);
+  const templatesOrdered: TeamSeed[] = [];
+  for (const id of pickIds) {
+    const t = TEAMS.find((x) => x.id === id);
+    if (!t) {
+      return c.json({ error: 'Invalid club pick in lobby' }, 400);
+    }
+    templatesOrdered.push(t);
+  }
 
-  await assignMembersToTeams(db, leagueId, shuffleMembers, shuffleTemplates);
+  const seeded = await seedOnlineLeagueWorld(db, leagueId, templatesOrdered);
+
+  const assignMembers = memberRows.map((m) => ({
+    id: m.id,
+    userId: m.userId,
+  }));
+  await assignMembersToTeams(db, leagueId, assignMembers, templatesOrdered);
 
   const prevSettings =
     league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
@@ -1016,6 +1465,7 @@ onlineRoutes.get('/leagues/:leagueId/members', async (c) => {
       userId: onlineLeagueMembers.userId,
       role: onlineLeagueMembers.role,
       onlineTeamId: onlineLeagueMembers.onlineTeamId,
+      lobbyPickTemplateId: onlineLeagueMembers.lobbyPickTemplateId,
       joinedAt: onlineLeagueMembers.joinedAt,
       name: users.name,
       email: users.email,
@@ -1036,6 +1486,7 @@ onlineRoutes.get('/leagues/:leagueId/members', async (c) => {
       userId: m.userId,
       role: m.role,
       onlineTeamId: m.onlineTeamId,
+      lobbyPickTemplateId: m.lobbyPickTemplateId ?? null,
       teamName: m.teamName ?? null,
       teamShortName: m.teamShortName ?? null,
       displayName: m.name?.trim() || m.email.split('@')[0],

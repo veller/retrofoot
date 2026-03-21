@@ -142,13 +142,21 @@ export function OnlineLeagueSeasonPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 md:p-6 max-w-3xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <Link
-          to={`/online/league/${leagueId}`}
-          className="text-sm text-slate-400 hover:text-pitch-400 transition-colors"
-        >
-          ← Lobby
-        </Link>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Link
+            to={`/online/league/${leagueId}`}
+            className="text-sm text-slate-400 hover:text-pitch-400 transition-colors"
+          >
+            ← Lobby
+          </Link>
+          <Link
+            to={`/online/league/${leagueId}/club`}
+            className="text-sm text-pitch-400 hover:text-pitch-300 transition-colors font-medium"
+          >
+            My club
+          </Link>
+        </div>
         <Link
           to="/online"
           className="text-sm text-slate-400 hover:text-pitch-400 transition-colors"

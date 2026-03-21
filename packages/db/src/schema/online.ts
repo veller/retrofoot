@@ -38,6 +38,8 @@ export const onlineLeagueMembers = sqliteTable(
     leagueId: text('league_id').notNull(),
     userId: text('user_id').notNull(),
     onlineTeamId: text('online_team_id'),
+    /** Core `TEAMS[].id` chosen in lobby before the host starts the league */
+    lobbyPickTemplateId: text('lobby_pick_template_id'),
     role: text('role').notNull().default('player'), // host | player
     joinedAt: integer('joined_at', { mode: 'timestamp' }).notNull(),
   },
